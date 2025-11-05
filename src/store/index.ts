@@ -1,9 +1,13 @@
 import { configureStore } from '@reduxjs/toolkit';
-// We'll add reducers later; for now, empty store
+import routeReducer from './routeSlice';
+import settingsReducer from './settingsSlice';
+import packageReducer from './packageSlice';
 
 export const store = configureStore({
   reducer: {
-    // Add slices here in future steps
+    route: routeReducer,
+    settings: settingsReducer,
+    packages: packageReducer,
   },
 });
 

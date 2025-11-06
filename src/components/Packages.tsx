@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { type AppDispatch, type RootState } from '../store';
 import { addPackage, loadPackagesFromDB, savePackagesToDB, clearPackagesFromDB, matchAddressToStop } from '../store/packageSlice';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Html5QrcodeScanner, Html5QrcodeSupportedFormats, Html5QrcodeScanType } from 'html5-qrcode';
 import { toast } from 'sonner';
 import { type Package } from '../db';
 
@@ -61,7 +61,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [recognizing, setRecognizing] = useState(false);
   const scannerRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const html5QrCodeScannerRef = useRef<Html5QrcodeScanner | null>(null);
 
   useEffect(() => {
     dispatch(loadPackagesFromDB());
@@ -133,74 +133,52 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     dispatch(clearPackagesFromDB());
   };
 
-  // Move scanner start to useEffect to ensure ref is mounted after setScanning(true)
   useEffect(() => {
-    if (scanning && scannerRef.current && !html5QrCodeRef.current) {
-      const start = async () => {
-        console.log('Starting scanner init - ref is available');
-        html5QrCodeRef.current = new Html5Qrcode("scanner");
-        const config = { fps: 10, qrbox: { width: 250, height: 250 }, formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128] };
-
-        try {
-          console.log('Fetching cameras...');
-          const cameras = await Html5Qrcode.getCameras();
-          console.log('Cameras found:', cameras);
-          if (cameras && cameras.length > 0) {
-            const rearCamera = cameras.find(cam => 
-              cam.label.toLowerCase().includes('back') || 
-              cam.label.toLowerCase().includes('rear') || 
-              !cam.label.toLowerCase().includes('front')
-            );
-            const cameraId = rearCamera ? { deviceId: { exact: rearCamera.id } } : { facingMode: { exact: "environment" } };
-            console.log('Selected camera ID:', cameraId);
-
-            console.log('Starting scanner...');
-            await html5QrCodeRef.current.start(
-              cameraId,
-              config,
-              (decodedText) => {
-                console.log('Decoded text:', decodedText);
-                setNewPackage((prev) => ({ ...prev, tracking: decodedText }));
-                toast.success(`Scanned: ${decodedText}`);
-                stopScanner();
-              },
-              (errorMessage) => {
-                console.warn(`Scan error: ${errorMessage}`);
-              }
-            );
-            console.log('Scanner started successfully');
-          } else {
-            console.error('No cameras found');
-            toast.error('No cameras found');
-            setScanning(false);
-          }
-        } catch (err) {
-          console.error('Scanner start error:', err);
-          toast.error(`Scanner start failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-          setScanning(false);
+    if (scanning && scannerRef.current && !html5QrCodeScannerRef.current) {
+      const config = {
+        fps: 30,
+        qrbox: (viewfinderWidth: number) => {
+          return { width: Math.min(300, viewfinderWidth * 0.8), height: 150 };
+        },
+        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.QR_CODE],
+        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+        showTorchButtonIfSupported: true,
+        rememberLastUsedCamera: true,
+        disableFlip: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
         }
       };
-      start();
+
+      html5QrCodeScannerRef.current = new Html5QrcodeScanner("scanner", config, false);
+
+      const onScanSuccess = (decodedText: string) => {
+        console.log('Decoded text:', decodedText);
+        setNewPackage((prev) => ({ ...prev, tracking: decodedText }));
+        toast.success(`Scanned: ${decodedText}`);
+        stopScanner();
+      };
+
+      const onScanFailure = (error: string) => {
+        console.warn(`Scan error: ${error}`);
+      };
+
+      html5QrCodeScannerRef.current.render(onScanSuccess, onScanFailure);
     }
   }, [scanning]);
 
   const startScanner = () => {
     console.log('Start scanner button clicked');
-    if (!scannerRef.current) {
-      console.log('Scanner ref not yet available');
-    }
     setScanning(true);
   };
 
   const stopScanner = () => {
     console.log('Stop scanner button clicked');
-    if (html5QrCodeRef.current) {
-      console.log('Stopping scanner...');
-      html5QrCodeRef.current.stop()
+    if (html5QrCodeScannerRef.current) {
+      html5QrCodeScannerRef.current.clear()
         .then(() => {
           console.log('Scanner stopped');
-          html5QrCodeRef.current?.clear();
-          html5QrCodeRef.current = null;
+          html5QrCodeScannerRef.current = null;
           setScanning(false);
         })
         .catch((err) => {

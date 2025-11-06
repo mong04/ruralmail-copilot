@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { type AppDispatch, type RootState } from '../store';
 import { addPackage, loadPackagesFromDB, savePackagesToDB, clearPackagesFromDB, matchAddressToStop } from '../store/packageSlice';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';  // New import
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { toast } from 'sonner';
 import { type Package } from '../db';
 
@@ -61,7 +61,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [recognizing, setRecognizing] = useState(false);
   const scannerRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);  // New ref for scanner instance
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
   useEffect(() => {
     dispatch(loadPackagesFromDB());
@@ -133,41 +133,83 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     dispatch(clearPackagesFromDB());
   };
 
-  const startScanner = () => {
-    setScanning(true);
-    if (scannerRef.current) {
-      html5QrCodeRef.current = new Html5Qrcode("scanner");  // Initialize with ID
-      const config = { fps: 10, qrbox: { width: 250, height: 250 }, formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128] };
+  // Move scanner start to useEffect to ensure ref is mounted after setScanning(true)
+  useEffect(() => {
+    if (scanning && scannerRef.current && !html5QrCodeRef.current) {
+      const start = async () => {
+        console.log('Starting scanner init - ref is available');
+        html5QrCodeRef.current = new Html5Qrcode("scanner");
+        const config = { fps: 10, qrbox: { width: 250, height: 250 }, formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128] };
 
-      html5QrCodeRef.current.start(
-        { facingMode: "environment" },  // Rear camera
-        config,
-        (decodedText) => {
-          setNewPackage((prev) => ({ ...prev, tracking: decodedText }));
-          toast.success(`Scanned: ${decodedText}`);
-          stopScanner();
-        },
-        (errorMessage) => {
-          // Optional: Handle scan errors (e.g., no code detected)
-          console.warn(`Scan error: ${errorMessage}`);
+        try {
+          console.log('Fetching cameras...');
+          const cameras = await Html5Qrcode.getCameras();
+          console.log('Cameras found:', cameras);
+          if (cameras && cameras.length > 0) {
+            const rearCamera = cameras.find(cam => 
+              cam.label.toLowerCase().includes('back') || 
+              cam.label.toLowerCase().includes('rear') || 
+              !cam.label.toLowerCase().includes('front')
+            );
+            const cameraId = rearCamera ? { deviceId: { exact: rearCamera.id } } : { facingMode: { exact: "environment" } };
+            console.log('Selected camera ID:', cameraId);
+
+            console.log('Starting scanner...');
+            await html5QrCodeRef.current.start(
+              cameraId,
+              config,
+              (decodedText) => {
+                console.log('Decoded text:', decodedText);
+                setNewPackage((prev) => ({ ...prev, tracking: decodedText }));
+                toast.success(`Scanned: ${decodedText}`);
+                stopScanner();
+              },
+              (errorMessage) => {
+                console.warn(`Scan error: ${errorMessage}`);
+              }
+            );
+            console.log('Scanner started successfully');
+          } else {
+            console.error('No cameras found');
+            toast.error('No cameras found');
+            setScanning(false);
+          }
+        } catch (err) {
+          console.error('Scanner start error:', err);
+          toast.error(`Scanner start failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+          setScanning(false);
         }
-      ).catch((err) => {
-        toast.error(`Scanner start failed: ${err.message}`);
-        setScanning(false);
-      });
+      };
+      start();
     }
+  }, [scanning]);
+
+  const startScanner = () => {
+    console.log('Start scanner button clicked');
+    if (!scannerRef.current) {
+      console.log('Scanner ref not yet available');
+    }
+    setScanning(true);
   };
 
   const stopScanner = () => {
+    console.log('Stop scanner button clicked');
     if (html5QrCodeRef.current) {
+      console.log('Stopping scanner...');
       html5QrCodeRef.current.stop()
         .then(() => {
-          setScanning(false);
+          console.log('Scanner stopped');
+          html5QrCodeRef.current?.clear();
           html5QrCodeRef.current = null;
+          setScanning(false);
         })
         .catch((err) => {
+          console.error('Scanner stop error:', err);
           toast.error(`Scanner stop failed: ${err.message}`);
         });
+    } else {
+      console.log('No scanner instance to stop');
+      setScanning(false);
     }
   };
 
@@ -234,7 +276,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           </button>
         ) : (
           <>
-            <div id="scanner" ref={scannerRef} className="w-full h-64 bg-gray-200 rounded" />  {/* Updated to use ID for library */}
+            <div id="scanner" ref={scannerRef} className="w-full h-64 bg-gray-200 rounded" />
             <button onClick={stopScanner} className="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600 mt-2">
               Stop Scanner
             </button>

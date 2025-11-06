@@ -176,9 +176,10 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             toast.error(`Failed to start scanner: ${err.message || err}`);
             setScanning(false);
           });
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Init error:', err);
-        toast.error(`Scanner initialization failed: ${err.message || err}`);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        toast.error(`Scanner initialization failed: ${errorMessage}`)
         setScanning(false);
       }
     }

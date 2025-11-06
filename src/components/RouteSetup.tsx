@@ -7,7 +7,7 @@ import { type Stop } from '../db';
 import { toast } from "sonner";
 
 interface CsvRow {
-  address?: string;
+  address_line1?: string;
   address_line2?: string;
   lat?: string;
   lng?: string;
@@ -21,9 +21,9 @@ const RouteSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [newStop, setNewStop] = useState<Partial<Stop>>({
     address_line1: '',
     address_line2: '',
-    city: settings.defaultCity,
-    state: settings.defaultState,
-    zip: settings.defaultZip,
+    city: '',
+    state: '',
+    zip: '',
     lat: 0,
     lng: 0,
     notes: '',
@@ -33,6 +33,15 @@ const RouteSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   useEffect(() => {
     dispatch(loadRouteFromDB());  // Load on mount
   }, [dispatch]);
+
+  useEffect(() => {
+    setNewStop((prev) => ({
+      ...prev,
+      city: settings.defaultCity,
+      state: settings.defaultState,
+      zip: settings.defaultZip,
+    }));
+  }, [settings.defaultCity, settings.defaultState, settings.defaultZip]);  // New: Sync when defaults change
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -84,7 +93,7 @@ const RouteSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         complete: (results) => {
           const importedStops: Stop[] = results.data
             .map((row) => ({
-              address_line1: row.address?.trim() || '',  // Map 'address' from CSV to 'address_line1'
+              address_line1: row.address_line1?.trim() || '',  // Map 'address' from CSV to 'address_line1'
               address_line2: row.address_line2?.trim() || '',  // Map 'address_line2' if present, else empty
               lat: parseFloat(row.lat ?? 'NaN'),
               lng: parseFloat(row.lng ?? 'NaN'),

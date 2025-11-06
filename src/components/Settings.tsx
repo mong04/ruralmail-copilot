@@ -14,6 +14,10 @@ const Settings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     dispatch(loadSettingsFromDB());
   }, [dispatch]);
 
+  useEffect(() => {
+    setForm(settings);
+  }, [settings]); // Sync form when Redux settings change
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };

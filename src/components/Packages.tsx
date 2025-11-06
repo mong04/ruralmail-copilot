@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { type AppDispatch, type RootState } from '../store';
 import { addPackage, loadPackagesFromDB, savePackagesToDB, clearPackagesFromDB, matchAddressToStop } from '../store/packageSlice';
-import { Html5QrcodeScanner, Html5QrcodeSupportedFormats, Html5QrcodeScanType } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { toast } from 'sonner';
 import { type Package } from '../db';
 
@@ -61,7 +61,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [recognizing, setRecognizing] = useState(false);
   const scannerRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const html5QrCodeScannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
   useEffect(() => {
     dispatch(loadPackagesFromDB());
@@ -134,37 +134,60 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   };
 
   useEffect(() => {
-    if (scanning && scannerRef.current && !html5QrCodeScannerRef.current) {
-      const config = {
-        fps: 30,
-        qrbox: (viewfinderWidth: number) => {
-          return { width: Math.min(300, viewfinderWidth * 0.8), height: 150 };
-        },
-        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.QR_CODE],
-        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-        showTorchButtonIfSupported: true,
-        rememberLastUsedCamera: true,
-        disableFlip: false,
-        experimentalFeatures: {
-          useBarCodeDetectorIfSupported: true
-        }
-      };
+    if (scanning && scannerRef.current && !html5QrCodeRef.current) {
+      try {
+        // Constructor config: Limit formats and disable verbose logging
+        const config = {
+          formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.QR_CODE],
+          verbose: false,
+        };
+        html5QrCodeRef.current = new Html5Qrcode("scanner", config);
 
-      html5QrCodeScannerRef.current = new Html5QrcodeScanner("scanner", config, false);
+        // Camera scan config: fps, qrbox (function for dynamic sizing, wider for Code 128)
+        const cameraConfig = {
+          fps: 10,  // Start low; increase to 20-30 if needed, but test for performance on 1D codes
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            return { width: Math.min(300, viewfinderWidth * 0.8), height: Math.min(150, viewfinderHeight * 0.8) };  // Height suits linear Code 128
+          },
+          disableFlip: false,
+        };
 
-      const onScanSuccess = (decodedText: string) => {
-        console.log('Decoded text:', decodedText);
-        setNewPackage((prev) => ({ ...prev, tracking: decodedText }));
-        toast.success(`Scanned: ${decodedText}`);
-        stopScanner();
-      };
+        // Use rear camera via constraints
+        const videoConstraints = { facingMode: "environment" };
 
-      const onScanFailure = (error: string) => {
-        console.warn(`Scan error: ${error}`);
-      };
+        const onScanSuccess = (decodedText: string) => {
+          console.log('Decoded text:', decodedText);
+          setNewPackage((prev) => ({ ...prev, tracking: decodedText }));
+          toast.success(`Scanned: ${decodedText}`);
+          stopScanner();
+        };
 
-      html5QrCodeScannerRef.current.render(onScanSuccess, onScanFailure);
+        const onScanFailure = (error: string) => {
+          console.warn(`Scan error: ${error}`);
+          // Optional: User hint for alignment issues common with Code 128
+          if (error.includes('no code')) {
+            toast.info('No code detected - align barcode fully in the scan area and hold steady.');
+          }
+        };
+
+        html5QrCodeRef.current.start(videoConstraints, cameraConfig, onScanSuccess, onScanFailure)
+          .catch((err) => {
+            console.error('Start error:', err);
+            toast.error(`Failed to start scanner: ${err.message || err}`);
+            setScanning(false);
+          });
+      } catch (err) {
+        console.error('Init error:', err);
+        toast.error(`Scanner initialization failed: ${err.message || err}`);
+        setScanning(false);
+      }
     }
+
+    return () => {
+      if (!scanning && html5QrCodeRef.current) {
+        stopScanner();
+      }
+    };
   }, [scanning]);
 
   const startScanner = () => {
@@ -174,16 +197,16 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const stopScanner = () => {
     console.log('Stop scanner button clicked');
-    if (html5QrCodeScannerRef.current) {
-      html5QrCodeScannerRef.current.clear()
+    if (html5QrCodeRef.current) {
+      html5QrCodeRef.current.stop()
         .then(() => {
           console.log('Scanner stopped');
-          html5QrCodeScannerRef.current = null;
+          html5QrCodeRef.current = null;
           setScanning(false);
         })
         .catch((err) => {
           console.error('Scanner stop error:', err);
-          toast.error(`Scanner stop failed: ${err.message}`);
+          toast.error(`Scanner stop failed: ${err.message || err}`);
         });
     } else {
       console.log('No scanner instance to stop');
@@ -254,7 +277,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           </button>
         ) : (
           <>
-            <div id="scanner" ref={scannerRef} className="w-full h-64 bg-gray-200 rounded" />
+            <div id="scanner" ref={scannerRef} className="w-full h-64 bg-gray-200 rounded" />  {/* Video renders here */}
             <button onClick={stopScanner} className="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600 mt-2">
               Stop Scanner
             </button>

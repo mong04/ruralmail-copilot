@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { type AppDispatch, type RootState } from '../store';
 import { addPackage, loadPackagesFromDB, savePackagesToDB, clearPackagesFromDB, matchAddressToStop } from '../store/packageSlice';
-import Quagga from 'quagga';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';  // New import
 import { toast } from 'sonner';
 import { type Package } from '../db';
 
-// Declarations for Web Speech API
+// Declarations for Web Speech API (unchanged)
 interface SpeechRecognition extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
@@ -52,13 +52,6 @@ declare global {
   }
 }
 
-// Declarations for Quagga
-interface QuaggaResult {
-  codeResult: {
-    code: string;
-  };
-}
-
 const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { packages, loading, error } = useSelector((state: RootState) => state.packages);
@@ -68,6 +61,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [recognizing, setRecognizing] = useState(false);
   const scannerRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);  // New ref for scanner instance
 
   useEffect(() => {
     dispatch(loadPackagesFromDB());
@@ -142,38 +136,39 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const startScanner = () => {
     setScanning(true);
     if (scannerRef.current) {
-      Quagga.init({
-        inputStream: {
-          type: 'LiveStream',
-          target: scannerRef.current,
-          constraints: { facingMode: 'environment' },  // Rear camera
-        },
-        decoder: {
-          readers: ['code_128_reader'],  // For USPS tracking
-        },
-      }, (err: Error | undefined) => {
-        if (err) {
-          toast.error(`Scanner init failed: ${err.message}`);
-          setScanning(false);
-          return;
-        }
-        Quagga.start();
-      });
+      html5QrCodeRef.current = new Html5Qrcode("scanner");  // Initialize with ID
+      const config = { fps: 10, qrbox: { width: 250, height: 250 }, formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128] };
 
-      Quagga.onDetected((result: QuaggaResult) => {
-        const tracking = result.codeResult?.code;
-        if (tracking) {
-          setNewPackage((prev) => ({ ...prev, tracking }));
-          toast.success(`Scanned: ${tracking}`);
+      html5QrCodeRef.current.start(
+        { facingMode: "environment" },  // Rear camera
+        config,
+        (decodedText) => {
+          setNewPackage((prev) => ({ ...prev, tracking: decodedText }));
+          toast.success(`Scanned: ${decodedText}`);
           stopScanner();
+        },
+        (errorMessage) => {
+          // Optional: Handle scan errors (e.g., no code detected)
+          console.warn(`Scan error: ${errorMessage}`);
         }
+      ).catch((err) => {
+        toast.error(`Scanner start failed: ${err.message}`);
+        setScanning(false);
       });
     }
   };
 
   const stopScanner = () => {
-    Quagga.stop();
-    setScanning(false);
+    if (html5QrCodeRef.current) {
+      html5QrCodeRef.current.stop()
+        .then(() => {
+          setScanning(false);
+          html5QrCodeRef.current = null;
+        })
+        .catch((err) => {
+          toast.error(`Scanner stop failed: ${err.message}`);
+        });
+    }
   };
 
   if (loading) return <p className="text-center">Loading packages...</p>;
@@ -239,7 +234,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           </button>
         ) : (
           <>
-            <div ref={scannerRef} className="w-full h-64 bg-gray-200 rounded" />  {/* Video preview */}
+            <div id="scanner" ref={scannerRef} className="w-full h-64 bg-gray-200 rounded" />  {/* Updated to use ID for library */}
             <button onClick={stopScanner} className="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600 mt-2">
               Stop Scanner
             </button>

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { type AppDispatch, type RootState } from '../store';
 import { addPackage, loadPackagesFromDB, savePackagesToDB, clearPackagesFromDB, matchAddressToStop } from '../store/packageSlice';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { BarcodeScanner } from 'react-barcode-scanner';
+import "react-barcode-scanner/polyfill";
 import { toast } from 'sonner';
 import { type Package } from '../db';
 
@@ -52,6 +53,10 @@ declare global {
   }
 }
 
+interface ExtendedMediaTrackConstraintSet extends MediaTrackConstraintSet {
+  torch?: boolean;
+}
+
 const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { packages, loading, error } = useSelector((state: RootState) => state.packages);
@@ -59,9 +64,10 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [newAddress, setNewAddress] = useState('');
   const [scanning, setScanning] = useState(false);
   const [recognizing, setRecognizing] = useState(false);
-  const scannerRef = useRef<HTMLDivElement>(null);
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
   useEffect(() => {
     dispatch(loadPackagesFromDB());
@@ -134,62 +140,36 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   };
 
   useEffect(() => {
-    if (scanning && scannerRef.current && !html5QrCodeRef.current) {
-      try {
-        // Constructor config: Limit formats and disable verbose logging
-        const config = {
-          formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.QR_CODE],
-          verbose: false,
-        };
-        html5QrCodeRef.current = new Html5Qrcode("scanner", config);
-
-        // Camera scan config: fps, qrbox (function for dynamic sizing, wider for Code 128)
-        const cameraConfig = {
-          fps: 10,  // Start low; increase to 20-30 if needed, but test for performance on 1D codes
-          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            return { width: Math.min(300, viewfinderWidth * 0.8), height: Math.min(150, viewfinderHeight * 0.8) };  // Height suits linear Code 128
-          },
-          disableFlip: false,
-        };
-
-        // Use rear camera via constraints
-        const videoConstraints = { facingMode: "environment" };
-
-        const onScanSuccess = (decodedText: string) => {
-          console.log('Decoded text:', decodedText);
-          setNewPackage((prev) => ({ ...prev, tracking: decodedText }));
-          toast.success(`Scanned: ${decodedText}`);
-          stopScanner();
-        };
-
-        const onScanFailure = (error: string) => {
-          console.warn(`Scan error: ${error}`);
-          // Optional: User hint for alignment issues common with Code 128
-          if (error.includes('no code')) {
-            toast.info('No code detected - align barcode fully in the scan area and hold steady.');
-          }
-        };
-
-        html5QrCodeRef.current.start(videoConstraints, cameraConfig, onScanSuccess, onScanFailure)
-          .catch((err) => {
-            console.error('Start error:', err);
-            toast.error(`Failed to start scanner: ${err.message || err}`);
-            setScanning(false);
-          });
-      } catch (err: unknown) {
-        console.error('Init error:', err);
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        toast.error(`Scanner initialization failed: ${errorMessage}`)
-        setScanning(false);
+    if (scanning && videoRef.current) {
+      const stream = videoRef.current.srcObject as MediaStream | null;
+      if (stream) {
+        const track = stream.getVideoTracks()[0];
+        const capabilities = track.getCapabilities() as Record<string, unknown>;
+        if ('torch' in capabilities) {
+          setTorchSupported(true);
+        }
       }
     }
-
-    return () => {
-      if (!scanning && html5QrCodeRef.current) {
-        stopScanner();
-      }
-    };
   }, [scanning]);
+
+  const toggleTorch = () => {
+    if (torchSupported && videoRef.current) {
+      const newTorchState = !torchOn;
+      const stream = videoRef.current.srcObject as MediaStream | null;
+      if (stream) {
+        const track = stream.getVideoTracks()[0];
+        track.applyConstraints({
+          advanced: [{ torch: newTorchState } as ExtendedMediaTrackConstraintSet]
+        }).then(() => {
+          setTorchOn(newTorchState);
+          toast.success(`Torch ${newTorchState ? 'on' : 'off'}`);
+        }).catch((err: unknown) => {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          toast.error(`Failed to toggle torch: ${errorMessage}`);
+        });
+      }
+    }
+  };
 
   const startScanner = () => {
     console.log('Start scanner button clicked');
@@ -198,20 +178,29 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const stopScanner = () => {
     console.log('Stop scanner button clicked');
-    if (html5QrCodeRef.current) {
-      html5QrCodeRef.current.stop()
-        .then(() => {
-          console.log('Scanner stopped');
-          html5QrCodeRef.current = null;
-          setScanning(false);
-        })
-        .catch((err) => {
-          console.error('Scanner stop error:', err);
-          toast.error(`Scanner stop failed: ${err.message || err}`);
-        });
-    } else {
-      console.log('No scanner instance to stop');
-      setScanning(false);
+    setScanning(false);
+    setTorchSupported(false);
+    setTorchOn(false);
+    // Cleanup stream if needed
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const handleScan = (result: { rawValue: string; format: string }) => {
+    console.log('Decoded text:', result.rawValue);
+    setNewPackage((prev) => ({ ...prev, tracking: result.rawValue }));
+    toast.success(`Scanned: ${result.rawValue} (${result.format})`);
+    stopScanner();
+  };
+
+  const handleError = (event: React.SyntheticEvent<HTMLVideoElement>) => {
+    const errorMsg = event.currentTarget.error?.message || 'Unknown error';
+    console.warn(`Scan error: ${errorMsg}`);
+    if (errorMsg.includes('no code')) {
+      toast.info('No code detected - align barcode fully in the scan area and hold steady.');
     }
   };
 
@@ -219,7 +208,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   if (error) return <p className="text-red-500 text-center">{error}</p>;
 
   return (
-    <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6">
+    <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6 relative">
       <h2 className="text-xl font-semibold mb-4">Add Today's Packages</h2>
       <button onClick={onBack} className="mb-4 text-blue-500">Back to Dashboard</button>
 
@@ -269,22 +258,38 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </button>
       </div>
 
-      {/* Scanner */}
+      {/* Scanner Trigger */}
       <div className="mb-6">
         <h3 className="text-lg mb-2">Scan Barcode</h3>
-        {!scanning ? (
-          <button onClick={startScanner} className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
-            Start Scanner
-          </button>
-        ) : (
-          <>
-            <div id="scanner" ref={scannerRef} className="w-full h-64 bg-gray-200 rounded" />  {/* Video renders here */}
-            <button onClick={stopScanner} className="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600 mt-2">
-              Stop Scanner
-            </button>
-          </>
-        )}
+        <button onClick={startScanner} disabled={scanning} className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+          Start Scanner
+        </button>
       </div>
+
+      {/* Full-Screen Scanner Overlay */}
+      {scanning && (
+        <div className="fixed inset-0 bg-black/80 flex flex-col items-center justify-center z-50">
+          <div className="w-full max-w-lg h-[60vh] bg-gray-200 rounded-lg overflow-hidden">
+            <BarcodeScanner 
+              ref={videoRef}
+              trackConstraints={{ facingMode: "environment" }}
+              onReset={handleScan as unknown as React.FormEventHandler<HTMLVideoElement>}
+              onError={handleError}
+              style={{ width: '100%', height: '100%' }}
+            />
+          </div>
+          <div className="mt-4 flex space-x-4">
+            <button onClick={stopScanner} className="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600">
+              Close Scanner
+            </button>
+            {torchSupported && (
+              <button onClick={toggleTorch} className="bg-yellow-500 text-white py-2 px-4 rounded hover:bg-yellow-600">
+                Torch {torchOn ? 'Off' : 'On'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Current Packages */}
       <div className="mb-6">

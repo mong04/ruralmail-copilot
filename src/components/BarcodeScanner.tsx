@@ -18,19 +18,22 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
   // Initialize the scanner instance once (handles Strict Mode)
   useEffect(() => {
+    console.log('Initializing Html5Qrcode scanner...');
     if (!html5QrCodeRef.current) {
       // Configure for barcode only
       html5QrCodeRef.current = new Html5Qrcode(containerId, {
         formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128],
-        verbose: false, // Set to true for debugging
+        verbose: true, // Enable verbose logging for debugging
       });
+      console.log('Scanner initialized with formats:', Html5QrcodeSupportedFormats.CODE_128);
     }
 
     // Cleanup on unmount
     return () => {
       if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+        console.log('Stopping scanner on unmount...');
         html5QrCodeRef.current.stop().catch((err) => {
-          console.error('Failed to stop scanner:', err);
+          console.error('Failed to stop scanner on unmount:', err);
         });
       }
     };
@@ -39,15 +42,21 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   // Start/stop scanning based on isScanning prop
   useEffect(() => {
     const scanner = html5QrCodeRef.current;
-    if (!scanner) return;
+    if (!scanner) {
+      console.warn('Scanner not initialized yet.');
+      return;
+    }
 
     if (isScanning) {
+      console.log('Starting scanning...');
       // Get cameras and start with back camera
       Html5Qrcode.getCameras()
         .then((devices) => {
+          console.log('Available cameras:', devices);
           if (devices && devices.length) {
             // Select the last device (typically back camera on mobile)
             const cameraId = devices[devices.length - 1].id;
+            console.log('Using camera:', cameraId);
 
             // Config optimized for barcodes: rectangular box
             const config = {
@@ -55,18 +64,21 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
               qrbox: { width: 300, height: 100 }, // Wider for linear barcodes
               disableFlip: false, // Allow flipping if needed
             };
+            console.log('Starting scanner with config:', config);
 
             scanner
               .start(
                 cameraId,
                 config,
                 (decodedText) => {
+                  console.log('Scan success! Decoded text:', decodedText);
                   // Call parent callback with tracking number
                   onScanSuccess(decodedText);
                   // Note: Don't stop here; parent controls via isScanning
                 },
                 (errorMessage) => {
-                  // Filter common no-detection errors
+                  // Filter common no-detection errors for toasts, but log all to console
+                  console.log('Scan frame error:', errorMessage);
                   if (
                     !errorMessage.includes('No MultiFormat Readers') &&
                     !errorMessage.includes('No Multiformat Readers') &&
@@ -77,6 +89,9 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
                   }
                 }
               )
+              .then(() => {
+                console.log('Scanner started successfully.');
+              })
               .catch((err) => {
                 console.error('Failed to start scanner:', err);
                 if (onScanError) {
@@ -94,6 +109,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
           if (onScanError) onScanError(err.message || 'Camera permission denied');
         });
     } else if (scanner.isScanning) {
+      console.log('Stopping scanning...');
       scanner.stop().catch((err) => {
         console.error('Failed to stop scanner:', err);
       });

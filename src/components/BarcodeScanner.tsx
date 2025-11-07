@@ -19,7 +19,11 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   // Initialize the scanner instance once (handles Strict Mode)
   useEffect(() => {
     if (!html5QrCodeRef.current) {
-      html5QrCodeRef.current = new Html5Qrcode(containerId);
+      // Configure for barcode only
+      html5QrCodeRef.current = new Html5Qrcode(containerId, {
+        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128],
+        verbose: false, // Set to true for debugging
+      });
     }
 
     // Cleanup on unmount
@@ -45,11 +49,11 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
             // Select the last device (typically back camera on mobile)
             const cameraId = devices[devices.length - 1].id;
 
-            // Config optimized for barcodes: rectangular box, specific formats
+            // Config optimized for barcodes: rectangular box
             const config = {
               fps: 10,
               qrbox: { width: 300, height: 100 }, // Wider for linear barcodes
-              formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128], // USPS typically uses Code 128
+              disableFlip: false, // Allow flipping if needed
             };
 
             scanner
@@ -62,8 +66,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
                   // Note: Don't stop here; parent controls via isScanning
                 },
                 (errorMessage) => {
-                  // Optional: Handle per-frame errors (e.g., no code detected)
-                  if (onScanError) {
+                  // Filter common no-detection errors
+                  if (
+                    !errorMessage.includes('No MultiFormat Readers') &&
+                    !errorMessage.includes('No Multiformat Readers') &&
+                    !errorMessage.includes('NotFoundException') &&
+                    onScanError
+                  ) {
                     onScanError(errorMessage);
                   }
                 }
@@ -71,7 +80,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
               .catch((err) => {
                 console.error('Failed to start scanner:', err);
                 if (onScanError) {
-                  onScanError(err.message);
+                  onScanError(err.message || 'Failed to start scanner');
                 }
               });
           } else {
@@ -96,8 +105,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       id={containerId}
       style={{
         width: '100%',
-        height: '300px', // Adjustable based on UI
-        border: '1px solid #ccc', // Optional visual feedback
+        height: '100%', // Fill the parent div
       }}
     />
   );

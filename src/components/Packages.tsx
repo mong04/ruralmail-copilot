@@ -251,20 +251,33 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
           {/* Scanning Instructions Overlay */}
           {isScanning && !showPackageForm && (
-            <div className="absolute inset-0 flex flex-col justify-center items-center bg-black/40 backdrop-blur-sm text-white z-10 px-8 text-center">
-              <div className="text-7xl mb-8 animate-bounce drop-shadow-lg">📦</div>
-              <h3 className="text-2xl font-extrabold mb-6 leading-tight drop-shadow-lg">Scan Tracking Barcode</h3>
-              <p className="text-lg max-w-2xl mx-auto mb-8 leading-relaxed opacity-95">Point camera at the USPS tracking barcode on the label</p>
-              <div className="inline-flex items-center px-6 py-3 bg-white/20 backdrop-blur-sm rounded-full text-sm font-semibold opacity-90 border border-white/30">
-                <span className="mr-2 animate-pulse">✨</span>
-                Auto-captures instantly
+            <div className="absolute inset-0 flex flex-col items-center text-white z-10 px-8 pointer-events-none">
+              {/* Top Instructions */}
+              <div className="w-full pt-4 text-center bg-linear-to-b from-black/60 to-transparent pb-8">
+                <h3 className="text-xl font-bold mb-2 drop-shadow-lg">Scan Tracking Barcode</h3>
+                <p className="text-sm opacity-90 drop-shadow-md">Point camera at the USPS tracking barcode</p>
+              </div>
+
+              {/* Targeting Area - Transparent center with borders */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-4/5 h-24 border-2 border-white/50 border-dashed rounded-xl flex items-center justify-center">
+                  <span className="text-4xl animate-pulse">📦</span>
+                </div>
+              </div>
+
+              {/* Bottom Hint */}
+              <div className="absolute bottom-0 w-full pb-4 text-center bg-linear-to-t from-black/60 to-transparent pt-8">
+                <div className="inline-flex items-center px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium opacity-90 border border-white/30">
+                  <span className="mr-2 animate-pulse">✨</span>
+                  Auto-captures instantly
+                </div>
               </div>
             </div>
           )}
 
           {/* Success Overlay */}
           {showPackageForm && !isScanning && (
-            <div className="absolute inset-0 flex flex-col justify-center items-center bg-linear-to-b from-emerald-400/30 to-teal-500/30 backdrop-blur-sm text-white z-10 px-8 text-center">
+            <div className="absolute inset-0 flex flex-col justify-center items-center bg-linear-to-b from-emerald-400/30 to-teal-500/30 backdrop-blur-sm text-white z-10 px-8 text-center pointer-events-none">
               <div className="text-9xl mb-8 animate-bounce drop-shadow-2xl">✅</div>
               <h3 className="text-3xl font-extrabold mb-6 leading-tight drop-shadow-lg">Barcode Captured!</h3>
               <p className="text-xl font-semibold mb-4 opacity-95">Now add package details</p>

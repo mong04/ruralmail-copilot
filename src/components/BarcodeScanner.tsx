@@ -22,7 +22,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     if (!html5QrCodeRef.current) {
       // Configure for barcode only
       html5QrCodeRef.current = new Html5Qrcode(containerId, {
-        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128],
+        // formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128],
         verbose: true, // Enable verbose logging for debugging
       });
       console.log('Scanner initialized with formats:', Html5QrcodeSupportedFormats.CODE_128);
@@ -63,6 +63,10 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
               fps: 10,
               qrbox: { width: 300, height: 100 }, // Wider for linear barcodes
               disableFlip: false, // Allow flipping if needed
+              formatsToSupport: [
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.QR_CODE
+              ]
             };
             console.log('Starting scanner with config:', config);
 

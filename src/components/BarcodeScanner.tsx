@@ -21,7 +21,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const containerId = 'barcode-scanner-container';
   
-  const videoTrackRef = useRef<MediaStreamTrack | null>(null);
+  // **FIX:** Removed the videoTrackRef, as it was causing the error.
+  // We will use the library's built-in method instead.
 
   // Initialize the scanner instance once
   useEffect(() => {
@@ -38,19 +39,20 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         html5QrCodeRef.current.stop().catch((err) => {
           console.error('Failed to stop scanner on unmount:', err);
         });
-        videoTrackRef.current = null;
       }
     };
   }, []);
 
   // Effect to control the torch (flash)
   useEffect(() => {
-    if (videoTrackRef.current && 'torch' in videoTrackRef.current.getCapabilities()) {
-      // **FIX for Error 1:** Cast constraints to 'any' to allow 'torch'
-      videoTrackRef.current.applyConstraints({
+    // **THE FIX:** Use the library's built-in 'applyVideoConstraints'
+    // This is safer and avoids the error.
+    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+      html5QrCodeRef.current.applyVideoConstraints({
         advanced: [{ torch: torch }],
       } as never).catch(e => {
         console.error('Failed to apply torch constraints:', e);
+        // Don't toast here, as it can happen on cameras without flash
       });
     }
   }, [torch]); // Re-run whenever the torch prop changes
@@ -71,15 +73,12 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
             const config = {
               fps: 10,
-              
-              // **FIX for Error 2 & 5:** Rename 'viewfinderHeight' to '_viewfinderHeight'
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
               qrbox: (viewfinderWidth: number, _viewfinderHeight: number) => {
                 const width = viewfinderWidth * 0.80; // 80% (matches w-4/5)
                 const height = 96; // 96px (matches h-24)
                 return { width, height };
               },
-
               disableFlip: false,
               formatsToSupport: [
                 Html5QrcodeSupportedFormats.CODE_128,
@@ -99,15 +98,14 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
               .then(() => {
                 console.log('Scanner started successfully.');
                 
-                // **FIX for Error 3 & 4:** Cast 'track' to 'any' to bypass
-                // the library's incorrect type definitions.
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const track: any = scanner.getRunningTrackCapabilities();
+                // **THE FIX:** 'getRunningTrackCapabilities()' returns
+                // the capabilities object directly.
+                const capabilities = scanner.getRunningTrackCapabilities();
                 
-                if (track) {
-                  videoTrackRef.current = track.getTrack(); // This method DOES exist
+                if (capabilities) {
                   if (onCameraReady) {
-                    onCameraReady(track.getCapabilities()); // This method DOES exist
+                    // Pass the capabilities object directly
+                    onCameraReady(capabilities); 
                   }
                 }
               })
@@ -131,7 +129,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       scanner.stop().catch((err) => {
         console.error('Failed to stop scanner:', err);
       });
-      videoTrackRef.current = null;
     }
   }, [isScanning, onScanSuccess, onScanError, onCameraReady]);
 

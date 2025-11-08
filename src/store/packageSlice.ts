@@ -26,7 +26,7 @@ export const savePackagesToDB = createAsyncThunk('packages/save', async (package
   return packages;
 });
 
-export const clearPackagesFromDB = createAsyncThunk('pakcages/clear', async () => {
+export const clearPackagesFromDB = createAsyncThunk('packages/clear', async () => {
     await clearPackages();
     return []; // Return empty array to reset state
 })

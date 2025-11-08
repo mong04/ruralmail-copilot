@@ -73,12 +73,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
             const config = {
               fps: 10,
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              qrbox: (viewfinderWidth: number, _viewfinderHeight: number) => {
-                const width = viewfinderWidth * 0.80; // 80% (matches w-4/5)
-                const height = 96; // 96px (matches h-24)
-                return { width, height };
-              },
               disableFlip: false,
               formatsToSupport: [
                 Html5QrcodeSupportedFormats.CODE_128,

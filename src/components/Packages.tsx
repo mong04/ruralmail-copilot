@@ -5,9 +5,9 @@ import { type AppDispatch, type RootState } from '../store';
 import { addPackage, loadPackagesFromDB, savePackagesToDB, clearPackagesFromDB, matchAddressToStop } from '../store/packageSlice';
 import { toast } from 'sonner';
 import { type Package } from '../db';
-import BarcodeScanner from './BarcodeScanner'; // The new implementation
+import ScannerView from './ScannerView';
 
-// Declarations for Web Speech API (unchanged)
+// ... (Speech Recognition interfaces remain the same) ...
 interface SpeechRecognition extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
@@ -18,34 +18,11 @@ interface SpeechRecognition extends EventTarget {
   start: () => void;
   stop: () => void;
 }
-
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-  message: string;
-}
-
-interface SpeechRecognitionResultList {
-  length: number;
-  item(index: number): SpeechRecognitionResult;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-  isFinal: boolean;
-  length: number;
-  item(index: number): SpeechRecognitionAlternative;
-  [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionAlternative {
-  transcript: string;
-  confidence: number;
-}
-
+interface SpeechRecognitionEvent extends Event { results: SpeechRecognitionResultList; }
+interface SpeechRecognitionErrorEvent extends Event { error: string; message: string; }
+interface SpeechRecognitionResultList { length: number; item(index: number): SpeechRecognitionResult;[index: number]: SpeechRecognitionResult; }
+interface SpeechRecognitionResult { isFinal: boolean; length: number; item(index: number): SpeechRecognitionAlternative;[index: number]: SpeechRecognitionAlternative; }
+interface SpeechRecognitionAlternative { transcript: string; confidence: number; }
 declare global {
   interface Window {
     SpeechRecognition?: new () => SpeechRecognition;
@@ -53,17 +30,39 @@ declare global {
   }
 }
 
-const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+// **NEW:** Define the props passed down from App.tsx
+interface PackagesProps {
+  onBack: () => void;
+  isScannerActive: boolean;
+  showPackageForm: boolean;
+  formContext: 'scan' | 'manual';
+  onScanSuccess: (tracking: string) => void;
+  onOpenScanner: () => void;
+  onOpenManualForm: () => void;
+  onCloseForm: () => void;
+}
+
+const Packages: React.FC<PackagesProps> = ({
+  onBack,
+  isScannerActive,
+  showPackageForm,
+  formContext,
+  onScanSuccess,
+  onOpenScanner,
+  onOpenManualForm,
+  onCloseForm
+}) => {
   const dispatch = useDispatch<AppDispatch>();
   const { packages, loading, error } = useSelector((state: RootState) => state.packages);
+  
+  // These states are still local, as they don't affect navigation
   const [newPackage, setNewPackage] = useState<Partial<Package>>({ tracking: '', size: 'small', notes: '' });
   const [newAddress, setNewAddress] = useState('');
-  const [showPackageForm, setShowPackageForm] = useState(false);
-  const [isScanning, setIsScanning] = useState(true);
   const [tempAssignedStop, setTempAssignedStop] = useState<number>(-1);
   const [isMatchingAddress, setIsMatchingAddress] = useState(false);
   const [recognizing, setRecognizing] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const addressInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     dispatch(loadPackagesFromDB());
@@ -71,6 +70,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   // Voice recognition setup (unchanged)
   useEffect(() => {
+    // ... (code unchanged) ...
     const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognitionConstructor) {
       recognitionRef.current = new SpeechRecognitionConstructor();
@@ -95,11 +95,11 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     };
   }, []);
 
-  // Live address matching with debounce
+  // Live address matching with debounce (unchanged)
   useEffect(() => {
+    // ... (code unchanged) ...
     let timeoutId: NodeJS.Timeout | null = null;
-
-    if (newAddress.trim().length > 2) {  // Min length for match
+    if (newAddress.trim().length > 2) {
       setIsMatchingAddress(true);
       timeoutId = setTimeout(async () => {
         const resultAction = await dispatch(matchAddressToStop(newAddress.trim()));
@@ -114,11 +114,13 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       setTempAssignedStop(-1);
       setIsMatchingAddress(false);
     }
-
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
     };
   }, [newAddress, dispatch]);
+
+
+  // **REMOVED:** The two useEffect hooks for navigation are gone.
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -126,6 +128,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   };
 
   const startRecognition = () => {
+    addressInputRef.current?.blur();
     if (recognitionRef.current) {
       setRecognizing(true);
       recognitionRef.current.start();
@@ -136,38 +139,62 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     if (recognitionRef.current) recognitionRef.current.stop();
   };
 
-  const handleScanSuccess = (tracking: string) => {
+  // This is now the "real" success handler, which updates local state
+  // before calling the prop to change navigation
+  const handleLocalScanSuccess = (tracking: string) => {
+    if (window.navigator.vibrate) {
+      window.navigator.vibrate(50);
+    }
+    
+    // 1. Set local form state
     setNewPackage({ tracking, size: 'small', notes: '' });
     setNewAddress('');
     setTempAssignedStop(-1);
     setIsMatchingAddress(false);
-    setShowPackageForm(true);
-    setIsScanning(false);
-    toast.success(`✅ Tracking captured: ${tracking}`);
+    
+    // 2. Call the prop to change the app's navigation state
+    onScanSuccess(tracking); 
+    
+    // 3. Auto-focus (this is still a local effect)
+    setTimeout(() => {
+      addressInputRef.current?.focus();
+    }, 700);
   };
 
-  const handleCloseForm = () => {
-    setShowPackageForm(false);
-    setIsScanning(true);
+  // Simplified: Just clear local state and call the prop handler
+  const handleCancelOrRescan = () => {
+    onCloseForm(); // Tell App.tsx to close the form
+
+    if (formContext === 'scan') {
+      // If we were scanning, go back to the scanner
+      onOpenScanner(); 
+    }
+    
+    // Clear local data
     setNewPackage({ tracking: '', size: 'small', notes: '' });
     setNewAddress('');
     setTempAssignedStop(-1);
     setIsMatchingAddress(false);
   };
 
+  // Simplified: Add package, then call prop handler
   const handleAddFromForm = async () => {
-    await handleAddPackage();
-    setShowPackageForm(false);
-    setIsScanning(true);
+    await handleAddPackage(); // Add the package (local logic)
+    
+    onCloseForm(); // Tell App.tsx to close the form
+    
+    if (formContext === 'scan') {
+      // If we were scanning, loop back to the scanner
+      onOpenScanner(); 
+    }
   };
 
-  // Updated to use cached tempAssignedStop if available
+  // This logic is purely local to Packages.tsx
   const handleAddPackage = async () => {
     if (!newPackage.tracking?.trim()) {
       toast.error('Tracking number required');
       return;
     }
-
     let assignedStop: number = -1;
     if (newAddress.trim()) {
       if (tempAssignedStop > -1) {
@@ -181,28 +208,18 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         }
       }
     }
-
     dispatch(addPackage({ ...newPackage, assignedAddress: newAddress.trim(), assignedStop } as Package));
     setNewPackage({ tracking: '', size: 'small', notes: '' });
     setNewAddress('');
-    toast.success('✅ Package added! Ready for the next one.');
   };
 
-  // Manual entry open
-  const openManualForm = () => {
-    setNewPackage({ tracking: '', size: 'small', notes: '' });
-    setNewAddress('');
-    setTempAssignedStop(-1);
-    setIsMatchingAddress(false);
-    setShowPackageForm(true);
-    setIsScanning(false);
-  };
-
+  // This is purely local state management
   const handleSave = () => {
     dispatch(savePackagesToDB(packages));
     toast.success('Packages saved!');
   };
 
+  // This is purely local state management
   const handleClear = () => {
     dispatch(clearPackagesFromDB());
     toast.success('Packages cleared!');
@@ -213,6 +230,15 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   return (
     <div className="w-full max-w-md bg-white rounded-xl shadow-xl p-6 relative min-h-screen">
+      
+      {/* This rendering logic is now controlled by props */}
+      {isScannerActive && (
+        <ScannerView 
+          onScanSuccess={handleLocalScanSuccess}
+          onClose={() => onOpenScanner()} // Call parent to close
+        />
+      )}
+
       <div className="flex justify-between items-center mb-6">
         <button onClick={onBack} className="text-blue-600 hover:text-blue-700 font-semibold text-lg">
           ← Back to Dashboard
@@ -225,83 +251,41 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
       {/* Add Packages Section */}
       <div className="mb-8">
-        {/* Manual Entry Button */}
-        {!showPackageForm && (
-          <div className="flex justify-center mb-8">
-            <button
-              onClick={openManualForm}
-              className="group inline-flex items-center justify-center px-8 py-4 bg-linear-to-r from-amber-500 to-orange-600 text-white rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95"
-            >
-              <span className="mr-3 text-xl group-hover:animate-bounce">⌨️</span>
-              Add Manual Package
-            </button>
-          </div>
-        )}
-
-        {/* Scanner */}
-        <div 
-          className="relative bg-black rounded-2xl overflow-hidden shadow-2xl mb-8" 
-          style={{ height: '420px' }}
-        >
-          <BarcodeScanner 
-            isScanning={isScanning && !showPackageForm}
-            onScanSuccess={handleScanSuccess}
-            onScanError={(error) => toast.error(`Scan error: ${error}`)}
-          />
-
-          {/* Scanning Instructions Overlay */}
-          {isScanning && !showPackageForm && (
-            <div className="absolute inset-0 flex flex-col items-center text-white z-10 px-8 pointer-events-none">
-              {/* Top Instructions */}
-              <div className="w-full pt-4 text-center bg-linear-to-b from-black/60 to-transparent pb-8">
-                <h3 className="text-xl font-bold mb-2 drop-shadow-lg">Scan Tracking Barcode</h3>
-                <p className="text-sm opacity-90 drop-shadow-md">Point camera at the USPS tracking barcode</p>
-              </div>
-
-              {/* Targeting Area - Transparent center with borders */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-4/5 h-24 border-2 border-white/50 border-dashed rounded-xl flex items-center justify-center">
-                  <span className="text-4xl animate-pulse">📦</span>
-                </div>
-              </div>
-
-              {/* Bottom Hint */}
-              <div className="absolute bottom-0 w-full pb-4 text-center bg-linear-to-t from-black/60 to-transparent pt-8">
-                <div className="inline-flex items-center px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium opacity-90 border border-white/30">
-                  <span className="mr-2 animate-pulse">✨</span>
-                  Auto-captures instantly
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Success Overlay */}
-          {showPackageForm && !isScanning && (
-            <div className="absolute inset-0 flex flex-col justify-center items-center bg-linear-to-b from-emerald-400/30 to-teal-500/30 backdrop-blur-sm text-white z-10 px-8 text-center pointer-events-none">
-              <div className="text-9xl mb-8 animate-bounce drop-shadow-2xl">✅</div>
-              <h3 className="text-3xl font-extrabold mb-6 leading-tight drop-shadow-lg">Barcode Captured!</h3>
-              <p className="text-xl font-semibold mb-4 opacity-95">Now add package details</p>
-              <p className="text-base max-w-md mx-auto leading-relaxed opacity-90">
-                Address auto-matches your route stops as you type
-              </p>
-            </div>
-          )}
+        <div className="flex flex-col space-y-4 mb-8">
+          <button
+            onClick={onOpenScanner} // Use prop handler
+            className="group inline-flex items-center justify-center px-8 py-5 bg-linear-to-r from-blue-500 to-indigo-600 text-white rounded-full font-bold text-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95"
+          >
+            <span className="mr-4 text-3xl">📷</span>
+            Scan Package
+          </button>
+          
+          <button
+            onClick={onOpenManualForm} // Use prop handler
+            className="group inline-flex items-center justify-center px-6 py-3 bg-gray-100 text-gray-700 rounded-full font-semibold text-base shadow-sm hover:shadow-md transition-all duration-300"
+          >
+            <span className="mr-3 text-xl">⌨️</span>
+            Add Manual Package
+          </button>
         </div>
 
-        {/* Slide-up Package Form */}
+        {/* Slide-up Package Form (controlled by props) */}
         <div
           className={`
             fixed inset-x-0 bottom-0 z-50 bg-linear-to-t from-slate-50/95 via-white to-white/90 backdrop-blur-xl rounded-t-3xl p-6 pb-10 shadow-2xl border-t border-slate-200/60
             max-h-[80vh] overflow-y-auto
             transition-all duration-700 ease-out
-            ${showPackageForm 
+            ${showPackageForm // Use prop
               ? 'translate-y-0 scale-100 opacity-100' 
               : 'translate-y-full scale-95 opacity-0 pointer-events-none'
             }
           `}
         >
-          {showPackageForm && (
+          {showPackageForm && ( // Use prop
             <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
+              
+              {/* ... (All form content (inputs, labels, etc) remains unchanged) ... */}
+              
               {/* Tracking Input */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-4">
@@ -329,6 +313,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 </label>
                 <input
                   type="text"
+                  ref={addressInputRef}
                   value={newAddress}
                   onChange={(e) => setNewAddress(e.target.value)}
                   placeholder="e.g. 123 Main St or 'Smith Farm'"
@@ -411,17 +396,26 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 />
               </div>
 
-              {/* Action Buttons */}
+              {/* Action Buttons (now use local handlers) */}
               <div className="flex space-x-4 pt-6">
                 <button
-                  onClick={handleCloseForm}
+                  onClick={handleCancelOrRescan} // Use simplified local handler
                   className="flex-1 bg-linear-to-r from-gray-400 to-gray-500 text-white py-5 px-6 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center"
                 >
-                  <span className="mr-3 text-xl">🔄</span>
-                  Rescan
+                  {formContext === 'scan' ? ( // Use prop
+                    <>
+                      <span className="mr-3 text-xl">🔄</span>
+                      Rescan
+                    </>
+                  ) : (
+                    <>
+                      <span className="mr-3 text-xl">❌</span>
+                      Cancel
+                    </>
+                  )}
                 </button>
                 <button
-                  onClick={handleAddFromForm}
+                  onClick={handleAddFromForm} // Use simplified local handler
                   disabled={!newPackage.tracking?.trim()}
                   className="flex-1 bg-linear-to-r from-emerald-500 to-teal-600 text-white py-5 px-6 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all duration-300 disabled:from-gray-400 disabled:to-gray-500 disabled:shadow-none disabled:cursor-not-allowed flex items-center justify-center"
                 >
@@ -434,7 +428,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </div>
       </div>
 
-      {/* Current Packages List */}
+      {/* Current Packages List (unchanged) */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold mb-4 flex items-center">
           <span className="mr-3">📋</span>
@@ -473,7 +467,7 @@ const Packages: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </div>
       </div>
 
-      {/* Save/Clear Buttons */}
+      {/* Save/Clear Buttons (unchanged) */}
       <div className="flex space-x-4 pt-6">
         <button
           onClick={handleClear}

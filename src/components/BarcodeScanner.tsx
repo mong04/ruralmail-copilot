@@ -1,3 +1,4 @@
+// src/components/BarcodeScanner.tsx
 import React, { useEffect, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Html5QrcodeSupportedFormats } from 'html5-qrcode'; // For format enums
@@ -6,38 +7,53 @@ interface BarcodeScannerProps {
   isScanning: boolean;
   onScanSuccess: (trackingNumber: string) => void;
   onScanError?: (error: string) => void;
+  onCameraReady?: (capabilities: MediaTrackCapabilities) => void;
+  torch?: boolean;
 }
 
 const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   isScanning,
   onScanSuccess,
   onScanError,
+  onCameraReady,
+  torch = false,
 }) => {
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const containerId = 'barcode-scanner-container';
+  
+  const videoTrackRef = useRef<MediaStreamTrack | null>(null);
 
-  // Initialize the scanner instance once (handles Strict Mode)
+  // Initialize the scanner instance once
   useEffect(() => {
-    console.log('Initializing Html5Qrcode scanner...');
     if (!html5QrCodeRef.current) {
-      // Configure for barcode only
       html5QrCodeRef.current = new Html5Qrcode(containerId, {
-        // formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128],
-        verbose: true, // Enable verbose logging for debugging
+        verbose: false,
       });
-      console.log('Scanner initialized with formats:', Html5QrcodeSupportedFormats.CODE_128);
+      console.log('Scanner initialized');
     }
 
     // Cleanup on unmount
     return () => {
       if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-        console.log('Stopping scanner on unmount...');
         html5QrCodeRef.current.stop().catch((err) => {
           console.error('Failed to stop scanner on unmount:', err);
         });
+        videoTrackRef.current = null;
       }
     };
   }, []);
+
+  // Effect to control the torch (flash)
+  useEffect(() => {
+    if (videoTrackRef.current && 'torch' in videoTrackRef.current.getCapabilities()) {
+      // **FIX for Error 1:** Cast constraints to 'any' to allow 'torch'
+      videoTrackRef.current.applyConstraints({
+        advanced: [{ torch: torch }],
+      } as never).catch(e => {
+        console.error('Failed to apply torch constraints:', e);
+      });
+    }
+  }, [torch]); // Re-run whenever the torch prop changes
 
   // Start/stop scanning based on isScanning prop
   useEffect(() => {
@@ -48,53 +64,52 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     }
 
     if (isScanning) {
-      console.log('Starting scanning...');
-      // Get cameras and start with back camera
       Html5Qrcode.getCameras()
         .then((devices) => {
-          console.log('Available cameras:', devices);
           if (devices && devices.length) {
-            // Select the last device (typically back camera on mobile)
             const cameraId = devices[devices.length - 1].id;
-            console.log('Using camera:', cameraId);
 
-            // Config optimized for barcodes: rectangular box
             const config = {
               fps: 10,
-              qrbox: { width: 300, height: 100 }, // Wider for linear barcodes
-              disableFlip: false, // Allow flipping if needed
+              
+              // **FIX for Error 2 & 5:** Rename 'viewfinderHeight' to '_viewfinderHeight'
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              qrbox: (viewfinderWidth: number, _viewfinderHeight: number) => {
+                const width = viewfinderWidth * 0.80; // 80% (matches w-4/5)
+                const height = 96; // 96px (matches h-24)
+                return { width, height };
+              },
+
+              disableFlip: false,
               formatsToSupport: [
                 Html5QrcodeSupportedFormats.CODE_128,
                 Html5QrcodeSupportedFormats.QR_CODE
-              ]
+              ],
             };
-            console.log('Starting scanner with config:', config);
 
             scanner
               .start(
                 cameraId,
                 config,
                 (decodedText) => {
-                  console.log('Scan success! Decoded text:', decodedText);
-                  // Call parent callback with tracking number
                   onScanSuccess(decodedText);
-                  // Note: Don't stop here; parent controls via isScanning
                 },
-                (errorMessage) => {
-                  // Filter common no-detection errors for toasts, but log all to console
-                  console.log('Scan frame error:', errorMessage);
-                  if (
-                    !errorMessage.includes('No MultiFormat Readers') &&
-                    !errorMessage.includes('No Multiformat Readers') &&
-                    !errorMessage.includes('NotFoundException') &&
-                    onScanError
-                  ) {
-                    onScanError(errorMessage);
-                  }
-                }
+                () => { /* No-op on frame errors */ }
               )
               .then(() => {
                 console.log('Scanner started successfully.');
+                
+                // **FIX for Error 3 & 4:** Cast 'track' to 'any' to bypass
+                // the library's incorrect type definitions.
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const track: any = scanner.getRunningTrackCapabilities();
+                
+                if (track) {
+                  videoTrackRef.current = track.getTrack(); // This method DOES exist
+                  if (onCameraReady) {
+                    onCameraReady(track.getCapabilities()); // This method DOES exist
+                  }
+                }
               })
               .catch((err) => {
                 console.error('Failed to start scanner:', err);
@@ -113,21 +128,38 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
           if (onScanError) onScanError(err.message || 'Camera permission denied');
         });
     } else if (scanner.isScanning) {
-      console.log('Stopping scanning...');
       scanner.stop().catch((err) => {
         console.error('Failed to stop scanner:', err);
       });
+      videoTrackRef.current = null;
     }
-  }, [isScanning, onScanSuccess, onScanError]);
+  }, [isScanning, onScanSuccess, onScanError, onCameraReady]);
 
   return (
-    <div
+    <div 
       id={containerId}
       style={{
         width: '100%',
-        height: '100%', // Fill the parent div
+        height: '100%',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        overflow: 'hidden',
       }}
-    />
+    >
+      <style>
+        {`
+          #${containerId} video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+            position: absolute;
+            top: 0;
+            left: 0;
+          }
+        `}
+      </style>
+    </div>
   );
 };
 

@@ -1,10 +1,23 @@
+// components/RouteSetup.tsx (REFACTORED)
 import React, { useState, type ChangeEvent, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { type AppDispatch, type RootState } from '../store';
-import { addStop, clearRouteMemory, loadRouteFromDB, saveRouteToDB, geocodeStop } from '../store/routeSlice';
+import {
+  addStop,
+  updateStop, // NEW
+  removeStop, // NEW
+  reorderStops, // NEW
+  clearRouteMemory,
+  loadRouteFromDB,
+  saveRouteToDB,
+} from '../store/routeSlice';
 import Papa from 'papaparse';
 import { type Stop } from '../db';
-import { toast } from "sonner";
+import { toast } from 'sonner';
+
+// Import the new components
+import AddressForm from './AddressForm';
+import AddressList from './AddressList';
 
 interface CsvRow {
   address_line1?: string;
@@ -16,85 +29,74 @@ interface CsvRow {
 
 const RouteSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const dispatch = useDispatch<AppDispatch>();
-  const { route, loading, error } = useSelector((state: RootState) => state.route);
-  const settings = useSelector((state: RootState) => state.settings); // Get defaults
-  const [newStop, setNewStop] = useState<Partial<Stop>>({
-    address_line1: '',
-    address_line2: '',
-    city: '',
-    state: '',
-    zip: '',
-    lat: 0,
-    lng: 0,
-    notes: '',
-  });
+  const { route, loading, error } = useSelector(
+    (state: RootState) => state.route
+  );
+  const settings = useSelector((state: RootState) => state.settings);
   const [importStatus, setImportStatus] = useState<string | null>(null);
 
+  // NEW: State to manage which stop is being edited
+  // null = no form, 'new' = adding, number = editing
+  const [editingIndex, setEditingIndex] = useState<number | 'new' | null>(null);
+
   useEffect(() => {
-    dispatch(loadRouteFromDB());  // Load on mount
+    dispatch(loadRouteFromDB()); // Load on mount
   }, [dispatch]);
 
-  useEffect(() => {
-    setNewStop((prev) => ({
-      ...prev,
-      city: settings.defaultCity,
-      state: settings.defaultState,
-      zip: settings.defaultZip,
-    }));
-  }, [settings.defaultCity, settings.defaultState, settings.defaultZip]);  // New: Sync when defaults change
+  // --- New Handlers for Child Components ---
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setNewStop((prev) => ({ ...prev, [name]: name === 'lat' || name === 'lng' ? parseFloat(value) : value }));
+  const handleAddStop = (stop: Stop) => {
+    dispatch(addStop(stop));
+    toast.success('Stop added!');
+    // setEditingIndex(null); // Close form
   };
 
-  // New handleGeocode
-  const handleGeocode = async () => {
-    if (!newStop.address_line1) return toast.error('Enter at least address line 1');
-    const result = await dispatch(geocodeStop(newStop));
-    if (geocodeStop.fulfilled.match(result)) {
-      setNewStop({ ...newStop, ...result.payload });
-      toast.success('Geocoded successfully!');
+  const handleUpdateStop = (stop: Stop) => {
+    if (typeof editingIndex === 'number') {
+      dispatch(updateStop({ index: editingIndex, stop }));
+      toast.success('Stop updated!');
+      setEditingIndex(null); // Close form
     }
   };
 
-  const handleAddStop = () => {
-    if (newStop.address_line1 && !isNaN(newStop.lat!) && !isNaN(newStop.lng!)) {
-      dispatch(addStop(newStop as Stop));
-      setNewStop({
-        address_line1: '',
-        address_line2: '',
-        city: settings.defaultCity,
-        state: settings.defaultState,
-        zip: settings.defaultZip,
-        lat: 0,
-        lng: 0,
-        notes: '',
-      });
-    } else {
-      toast.error('Missing required fields or coords - geocode or enter manually');
+  const handleRemoveStop = (index: number) => {
+    // Simple confirm
+    if (window.confirm('Are you sure you want to remove this stop?')) {
+      dispatch(removeStop(index));
+      toast.success('Stop removed.');
     }
   };
+
+  const handleReorderStops = (startIndex: number, endIndex: number) => {
+    dispatch(reorderStops({ startIndex, endIndex }));
+  };
+
+  // --- Database Actions ---
 
   const handleSave = () => {
     dispatch(saveRouteToDB(route));
+    toast.success('Route saved!');
   };
 
   const handleClear = () => {
-    dispatch(clearRouteMemory());
+    if (window.confirm('Are you sure you want to clear the entire route?')) {
+      dispatch(clearRouteMemory());
+      toast.success('Route cleared.');
+    }
   };
 
+  // --- CSV Import (Moved) ---
   const handleCSVUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setImportStatus('Importing...');  // Show loading
+      setImportStatus('Importing...');
       Papa.parse<CsvRow>(file, {
         header: true,
         complete: (results) => {
           const importedStops: Stop[] = results.data
             .map((row) => ({
-              address_line1: row.address_line1?.trim() || '',  // Map 'address' from CSV to 'address_line1'
-              address_line2: row.address_line2?.trim() || '',  // Map 'address_line2' if present, else empty
+              address_line1: row.address_line1?.trim() || '',
+              address_line2: row.address_line2?.trim() || '',
               lat: parseFloat(row.lat ?? 'NaN'),
               lng: parseFloat(row.lng ?? 'NaN'),
               notes: row.notes?.trim() || '',
@@ -102,15 +104,19 @@ const RouteSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               state: settings.defaultState,
               zip: settings.defaultZip,
             }))
-            .filter((stop) => stop.address_line1 && !isNaN(stop.lat) && !isNaN(stop.lng));  // Stricter filter
+            .filter(
+              (stop) =>
+                stop.address_line1 && !isNaN(stop.lat) && !isNaN(stop.lng)
+            );
 
           if (importedStops.length > 0) {
             importedStops.forEach((stop) => dispatch(addStop(stop)));
-            setImportStatus(`Imported ${importedStops.length} stops successfully!`);
+            setImportStatus(
+              `Imported ${importedStops.length} stops successfully!`
+            );
           } else {
             setImportStatus('No valid stops found in CSV. Check format.');
           }
-          console.log('Imported stops:', importedStops);  // Debug log
         },
         error: (err) => {
           console.error('CSV parse error:', err);
@@ -126,116 +132,82 @@ const RouteSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   return (
     <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6">
       <h2 className="text-xl font-semibold mb-4">Set Up Your Fixed Route</h2>
-      <button onClick={onBack} className="mb-4 text-blue-500">Back to Dashboard</button>
+      <button onClick={onBack} className="mb-4 text-blue-500">
+        Back to Dashboard
+      </button>
 
-      {/* Manual Entry */}
-      <div className="mb-6">
-        <h3 className="text-lg mb-2">Add Stop Manually</h3>
-        <input
-          type="text"
-          name="address_line1"
-          value={newStop.address_line1}
-          onChange={handleInputChange}
-          placeholder="Address Line 1"
-          className="w-full mb-2 p-2 border rounded"
-        />
-        <input
-          type="text"
-          name="address_line2"
-          value={newStop.address_line2}
-          onChange={handleInputChange}
-          placeholder="Address Line 2 (optional)"
-          className="w-full mb-2 p-2 border rounded"
-        />
-        <input
-          type="text"
-          name="city"
-          value={newStop.city}
-          onChange={handleInputChange}
-          placeholder="City"
-          className="w-full mb-2 p-2 border rounded"
-        />
-        <input
-          type="text"
-          name="state"
-          value={newStop.state}
-          onChange={handleInputChange}
-          placeholder="State"
-          className="w-full mb-2 p-2 border rounded"
-        />
-        <input
-          type="text"
-          name="zip"
-          value={newStop.zip}
-          onChange={handleInputChange}
-          placeholder="Zip"
-          className="w-full mb-2 p-2 border rounded"
-        />
-        <button onClick={handleGeocode} className="bg-yellow-500 text-white py-2 px-4 rounded hover:bg-yellow-600 mb-2">
-          Geocode Address
+      {/* --- Main Action Button --- */}
+      {!editingIndex && (
+        <button
+          onClick={() => setEditingIndex('new')}
+          className="w-full bg-blue-500 text-white py-3 px-4 rounded hover:bg-blue-600 text-lg font-semibold"
+        >
+          Add New Stop
         </button>
-        <input
-          type="number"
-          name="lat"
-          value={newStop.lat}
-          onChange={handleInputChange}
-          placeholder="Latitude"
-          className="w-full mb-2 p-2 border rounded"
-        />
-        <input
-          type="number"
-          name="lng"
-          value={newStop.lng}
-          onChange={handleInputChange}
-          placeholder="Longitude"
-          className="w-full mb-2 p-2 border rounded"
-        />
-        <input
-          type="text"
-          name="notes"
-          value={newStop.notes}
-          onChange={handleInputChange}
-          placeholder="Notes (optional)"
-          className="w-full mb-2 p-2 border rounded"
-        />
-        <button onClick={handleAddStop} className="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600">
-          Add Stop
-        </button>
-      </div>
+      )}
 
-      {/* CSV Import */}
-      <div className="mb-6">
-        <h3 className="text-lg mb-2">Import from CSV</h3>
-        <label className="w-full bg-blue-100 text-blue-800 py-2 px-4 rounded-lg cursor-pointer hover:bg-blue-200 transition text-center block">
-          Choose CSV File
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleCSVUpload}
-            className="hidden"  // Hide default input, use label as button
-          />
-        </label>
-        <p className="text-sm text-gray-500 mt-2">CSV format: address,address_line2,lat,lng,notes (headers required; address_line2 optional)</p>
-        {importStatus && <p className="mt-2 text-green-600">{importStatus}</p>}  {/* Feedback */}
-      </div>
+      {/* --- Conditional Address Form --- */}
+      {editingIndex === 'new' && (
+        <AddressForm
+          defaultLocation={settings}
+          onSubmit={handleAddStop}
+          onCancel={() => setEditingIndex(null)}
+        />
+      )}
+      {typeof editingIndex === 'number' && (
+        <AddressForm
+          defaultLocation={settings}
+          initialData={route[editingIndex]}
+          onSubmit={handleUpdateStop}
+          onCancel={() => setEditingIndex(null)}
+        />
+      )}
 
-      {/* Current Route */}
-      <div className="mb-6">
+      {/* --- Current Route List --- */}
+      <div className="mb-6 mt-6">
         <h3 className="text-lg mb-2">Current Route ({route.length} stops)</h3>
-        <ul key={route.length} className="list-disc pl-5 max-h-60 overflow-y-auto">  {/* Added key and scroll */}
-          {route.map((stop, index) => (
-            <li key={index}>
-              {stop.address_line1}{stop.address_line2 ? `, ${stop.address_line2}` : ''} ({stop.lat}, {stop.lng}) {stop.notes && `- ${stop.notes}`}
-            </li>
-          ))}
-        </ul>
+        <AddressList
+          addresses={route}
+          onEdit={setEditingIndex}
+          onRemove={handleRemoveStop}
+          onReorder={handleReorderStops}
+        />
       </div>
 
+      {/* --- CSV Import (De-emphasized) --- */}
+      <details className="mb-6 border rounded-lg p-3">
+        <summary className="cursor-pointer font-medium text-gray-700">
+          Import from CSV
+        </summary>
+        <div className="mt-4">
+          <label className="w-full bg-blue-100 text-blue-800 py-2 px-4 rounded-lg cursor-pointer hover:bg-blue-200 transition text-center block">
+            Choose CSV File
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCSVUpload}
+              className="hidden"
+            />
+          </label>
+          <p className="text-sm text-gray-500 mt-2">
+            Headers: address_line1,address_line2,lat,lng,notes
+          </p>
+          {importStatus && <p className="mt-2 text-green-600">{importStatus}</p>}
+        </div>
+      </details>
+
+      {/* --- Save/Clear Actions --- */}
       <div className="flex justify-between">
-        <button onClick={handleClear} className="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600">
+        <button
+          onClick={handleClear}
+          className="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600"
+        >
           Clear Route
         </button>
-        <button onClick={handleSave} className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+        <button
+          onClick={handleSave}
+          className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+        >
           Save Route
         </button>
       </div>

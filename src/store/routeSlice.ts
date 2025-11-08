@@ -1,3 +1,4 @@
+// store/routeSlice.ts
 import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit';
 import { loadRoute, saveRoute, type RouteData, type Stop } from '../db';
 import MapboxSdk from '@mapbox/mapbox-sdk';
@@ -5,10 +6,6 @@ import Geocoding from '@mapbox/mapbox-sdk/services/geocoding';
 import { toast } from 'sonner';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
-
-if (!MAPBOX_TOKEN) {
-  console.warn('Mapbox token missing - geocoding disabled');
-}
 
 const mapboxClient = MAPBOX_TOKEN ? MapboxSdk({ accessToken: MAPBOX_TOKEN }) : null;
 const geocodingService = mapboxClient ? Geocoding(mapboxClient) : null;
@@ -90,28 +87,69 @@ export const geocodeStop = createAsyncThunk(
   }
 );
 
+
+// ** NEW PAYLOAD TYPES **
+interface UpdateStopPayload {
+  index: number;
+  stop: Stop;
+}
+
+interface ReorderStopsPayload {
+  startIndex: number;
+  endIndex: number;
+}
+
 const routeSlice = createSlice({
   name: 'route',
   initialState,
   reducers: {
-    // Temporary in-memory add stop (before save)
-    addStop: (state, action: PayloadAction<Stop>) => {  // Now full Stop
-        const stop = action.payload;
-        stop.full_address = [
-            stop.address_line1,
-            stop.address_line2,
-            stop.city,
-            stop.state,
-            stop.zip,
-        ].filter(Boolean).join(', ');
-        state.route.push(stop);
+    // ** UPDATED to ensure full_address is always set **
+    addStop: (state, action: PayloadAction<Stop>) => {
+      const stop = action.payload;
+      stop.full_address = [
+        stop.address_line1,
+        stop.address_line2,
+        stop.city,
+        stop.state,
+        stop.zip,
+      ]
+        .filter(Boolean)
+        .join(', ');
+      state.route.push(stop);
     },
-    // Clear in-memory
+    // ** NEW **
+    updateStop: (state, action: PayloadAction<UpdateStopPayload>) => {
+      const { index, stop } = action.payload;
+      if (state.route[index]) {
+        // Ensure full_address is re-computed
+        stop.full_address = [
+          stop.address_line1,
+          stop.address_line2,
+          stop.city,
+          stop.state,
+          stop.zip,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        state.route[index] = stop;
+      }
+    },
+    // ** NEW **
+    removeStop: (state, action: PayloadAction<number>) => {
+      state.route.splice(action.payload, 1);
+    },
+    // ** NEW **
+    reorderStops: (state, action: PayloadAction<ReorderStopsPayload>) => {
+      const { startIndex, endIndex } = action.payload;
+      const [removed] = state.route.splice(startIndex, 1);
+      state.route.splice(endIndex, 0, removed);
+    },
     clearRouteMemory: (state) => {
       state.route = [];
     },
   },
   extraReducers: (builder) => {
+    // ... (all existing extraReducers for thunks) ...
     builder
       .addCase(loadRouteFromDB.pending, (state) => {
         state.loading = true;
@@ -127,15 +165,19 @@ const routeSlice = createSlice({
       .addCase(saveRouteToDB.fulfilled, (state, action) => {
         state.route = action.payload;
       })
-      .addCase(geocodeStop.pending, (state) => { state.loading = true; })
-      .addCase(geocodeStop.fulfilled, (state) => {  // Remove unused 'action'
-        state.loading = false;
-        // Update last added stop with coords (or handle index later)
-        // For now, assume called before add; we'll adjust UI
+      .addCase(geocodeStop.pending, (state) => {
+        state.loading = true;
       })
-      .addCase(geocodeStop.rejected, (state) => { state.loading = false; });  // Remove unused 'action'
+      .addCase(geocodeStop.fulfilled, (state) => {
+        state.loading = false;
+      })
+      .addCase(geocodeStop.rejected, (state) => {
+        state.loading = false;
+      });
   },
 });
 
-export const { addStop, clearRouteMemory } = routeSlice.actions;
+// ** UPDATED exports **
+export const { addStop, updateStop, removeStop, reorderStops, clearRouteMemory } =
+  routeSlice.actions;
 export default routeSlice.reducer;

@@ -13,7 +13,11 @@ interface RuralMailDB extends DBSchema {
   packages: {
     key: string;
     value: PackageData;
-  }
+  };
+  hud: {  // NEW for Iteration 4
+    key: string;
+    value: HudData;
+  };
 }
 
 // Type for route (array of stops)
@@ -38,7 +42,8 @@ export type SettingsData = {
 };
 
 export type Package = {
-  tracking: string;
+  id: string;  // YOUR UPDATE: Unique ID
+  tracking?: string;  // YOUR UPDATE: Optional
   size: 'small' | 'medium' | 'large';
   notes?: string;
   assignedStop?: number; // Index in route
@@ -50,9 +55,14 @@ export type PackageData = {
   packages: Package[];
 };
 
-// Open or create DB (version 1)
+// NEW for HUD (Iteration 4)
+export type HudData = {
+  currentStop: number;
+  weatherAlerts: string[];  // Cached
+};
+
 export async function getDB() {
-  return openDB<RuralMailDB>('ruralmail-db', 3, {  // Bump version for upgrade
+  return openDB<RuralMailDB>('ruralmail-db', 4, {  // Bumped to 4 for HUD
     upgrade(db, oldVersion) {
       if (oldVersion < 1) {
         db.createObjectStore('routes');
@@ -60,28 +70,29 @@ export async function getDB() {
       if (oldVersion < 2) {
         db.createObjectStore('settings');
       }
-      if (oldVersion< 3) {
+      if (oldVersion < 3) {  // FIXED: Added space
         db.createObjectStore('packages');
+      }
+      if (oldVersion < 4) {  // NEW: HUD store
+        db.createObjectStore('hud');
       }
     },
   });
 }
 
-// Save route
+// Route methods (unchanged)
 export async function saveRoute(route: RouteData) {
   const db = await getDB();
   const tx = db.transaction('routes', 'readwrite');
-  await tx.store.put(route, 'fixed-route');  // Key is fixed string
-  await tx.done;  // Best practice: wait for completion
+  await tx.store.put(route, 'fixed-route');
+  await tx.done;
 }
 
-// Load route
 export async function loadRoute(): Promise<RouteData | undefined> {
   const db = await getDB();
   return db.get('routes', 'fixed-route');
 }
 
-// Clear route (for reset)
 export async function clearRoute() {
   const db = await getDB();
   const tx = db.transaction('routes', 'readwrite');
@@ -89,6 +100,7 @@ export async function clearRoute() {
   await tx.done;
 }
 
+// Settings methods (unchanged)
 export async function saveSettings(settings: SettingsData) {
   const db = await getDB();
   const tx = db.transaction('settings', 'readwrite');
@@ -101,6 +113,7 @@ export async function loadSettings(): Promise<SettingsData> {
   return (await db.get('settings', 'defaults')) || {};
 }
 
+// Packages methods (unchanged)
 export async function savePackages(packages: Package[], date: string = new Date().toISOString().split('T')[0]) {
   const db = await getDB();
   const tx = db.transaction('packages', 'readwrite');
@@ -122,5 +135,25 @@ export async function clearPackages() {
   const db = await getDB();
   const tx = db.transaction('packages', 'readwrite');
   await tx.store.delete('daily-packages');
+  await tx.done;
+}
+
+// NEW HUD methods (Iteration 4)
+export async function saveHud(hud: HudData) {
+  const db = await getDB();
+  const tx = db.transaction('hud', 'readwrite');
+  await tx.store.put(hud, 'delivery-state');
+  await tx.done;
+}
+
+export async function loadHud(): Promise<HudData | undefined> {
+  const db = await getDB();
+  return db.get('hud', 'delivery-state');
+}
+
+export async function clearHud() {
+  const db = await getDB();
+  const tx = db.transaction('hud', 'readwrite');
+  await tx.store.delete('delivery-state');
   await tx.done;
 }

@@ -1,7 +1,7 @@
 // components/RouteSetup.tsx (REFACTORED)
 import React, { useState, type ChangeEvent, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { type AppDispatch, type RootState } from '../store';
+import { type AppDispatch, type RootState } from '../../store';
 import {
   addStop,
   updateStop, // NEW
@@ -10,9 +10,9 @@ import {
   clearRouteMemory,
   loadRouteFromDB,
   saveRouteToDB,
-} from '../store/routeSlice';
+} from '../../store/routeSlice';
 import Papa from 'papaparse';
-import { type Stop } from '../db';
+import { type Stop } from '../../db';
 import { toast } from 'sonner';
 
 // Import the new components

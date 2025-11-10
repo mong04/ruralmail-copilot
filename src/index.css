@@ -66,18 +66,3 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
-
-/* Add this to your main CSS file, e.g., index.css */
-
-@keyframes scan {
-  0% {
-    transform: translateY(0);
-  }
-  50% {
-    /* 96px (h-24) - 2px (laser height) = 94px */
-    transform: translateY(94px); 
-  }
-  100% {
-    transform: translateY(0);
-  }
-}

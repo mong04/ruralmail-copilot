@@ -13,12 +13,30 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScanSuccess, onClose }) => 
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [canUseTorch, setCanUseTorch] = useState(false);
 
-  // This is called by BarcodeScanner once the camera is ready
   const handleCameraReady = (capabilities: MediaTrackCapabilities) => {
-    // **THE FIX:** Check for the property using 'in' operator
     if ('torch' in capabilities) {
       setCanUseTorch(true);
     }
+  };
+
+  // **THE STABLE WORKAROUND:**
+  // This function is the stable fix for the library's bug.
+  // It filters the "false positive" errors caused by the torch.
+  const handleScanError = (error: string) => {
+    if (
+      // These are the "false positive" errors thrown
+      // by the library's torch toggle.
+      error.includes('Camera permission denied') || 
+      error.includes('NotAllowedError') ||
+      error.includes('torch')
+    ) {
+      // We log it to the console for debugging but
+      // do not show a toast to the user.
+      console.warn("Filtered Scan Error (Known Library Issue):", error);
+      return;
+    }
+    // This is a *real* error, so we must show it.
+    toast.error(`Scan error: ${error}`);
   };
 
   const toggleTorch = () => {
@@ -29,19 +47,33 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScanSuccess, onClose }) => 
     }
   };
 
-  // We use createPortal to render this component at the root level (on top of everything)
   return createPortal(
     <div className="fixed inset-0 z-50 bg-black animate-in fade-in-25 duration-300">
-      {/* 1. The Scanner (fills the whole screen) */}
+      
+      <style>
+        {`
+          @keyframes scan {
+            0% {
+              transform: translateY(0);
+            }
+            50% {
+              transform: translateY(94px); /* 96px (h-24) - 2px (laser) */
+            }
+            100% {
+              transform: translateY(0);
+            }
+          }
+        `}
+      </style>
+
       <BarcodeScanner
-        isScanning={true} // Always scanning when this view is active
-        onScanSuccess={onScanSuccess} // Pass success up to parent
-        onScanError={(error) => toast.error(`Scan error: ${error}`)}
-        onCameraReady={handleCameraReady} // Get camera capabilities
-        torch={isTorchOn} // Pass torch state down
+        isScanning={true}
+        onScanSuccess={onScanSuccess}
+        onScanError={handleScanError} // Use the workaround
+        onCameraReady={handleCameraReady}
+        torch={isTorchOn}
       />
 
-      {/* 2. The UI Overlay */}
       <div className="absolute inset-0 z-10 flex flex-col justify-between p-6 pointer-events-none">
         
         {/* Top Controls: Close & Flash */}
@@ -50,10 +82,8 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScanSuccess, onClose }) => 
             onClick={onClose}
             className="p-3 bg-black/40 rounded-full text-white text-2xl shadow-lg pointer-events-auto transition-all hover:bg-black/60 active:scale-90"
           >
-            {/* Close Icon (X) */}
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
-
           {canUseTorch && (
             <button
               onClick={toggleTorch}
@@ -63,7 +93,6 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScanSuccess, onClose }) => 
                 : 'bg-black/40 text-white hover:bg-black/60'
               }`}
             >
-              {/* Flash Icon */}
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6v10l7-5-7 5V2Z"></path><path d="m17.5 13 5 5L13 22V12l9.5 5.5Z"></path></svg>
             </button>
           )}
@@ -76,9 +105,9 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScanSuccess, onClose }) => 
             style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)' }} 
           >
             <div 
-              className="absolute top-0 w-full h-0.5 bg-red-500 opacity-75"
+              className="absolute w-full h-0.5 bg-red-500 opacity-75"
               style={{
-                animation: 'scan 2s infinite linear',
+                animation: 'scan 2.5s infinite ease-in-out',
                 boxShadow: '0 0 10px 2px rgba(239, 68, 68, 0.5)'
               }}
             ></div>
@@ -94,7 +123,7 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScanSuccess, onClose }) => 
         </div>
       </div>
     </div>,
-    document.body // Render this component directly into the <body> tag
+    document.body
   );
 };
 

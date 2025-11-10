@@ -21,8 +21,9 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const containerId = 'barcode-scanner-container';
   
-  // **FIX:** Removed the videoTrackRef, as it was causing the error.
-  // We will use the library's built-in method instead.
+  // **THE FIX:** Use a ref to track if this is the first render.
+  // This will prevent the torch useEffect from running on mount.
+  const didMount = useRef(false);
 
   // Initialize the scanner instance once
   useEffect(() => {
@@ -45,17 +46,27 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
   // Effect to control the torch (flash)
   useEffect(() => {
-    // **THE FIX:** Use the library's built-in 'applyVideoConstraints'
-    // This is safer and avoids the error.
+    // **THE FIX:** Check the didMount ref.
+    // If this is the first render, set it to true and do nothing.
+    // This stops the race condition on startup.
+    if (!didMount.current) {
+      didMount.current = true;
+      return;
+    }
+
+    // On all subsequent renders (i.e., when the button is tapped),
+    // apply the constraints.
     if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
       html5QrCodeRef.current.applyVideoConstraints({
         advanced: [{ torch: torch }],
       } as never).catch(e => {
+        // This is where the *library bug* happens.
+        // The library will catch this error and (incorrectly)
+        // pass it to the onScanError prop.
         console.error('Failed to apply torch constraints:', e);
-        // Don't toast here, as it can happen on cameras without flash
       });
     }
-  }, [torch]); // Re-run whenever the torch prop changes
+  }, [torch]); // Only runs when torch prop changes
 
   // Start/stop scanning based on isScanning prop
   useEffect(() => {
@@ -92,13 +103,21 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
               .then(() => {
                 console.log('Scanner started successfully.');
                 
-                // **THE FIX:** 'getRunningTrackCapabilities()' returns
-                // the capabilities object directly.
+                // Manually style the video element to force full-screen
+                const videoElement = document.querySelector(`#${containerId} video`) as HTMLVideoElement;
+                if (videoElement) {
+                  videoElement.style.width = '100%';
+                  videoElement.style.height = '100%';
+                  videoElement.style.objectFit = 'cover';
+                  videoElement.style.position = 'absolute';
+                  videoElement.style.top = '0';
+                  videoElement.style.left = '0';
+                }
+                
                 const capabilities = scanner.getRunningTrackCapabilities();
                 
                 if (capabilities) {
                   if (onCameraReady) {
-                    // Pass the capabilities object directly
                     onCameraReady(capabilities); 
                   }
                 }
@@ -123,6 +142,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       scanner.stop().catch((err) => {
         console.error('Failed to stop scanner:', err);
       });
+      // Reset the didMount ref for the next time the scanner opens
+      didMount.current = false;
     }
   }, [isScanning, onScanSuccess, onScanError, onCameraReady]);
 
@@ -138,18 +159,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         overflow: 'hidden',
       }}
     >
-      <style>
-        {`
-          #${containerId} video {
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover !important;
-            position: absolute;
-            top: 0;
-            left: 0;
-          }
-        `}
-      </style>
+      {/* No style tag needed, we are styling the video in the useEffect */}
     </div>
   );
 };

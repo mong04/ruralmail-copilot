@@ -1,5 +1,7 @@
+// src/store/packageSlice.ts
 import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit';
-import { loadPackages, savePackages, clearPackages, type Package } from '../db';
+// **FIX:** Import 'Stop' from your existing 'db' file
+import { loadPackages, savePackages, clearPackages, type Package, type Stop } from '../db';
 import type { RootState } from '.';
 import { toast } from 'sonner';
 import Fuse from 'fuse.js';
@@ -16,6 +18,12 @@ const initialState: PackageState = {
   error: null,
 };
 
+// This type is correct
+type AddressMatch = {
+  stopIndex: number;
+  address: string;
+} | null;
+
 export const loadPackagesFromDB = createAsyncThunk('packages/load', async () => {
   const data = await loadPackages();
   return data ? data.packages : [];
@@ -31,28 +39,43 @@ export const clearPackagesFromDB = createAsyncThunk('packages/clear', async () =
     return []; // Return empty array to reset state
 })
 
-export const matchAddressToStop = createAsyncThunk(
-  'packages/matchAddress',
-  async (address: string, { getState, rejectWithValue }) => {
+export const matchAddressToStop = createAsyncThunk<
+  AddressMatch[],
+  string,
+  { state: RootState }
+>('packages/matchAddress', async (address, { getState, rejectWithValue }) => {
     const state = getState() as RootState;
-    const route = state.route.route;
-    if (route.length === 0) {
-      toast.error('No route loaded - cannot match address');
+    
+    // **FIX:** Use the 'Stop' type you're already importing in routeSlice
+    const route = state.route.route as Stop[]; 
+    
+    if (!route || route.length === 0) {
       return rejectWithValue('No route');
     }
 
     const fuse = new Fuse(route, {
-      keys: ['full_address'],  // Match on computed full_address
-      threshold: 0.3,  // Fuzzy tolerance for typos
+      keys: ['full_address'],
+      threshold: 0.3,
       ignoreLocation: true,
     });
 
-    const result = fuse.search(address);
-    if (result.length > 0) {
-      return result[0].refIndex;  // Return stop index
-    }
-    toast.warning('No matching stop found - saving as unassigned');
-    return -1;  // Unassigned
+    const results = fuse.search(address, { limit: 5 });
+
+    const matches: AddressMatch[] = results
+      .map(result => {
+        // **FIX:** Cast the item to 'Stop'
+        const item = result.item as Stop;
+        if (item && item.full_address) {
+          return {
+            stopIndex: result.refIndex,
+            address: item.full_address 
+          };
+        }
+        return null;
+      })
+      .filter((match): match is AddressMatch => match !== null);
+
+    return matches;
   }
 );
 
@@ -66,6 +89,19 @@ const packageSlice = createSlice({
     clearPackagesMemory: (state) => {
       state.packages = [];
     },
+    deletePackage: (state, action: PayloadAction<string>) => {
+      state.packages = state.packages.filter(
+        (pkg) => pkg.id !== action.payload
+      );
+    },
+    updatePackage: (state, action: PayloadAction<Package>) => {
+      const index = state.packages.findIndex(
+        (pkg) => pkg.id === action.payload.id
+      );
+      if (index !== -1) {
+        state.packages[index] = action.payload;
+      }
+    }
   },
     extraReducers: (builder) => {
     builder
@@ -77,32 +113,33 @@ const packageSlice = createSlice({
         .addCase(loadPackagesFromDB.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Failed to load packages';
-        toast.error(state.error);  // Add this for user feedback
+        toast.error(state.error);
         })
-        .addCase(savePackagesToDB.pending, (state) => { state.loading = true; })  // Optional: Add pending if we want loader
+        .addCase(savePackagesToDB.pending, (state) => { state.loading = true; })
         .addCase(savePackagesToDB.fulfilled, (state, action) => {
         state.loading = false;
         state.packages = action.payload;
-        toast.success('Packages saved!');  // Optional success toast
         })
         .addCase(savePackagesToDB.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Failed to save packages';
-        toast.error(state.error);  // Add this
+        toast.error(state.error);
         })
         .addCase(clearPackagesFromDB.fulfilled, (state) => {
         state.packages = [];
-        toast.success('Packages cleared for new day!');
         })
         .addCase(clearPackagesFromDB.rejected, (state, action) => {
         state.error = action.error.message || 'Failed to clear packages';
         toast.error(state.error);
         })
-  .addCase(matchAddressToStop.fulfilled, () => {
-  // Not directly updating state; used in UI dispatch chain
-  })
+        .addCase(matchAddressToStop.fulfilled, () => {
+        // Not directly updating state
+        })
+        .addCase(matchAddressToStop.rejected, () => {
+        // Not directly updating state
+        })
     },
 });
 
-export const { addPackage, clearPackagesMemory } = packageSlice.actions;
+export const { addPackage, clearPackagesMemory, updatePackage, deletePackage } = packageSlice.actions;
 export default packageSlice.reducer;

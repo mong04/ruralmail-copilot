@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { type AppDispatch, type RootState } from '../../store';
-import { updatePosition, advanceStop, fetchWeatherAlerts } from '../../store/hudSlice';
+import { updatePosition, advanceStop, fetchWeatherAlerts } from '../delivery-hud/hudSlice';
 import { toast } from 'sonner';
 import { type Package, type Stop } from '../../db';
 import * as turf from '@turf/turf';

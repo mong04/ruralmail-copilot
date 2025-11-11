@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { type AppDispatch, type RootState } from '../store';
-import { saveSettingsToDB } from '../store/settingsSlice';
+import { type AppDispatch, type RootState } from '../../store';
+import { saveSettingsToDB } from './settingsSlice';
 import { toast } from 'sonner';
-import { type SettingsData } from '../db';
+import { type SettingsData } from '../../db';
 
 /**
  * Settings component for managing default location data.

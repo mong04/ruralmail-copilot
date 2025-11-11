@@ -1,6 +1,6 @@
 // store/routeSlice.ts
 import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit';
-import { loadRoute, saveRoute, type RouteData, type Stop } from '../db';
+import { loadRoute, saveRoute, type RouteData, type Stop } from '../../db';
 import MapboxSdk from '@mapbox/mapbox-sdk';
 import Geocoding from '@mapbox/mapbox-sdk/services/geocoding';
 import { toast } from 'sonner';

@@ -1,8 +1,8 @@
 import { configureStore } from '@reduxjs/toolkit';
-import routeReducer from './routeSlice';
-import settingsReducer from './settingsSlice';
-import packageReducer from './packageSlice';
-import hudReducer from './hudSlice';
+import routeReducer from '../../src/features/route-setup/routeSlice';
+import settingsReducer from '../../src/features/settings/settingsSlice';
+import packageReducer from '../features/package-management/packageSlice';
+import hudReducer from '../features/delivery-hud/hudSlice';
 
 /**
  * Configures the Redux store with slices.

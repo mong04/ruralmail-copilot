@@ -1,6 +1,6 @@
 // components/AddressList.tsx (NEW FILE, UPDATED)
 import React from 'react';
-import { type Stop } from '../../db';
+import { type Stop } from '../../../db';
 // *** THIS IS THE ONLY CHANGE ***
 import {
   DragDropContext,

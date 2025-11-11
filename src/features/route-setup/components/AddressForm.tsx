@@ -1,6 +1,6 @@
 // components/AddressForm.tsx (FINAL WITH LINTER FIX)
 import React, { useState, useEffect, useRef, useCallback } from 'react'; // <-- 1. Import useCallback
-import { type Stop, type SettingsData } from '../../db';
+import { type Stop, type SettingsData } from '../../../db';
 import { AddressAutofill } from '@mapbox/search-js-react';
 // We only need this one type from 'core'
 import type { AddressAutofillRetrieveResponse } from '@mapbox/search-js-core';

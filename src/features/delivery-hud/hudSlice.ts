@@ -1,8 +1,8 @@
 import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { loadHud, saveHud, type HudData } from '../db';
-import type { RootState } from '.';
+import { loadHud, saveHud, type HudData } from '../../db';
+import type { RootState } from '../../store';
 
 // Define interface for OpenWeather alerts response (based on docs: https://openweathermap.org/api/one-call-3)
 interface WeatherAlert {

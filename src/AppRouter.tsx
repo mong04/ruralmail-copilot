@@ -1,10 +1,10 @@
 import { createHashRouter } from 'react-router-dom';
-import Dashboard from '../Dashboard';
-import RouteSetup from '../route-setup/RouteSetup';
-import Settings from '../Settings';
-import Packages from '../packages/Packages';
-import Delivery from '../Delivery/Delivery';
-import Layout from '../layout/Layout'; // Adjust path if needed
+import Dashboard from './features/dashboard/Dashboard';
+import RouteSetup from './features/route-setup/RouteSetup';
+import Settings from '../src/features/settings/Settings';
+import Packages from './features/package-management/Packages';
+import Delivery from './features/delivery-hud/Delivery';
+import Layout from './components/layout/Layout'; // Adjust path if needed
 
 export const router = createHashRouter([
   {

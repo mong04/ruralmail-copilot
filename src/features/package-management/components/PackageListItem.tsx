@@ -1,6 +1,6 @@
 // src/components/packages/PackageListItem.tsx
 import React from 'react';
-import { type Package } from '../../db';
+import { type Package } from '../../../db';
 import {
   SwipeableListItem,
   SwipeAction,

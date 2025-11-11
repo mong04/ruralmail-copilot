@@ -1,14 +1,14 @@
 // src/components/packages/PackageList.tsx
 import React, { useRef, useMemo, useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
-import { type RootState } from '../../store';
-import { type Package, type Stop } from '../../db';
+import { type RootState } from '../../../store';
+import { type Package, type Stop } from '../../../db';
 import { SwipeableList } from 'react-swipeable-list';
 import 'react-swipeable-list/dist/styles.css';
 import { PackageListItem } from './PackageListItem';
 import { GroupHeader } from './GroupHeader';
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
-import { useIsMobile } from '../../hooks/useIsMobile';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 interface PackageListProps {
   packages: Package[]; // Flat, filtered list

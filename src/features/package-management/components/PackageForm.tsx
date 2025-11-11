@@ -1,10 +1,10 @@
 // src/components/packages/PackageForm.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch } from 'react-redux';
-import { type AppDispatch } from '../../store';
-import { addPackage, updatePackage, matchAddressToStop } from '../../store/packageSlice';
+import { type AppDispatch } from '../../../store';
+import { addPackage, updatePackage, matchAddressToStop } from '../packageSlice';
 import { toast } from 'sonner';
-import { type Package } from '../../db';
+import { type Package } from '../../../db';
 
 // Declarations for Web Speech API
 interface SpeechRecognition extends EventTarget {

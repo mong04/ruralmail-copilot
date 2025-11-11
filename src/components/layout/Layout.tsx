@@ -6,10 +6,10 @@ import { Outlet } from 'react-router-dom';
  */
 const Layout: React.FC = () => {
   return (
-    <div className="min-h-screen bg-linear-to-br from-green-100 to-blue-100 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4">
       <header role="banner" className="w-full max-w-md text-center mb-8">
-        <h1 className="text-3xl font-bold text-green-800">RuralMail Co-Pilot</h1>
-        <p className="text-sm text-gray-600">Your serene delivery assistant</p>
+        <h1 className="text-3xl font-bold ">RuralMail Co-Pilot</h1>
+        <p className="text-sm">Your serene delivery assistant</p>
       </header>
       <Outlet />
     </div>

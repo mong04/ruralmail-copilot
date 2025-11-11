@@ -1,79 +1,72 @@
-/* style.css */
-/* Import Tailwind v4 – includes Preflight (base resets), utilities, etc. */
-/* Reference: https://tailwindcss.com/docs/installation#include-tailwind-in-your-css */
+/* src/style.css */
+
+/* 1. Import Tailwind's base styles, components, and utilities. */
 @import "tailwindcss";
 
-/* Custom global styles – placed AFTER import to override Preflight for readability and theme consistency */
+/* 2. Define your "Co-Pilot Pro" theme variables */
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif !important; /* Override Preflight sans-serif */
+  /* Light Mode (Default) */
+  --background: 240 5% 96%;        /* Clean, light gray (not pure white) */
+  --foreground: 240 6% 10%;        /* Very dark, readable text */
+
+  --card: 0 0% 100%;             /* Pure white cards */
+  --card-foreground: 240 6% 10%;
+
+  --primary: 221 83% 53%;         /* Strong, professional "Action Blue" */
+  --primary-foreground: 0 0% 100%; /* White text on blue */
+
+  --secondary: 240 5% 90%;       /* Light gray for secondary elements */
+  --secondary-foreground: 240 6% 20%; /* Dark text on light gray */
+
+  --destructive: 0 84% 60%;      /* Clear, modern red */
+  --destructive-foreground: 0 0% 100%;
+
+  --success: 142 70% 45%;         /* "Serene" green, now used for "Success" */
+  --success-foreground: 0 0% 100%;
+  
+  --muted: 240 5% 90%;           /* Faint gray for borders */
+  --muted-foreground: 240 5% 45%; /* Faded text */
+
+  --accent: 240 5% 94%;          /* Hover effects */
+  --accent-foreground: 240 6% 10%;
+
+  --radius: 0.5rem;               /* Tighter, more modern 8px radius */
+}
+
+.dark {
+  /* Dark Mode Overrides */
+  --background: 240 6% 10%;        /* True dark background */
+  --foreground: 240 5% 98%;        /* Light, readable text */
+
+  --card: 240 6% 14%;          /* Slightly lighter dark gray cards */
+  --card-foreground: 240 5% 98%;
+
+  --primary: 217 91% 60%;         /* A brighter, vibrant blue for dark mode */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 240 5% 20%;       /* Dark gray for secondary elements */
+  --secondary-foreground: 240 5% 98%; /* Light text on dark gray */
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  
+  --success: 142 60% 55%;
+  --success-foreground: 0 0% 100%;
+
+  --muted: 240 5% 20%;
+  --muted-foreground: 240 5% 60%;
+
+  --accent: 240 5% 25%;
+  --accent-foreground: 240 5% 98%;
+}
+
+/* 3. Apply base styles to the body */
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87) !important; /* Light text for dark bg – ensures readability */
-  background-color: #242424 !important; /* Dark bg – adjust for rural serenity theme */
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547 !important;
-    background-color: #ffffff !important;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
-}
-
-/* Theme overrides for rural serenity (greens/blues, soft gradients) */
-.bg-gradient-to-br {
-  background-image: linear-gradient(to bottom right, #D1FAE5, #BFDBFE) !important; /* Reinforce your original gradient */
 }

@@ -8,12 +8,12 @@ import {
   deletePackage,
   savePackagesToDB,
   clearPackagesFromDB,
-} from '../../store/packageSlice';
+} from './packageSlice';
 import { toast } from 'sonner';
 import { type Package } from '../../db';
-import ScannerView from './ScannerView';
-import PackageList from './PackageList';
-import PackageForm from './PackageForm';
+import ScannerView from './components/ScannerView';
+import PackageList from './components/PackageList';
+import PackageForm from './components/PackageForm';
 
 const Packages: React.FC = () => {
   const navigate = useNavigate();

@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { loadSettings, saveSettings, type SettingsData } from '../db';
+import { loadSettings, saveSettings, type SettingsData } from '../../db';
 
 interface SettingsState extends SettingsData {
   loading: boolean;

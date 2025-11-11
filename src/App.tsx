@@ -1,30 +1,32 @@
 import { useState, useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
-import { router } from './components/routes/Routes';
+import { router } from './AppRouter';
 
 /**
  * Main App component handling authentication and routing.
- * Uses placeholder login; extend for real auth in future iterations.
+ * Currently uses a placeholder login; extend with real auth in future iterations.
  */
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
 
+  // Load persisted login state
   useEffect(() => {
-    // Persist login state (e.g., from localStorage for offline PWA)
     const storedLogin = localStorage.getItem('isLoggedIn');
     if (storedLogin === 'true') {
       setIsLoggedIn(true);
     }
   }, []);
 
+  // Persist login state changes
   useEffect(() => {
     localStorage.setItem('isLoggedIn', isLoggedIn.toString());
   }, [isLoggedIn]);
 
+  // Simple auth gate
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-linear-to-br from-green-100 to-blue-100 flex flex-col items-center justify-center p-4">
-        <header className="w-full max-w-md text-center mb-8">
+        <header role="banner" className="w-full max-w-md text-center mb-8">
           <h1 className="text-3xl font-bold text-green-800">RuralMail Co-Pilot</h1>
           <p className="text-sm text-gray-600">Your serene delivery assistant</p>
         </header>
@@ -42,7 +44,10 @@ const App: React.FC = () => {
     );
   }
 
-  return <RouterProvider router={router} />;
+  // Authenticated view
+  return (
+    <RouterProvider router={router} />
+  );
 };
 
 export default App;

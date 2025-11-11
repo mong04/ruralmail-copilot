@@ -1,10 +1,12 @@
+// src/App.tsx
 import { useState, useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './AppRouter';
+import { Toaster } from 'sonner';
 
 /**
  * Main App component handling authentication and routing.
- * Currently uses a placeholder login; extend with real auth in future iterations.
+ * Uses a simple localStorage-based login; extend with real auth (e.g., Firebase) in future.
  */
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
@@ -22,31 +24,34 @@ const App: React.FC = () => {
     localStorage.setItem('isLoggedIn', isLoggedIn.toString());
   }, [isLoggedIn]);
 
-  // Simple auth gate
+  // Simple auth gate with improved UX
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-green-100 to-blue-100 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex flex-col items-center justify-center p-4">
         <header role="banner" className="w-full max-w-md text-center mb-8">
-          <h1 className="text-3xl font-bold text-green-800">RuralMail Co-Pilot</h1>
-          <p className="text-sm text-gray-600">Your serene delivery assistant</p>
+          <h1 className="text-4xl font-bold text-primary-800">RuralMail Co-Pilot</h1>
+          <p className="text-md text-secondary-600 mt-2">Your intelligent rural delivery companion</p>
         </header>
-        <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">Welcome Back</h2>
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+          <h2 className="text-2xl font-semibold mb-6 text-center">Welcome Back</h2>
           <button
             onClick={() => setIsLoggedIn(true)}
-            className="w-full bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 transition focus:ring-2 focus:ring-green-500"
+            className="w-full bg-primary-600 text-white py-3 rounded-lg hover:bg-primary-700 transition focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 font-medium"
             aria-label="Log In"
           >
-            Log In (Placeholder)
+            Log In (Demo)
           </button>
         </div>
       </div>
     );
   }
 
-  // Authenticated view
+  // Authenticated view with Toaster for notifications
   return (
-    <RouterProvider router={router} />
+    <>
+      <Toaster position="top-center" richColors />
+      <RouterProvider router={router} />
+    </>
   );
 };
 

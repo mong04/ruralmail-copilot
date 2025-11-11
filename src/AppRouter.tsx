@@ -1,10 +1,11 @@
+// src/AppRouter.tsx
 import { createHashRouter } from 'react-router-dom';
 import Dashboard from './features/dashboard/Dashboard';
 import RouteSetup from './features/route-setup/RouteSetup';
-import Settings from '../src/features/settings/Settings';
+import Settings from './features/settings/Settings';
 import Packages from './features/package-management/Packages';
 import Delivery from './features/delivery-hud/Delivery';
-import Layout from './components/layout/Layout'; // Adjust path if needed
+import Layout from './components/layout/Layout';
 
 export const router = createHashRouter([
   {

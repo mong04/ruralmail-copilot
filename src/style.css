@@ -1,66 +1,105 @@
 /* src/style.css */
 
-/* 1. Import Tailwind's base styles, components, and utilities. */
+/* 1. Import Tailwind's v4 base/utilities */
 @import "tailwindcss";
 
-/* 2. Define your "Co-Pilot Pro" theme variables */
-:root {
-  /* Light Mode (Default) */
-  --background: 240 5% 96%;        /* Clean, light gray (not pure white) */
-  --foreground: 240 6% 10%;        /* Very dark, readable text */
-
-  --card: 0 0% 100%;             /* Pure white cards */
-  --card-foreground: 240 6% 10%;
-
-  --primary: 221 83% 53%;         /* Strong, professional "Action Blue" */
-  --primary-foreground: 0 0% 100%; /* White text on blue */
-
-  --secondary: 240 5% 90%;       /* Light gray for secondary elements */
-  --secondary-foreground: 240 6% 20%; /* Dark text on light gray */
-
-  --destructive: 0 84% 60%;      /* Clear, modern red */
-  --destructive-foreground: 0 0% 100%;
-
-  --success: 142 70% 45%;         /* "Serene" green, now used for "Success" */
-  --success-foreground: 0 0% 100%;
-  
-  --muted: 240 5% 90%;           /* Faint gray for borders */
-  --muted-foreground: 240 5% 45%; /* Faded text */
-
-  --accent: 240 5% 94%;          /* Hover effects */
-  --accent-foreground: 240 6% 10%;
-
-  --radius: 0.5rem;               /* Tighter, more modern 8px radius */
+/* 2. Configure v4 features */
+@config {
+  /* This tells v4 to look for classes in these files */
+  content: [
+    './index.html',
+    './src/**/*.{js,ts,jsx,tsx}',
+  ];
+  /* This enables the .dark class strategy */
+  dark: 'class'; 
 }
 
-.dark {
-  /* Dark Mode Overrides */
-  --background: 240 6% 10%;        /* True dark background */
-  --foreground: 240 5% 98%;        /* Light, readable text */
-
-  --card: 240 6% 14%;          /* Slightly lighter dark gray cards */
-  --card-foreground: 240 5% 98%;
-
-  --primary: 217 91% 60%;         /* A brighter, vibrant blue for dark mode */
+/* 3. Define your theme using CSS variables */
+:root {
+  /* Light Mode */
+  --background: 240 5% 96%;
+  --foreground: 240 6% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 6% 10%;
+  --primary: 221 83% 53%;
   --primary-foreground: 0 0% 100%;
-
-  --secondary: 240 5% 20%;       /* Dark gray for secondary elements */
-  --secondary-foreground: 240 5% 98%; /* Light text on dark gray */
-
+  --secondary: 240 5% 90%;
+  --secondary-foreground: 240 6% 20%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 142 70% 45%;
+  --success-foreground: 0 0% 100%;
+  --muted: 240 5% 90%;
+  --muted-foreground: 240 5% 45%;
+  --accent: 240 5% 94%;
+  --accent-foreground: 240 6% 10%;
+  --radius: 0.5rem;
+}
+.dark {
+  /* Dark Mode */
+  --background: 240 6% 10%;
+  --foreground: 240 5% 98%;
+  --card: 240 6% 14%;
+  --card-foreground: 240 5% 98%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 5% 20%;
+  --secondary-foreground: 240 5% 98%;
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
-  
   --success: 142 60% 55%;
   --success-foreground: 0 0% 100%;
-
   --muted: 240 5% 20%;
   --muted-foreground: 240 5% 60%;
-
   --accent: 240 5% 25%;
   --accent-foreground: 240 5% 98%;
 }
 
-/* 3. Apply base styles to the body */
+/* 4. Apply CSS variables to Tailwind's theme (the new v4 @theme way) */
+@theme {
+  extend: {
+    colors: {
+      border: 'hsl(var(--muted))',
+      background: 'hsl(var(--background))',
+      foreground: 'hsl(var(--foreground))',
+      primary: {
+        DEFAULT: 'hsl(var(--primary))',
+        foreground: 'hsl(var(--primary-foreground))',
+      },
+      secondary: {
+        DEFAULT: 'hsl(var(--secondary))',
+        foreground: 'hsl(var(--secondary-foreground))',
+      },
+      destructive: {
+        DEFAULT: 'hsl(var(--destructive))',
+        foreground: 'hsl(var(--destructive-foreground))',
+      },
+      success: {
+        DEFAULT: 'hsl(var(--success))',
+        foreground: 'hsl(var(--success-foreground))',
+      },
+      muted: {
+        DEFAULT: 'hsl(var(--muted))',
+        foreground: 'hsl(var(--muted-foreground))',
+      },
+      accent: {
+        DEFAULT: 'hsl(var(--accent))',
+        foreground: 'hsl(var(--accent-foreground))',
+      },
+      card: {
+        DEFAULT: 'hsl(var(--card))',
+        foreground: 'hsl(var(--card-foreground))',
+      },
+    },
+    borderRadius: {
+      lg: 'var(--radius)',
+      md: 'calc(var(--radius) - 2px)',
+      sm: 'calc(var(--radius) - 4px)',
+    },
+  }
+}
+
+/* 5. Apply base styles to the body */
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
@@ -70,3 +109,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* We don't need the animate plugin import, 
+   Vite + Tailwind v4 handle it automatically 
+   if it's a PostCSS plugin. Let's keep it simple. */

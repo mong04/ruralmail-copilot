@@ -1,6 +1,6 @@
 import { openDB, type DBSchema } from 'idb';
 
-// Define schema for TypeScript safety (per idb docs)
+// Define schema for TypeScript safety (per idb docs: https://github.com/jakearchibald/idb)
 interface RuralMailDB extends DBSchema {
   routes: {
     key: string;
@@ -14,13 +14,12 @@ interface RuralMailDB extends DBSchema {
     key: string;
     value: PackageData;
   };
-  hud: {  // NEW for Iteration 4
+  hud: {
     key: string;
     value: HudData;
   };
 }
 
-// Type for route (array of stops)
 export type Stop = {
   address_line1: string;
   address_line2?: string;
@@ -42,8 +41,8 @@ export type SettingsData = {
 };
 
 export type Package = {
-  id: string;  // YOUR UPDATE: Unique ID
-  tracking?: string;  // YOUR UPDATE: Optional
+  id: string;
+  tracking?: string;
   size: 'small' | 'medium' | 'large';
   notes?: string;
   assignedStop?: number; // Index in route
@@ -55,14 +54,17 @@ export type PackageData = {
   packages: Package[];
 };
 
-// NEW for HUD (Iteration 4)
 export type HudData = {
   currentStop: number;
-  weatherAlerts: string[];  // Cached
+  weatherAlerts: string[];  // Cached alerts
 };
 
+/**
+ * Opens or creates the IndexedDB database with schema.
+ * @returns {Promise<IDBPDatabase<RuralMailDB>>} The opened database.
+ */
 export async function getDB() {
-  return openDB<RuralMailDB>('ruralmail-db', 4, {  // Bumped to 4 for HUD
+  return openDB<RuralMailDB>('ruralmail-db', 4, {
     upgrade(db, oldVersion) {
       if (oldVersion < 1) {
         db.createObjectStore('routes');
@@ -70,17 +72,21 @@ export async function getDB() {
       if (oldVersion < 2) {
         db.createObjectStore('settings');
       }
-      if (oldVersion < 3) {  // FIXED: Added space
+      if (oldVersion < 3) {
         db.createObjectStore('packages');
       }
-      if (oldVersion < 4) {  // NEW: HUD store
+      if (oldVersion < 4) {
         db.createObjectStore('hud');
       }
+      // Future migrations can be added here
     },
   });
 }
 
-// Route methods (unchanged)
+/**
+ * Saves the route to IndexedDB.
+ * @param {RouteData} route - The route data to save.
+ */
 export async function saveRoute(route: RouteData) {
   const db = await getDB();
   const tx = db.transaction('routes', 'readwrite');
@@ -88,11 +94,18 @@ export async function saveRoute(route: RouteData) {
   await tx.done;
 }
 
+/**
+ * Loads the route from IndexedDB.
+ * @returns {Promise<RouteData | undefined>} Loaded route or undefined if not found.
+ */
 export async function loadRoute(): Promise<RouteData | undefined> {
   const db = await getDB();
   return db.get('routes', 'fixed-route');
 }
 
+/**
+ * Clears the route from IndexedDB.
+ */
 export async function clearRoute() {
   const db = await getDB();
   const tx = db.transaction('routes', 'readwrite');
@@ -100,7 +113,10 @@ export async function clearRoute() {
   await tx.done;
 }
 
-// Settings methods (unchanged)
+/**
+ * Saves settings to IndexedDB.
+ * @param {SettingsData} settings - Settings to save.
+ */
 export async function saveSettings(settings: SettingsData) {
   const db = await getDB();
   const tx = db.transaction('settings', 'readwrite');
@@ -108,12 +124,20 @@ export async function saveSettings(settings: SettingsData) {
   await tx.done;
 }
 
+/**
+ * Loads settings from IndexedDB.
+ * @returns {Promise<SettingsData>} Loaded settings or empty object.
+ */
 export async function loadSettings(): Promise<SettingsData> {
   const db = await getDB();
   return (await db.get('settings', 'defaults')) || {};
 }
 
-// Packages methods (unchanged)
+/**
+ * Saves packages to IndexedDB for the given date.
+ * @param {Package[]} packages - Packages to save.
+ * @param {string} [date] - Date key (default: current YYYY-MM-DD).
+ */
 export async function savePackages(packages: Package[], date: string = new Date().toISOString().split('T')[0]) {
   const db = await getDB();
   const tx = db.transaction('packages', 'readwrite');
@@ -121,6 +145,10 @@ export async function savePackages(packages: Package[], date: string = new Date(
   await tx.done;
 }
 
+/**
+ * Loads packages from IndexedDB if matching current date.
+ * @returns {Promise<PackageData | undefined>} Loaded data or undefined if outdated/no data.
+ */
 export async function loadPackages(): Promise<PackageData | undefined> {
   const db = await getDB();
   const data = await db.get('packages', 'daily-packages');
@@ -131,6 +159,9 @@ export async function loadPackages(): Promise<PackageData | undefined> {
   return undefined; // Clear if old data
 }
 
+/**
+ * Clears packages from IndexedDB.
+ */
 export async function clearPackages() {
   const db = await getDB();
   const tx = db.transaction('packages', 'readwrite');
@@ -138,7 +169,10 @@ export async function clearPackages() {
   await tx.done;
 }
 
-// NEW HUD methods (Iteration 4)
+/**
+ * Saves HUD data to IndexedDB.
+ * @param {HudData} hud - HUD data to save.
+ */
 export async function saveHud(hud: HudData) {
   const db = await getDB();
   const tx = db.transaction('hud', 'readwrite');
@@ -146,11 +180,18 @@ export async function saveHud(hud: HudData) {
   await tx.done;
 }
 
+/**
+ * Loads HUD data from IndexedDB.
+ * @returns {Promise<HudData | undefined>} Loaded HUD or undefined.
+ */
 export async function loadHud(): Promise<HudData | undefined> {
   const db = await getDB();
   return db.get('hud', 'delivery-state');
 }
 
+/**
+ * Clears HUD data from IndexedDB.
+ */
 export async function clearHud() {
   const db = await getDB();
   const tx = db.transaction('hud', 'readwrite');

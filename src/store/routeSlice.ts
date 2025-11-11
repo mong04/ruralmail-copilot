@@ -5,10 +5,22 @@ import MapboxSdk from '@mapbox/mapbox-sdk';
 import Geocoding from '@mapbox/mapbox-sdk/services/geocoding';
 import { toast } from 'sonner';
 
+// Mapbox token from env
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const mapboxClient = MAPBOX_TOKEN ? MapboxSdk({ accessToken: MAPBOX_TOKEN }) : null;
 const geocodingService = mapboxClient ? Geocoding(mapboxClient) : null;
+
+// Define payload types
+interface UpdateStopPayload {
+  index: number;
+  stop: Stop;
+}
+
+interface ReorderStopsPayload {
+  startIndex: number;
+  endIndex: number;
+}
 
 // Initial state
 interface RouteState {
@@ -23,19 +35,31 @@ const initialState: RouteState = {
   error: null,
 };
 
-// Async thunk to load route from DB
+/**
+ * Async thunk to load route from DB.
+ * @returns {Promise<RouteData>} Loaded route or empty array.
+ */
 export const loadRouteFromDB = createAsyncThunk('route/load', async () => {
   const route = await loadRoute();
   return route || [];
 });
 
-// Async thunk to save route to DB
+/**
+ * Async thunk to save route to DB.
+ * @param {RouteData} route - Route to save.
+ * @returns {Promise<RouteData>} Saved route.
+ */
 export const saveRouteToDB = createAsyncThunk('route/save', async (route: RouteData) => {
   await saveRoute(route);
   return route;
 });
 
-// New thunk for geocoding a stop (structured input)
+/**
+ * Async thunk for geocoding a stop using Mapbox.
+ * Reference: https://docs.mapbox.com/mapbox-search-js/api/#forwardgeocode for query options.
+ * @param {Partial<Stop>} partialStop - Partial stop data.
+ * @returns {Promise<Stop>} Geocoded stop.
+ */
 export const geocodeStop = createAsyncThunk(
   'route/geocodeStop',
   async (partialStop: Partial<Stop>, { rejectWithValue }) => {
@@ -49,7 +73,7 @@ export const geocodeStop = createAsyncThunk(
     }
 
     try {
-      // Construct a query string since Mapbox v5 forwardGeocode expects 'query' (not structured fields)
+      // Construct query string (Mapbox v5 expects 'query')
       const addressParts = [
         partialStop.address_line1,
         partialStop.address_line2,
@@ -61,95 +85,98 @@ export const geocodeStop = createAsyncThunk(
       const response = await geocodingService
         .forwardGeocode({
           query: addressParts,
-          countries: ['us'],  // Fixed for USPS
           limit: 1,
-          autocomplete: false,
-          types: ['address'],  // Focus on addresses
+          // Optional: Bias to US if no country specified
+          countries: ['us'],
         })
         .send();
 
       const feature = response.body.features[0];
-      if (!feature || feature.relevance < 0.75) {  // Use 'relevance' instead of 'match_code.confidence'
-        toast.error('No accurate match found - try manual lat/lng');
-        return rejectWithValue('No match');
+      if (!feature) {
+        return rejectWithValue('No results found');
       }
 
       return {
-        lat: feature.center[1],  // [lng, lat] -> lat first
+        ...partialStop,
+        lat: feature.center[1],
         lng: feature.center[0],
-        full_address: feature.place_name,  // Use 'place_name' for full address
-      };
-    } catch (err: unknown) {  // Type 'err' as 'unknown'
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      toast.error(`Geocoding failed: ${message}`);
+        full_address: feature.place_name,
+      } as Stop;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Geocoding failed';
+      toast.error(message);
       return rejectWithValue(message);
     }
   }
 );
 
-
-// ** NEW PAYLOAD TYPES **
-interface UpdateStopPayload {
-  index: number;
-  stop: Stop;
-}
-
-interface ReorderStopsPayload {
-  startIndex: number;
-  endIndex: number;
-}
-
 const routeSlice = createSlice({
   name: 'route',
   initialState,
   reducers: {
-    // ** UPDATED to ensure full_address is always set **
+    /**
+     * Reducer to add a stop, computing full_address.
+     * @param {RouteState} state - Current state.
+     * @param {PayloadAction<Stop>} action - Stop to add.
+     */
     addStop: (state, action: PayloadAction<Stop>) => {
-      const stop = action.payload;
-      stop.full_address = [
-        stop.address_line1,
-        stop.address_line2,
-        stop.city,
-        stop.state,
-        stop.zip,
-      ]
-        .filter(Boolean)
-        .join(', ');
+      const stop = {
+        ...action.payload,
+        full_address: [
+          action.payload.address_line1,
+          action.payload.address_line2,
+          action.payload.city,
+          action.payload.state,
+          action.payload.zip,
+        ].filter(Boolean).join(', '),
+      };
       state.route.push(stop);
     },
-    // ** NEW **
+    /**
+     * Reducer to update a stop, recomputing full_address.
+     * @param {RouteState} state - Current state.
+     * @param {PayloadAction<UpdateStopPayload>} action - Index and updated stop.
+     */
     updateStop: (state, action: PayloadAction<UpdateStopPayload>) => {
       const { index, stop } = action.payload;
       if (state.route[index]) {
-        // Ensure full_address is re-computed
         stop.full_address = [
           stop.address_line1,
           stop.address_line2,
           stop.city,
           stop.state,
           stop.zip,
-        ]
-          .filter(Boolean)
-          .join(', ');
+        ].filter(Boolean).join(', ');
         state.route[index] = stop;
       }
     },
-    // ** NEW **
+    /**
+     * Reducer to remove a stop by index.
+     * @param {RouteState} state - Current state.
+     * @param {PayloadAction<number>} action - Index to remove.
+     */
     removeStop: (state, action: PayloadAction<number>) => {
       state.route.splice(action.payload, 1);
     },
-    // ** NEW **
+    /**
+     * Reducer to reorder stops.
+     * @param {RouteState} state - Current state.
+     * @param {PayloadAction<ReorderStopsPayload>} action - Start and end indices.
+     */
     reorderStops: (state, action: PayloadAction<ReorderStopsPayload>) => {
       const { startIndex, endIndex } = action.payload;
       const [removed] = state.route.splice(startIndex, 1);
       state.route.splice(endIndex, 0, removed);
     },
+    /**
+     * Reducer to clear route in memory.
+     * @param {RouteState} state - Current state.
+     */
     clearRouteMemory: (state) => {
       state.route = [];
     },
   },
   extraReducers: (builder) => {
-    // ... (all existing extraReducers for thunks) ...
     builder
       .addCase(loadRouteFromDB.pending, (state) => {
         state.loading = true;
@@ -177,7 +204,5 @@ const routeSlice = createSlice({
   },
 });
 
-// ** UPDATED exports **
-export const { addStop, updateStop, removeStop, reorderStops, clearRouteMemory } =
-  routeSlice.actions;
+export const { addStop, updateStop, removeStop, reorderStops, clearRouteMemory } = routeSlice.actions;
 export default routeSlice.reducer;

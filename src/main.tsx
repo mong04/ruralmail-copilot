@@ -7,9 +7,14 @@ import './style.css';
 import { Toaster } from 'sonner';
 import { loadRouteFromDB } from './store/routeSlice';
 import { loadPackagesFromDB } from './store/packageSlice';
+import { loadSettingsFromDB } from './store/settingsSlice';
+import { loadHudFromDB } from './store/hudSlice';
 
-store.dispatch(loadPackagesFromDB());
+// Dispatch initial loads (fire-and-forget; thunks handle async)
 store.dispatch(loadRouteFromDB());
+store.dispatch(loadPackagesFromDB());
+store.dispatch(loadSettingsFromDB());
+store.dispatch(loadHudFromDB());
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -17,5 +22,5 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <Toaster />
       <App />
     </Provider>
-  </React.StrictMode>,
+  </React.StrictMode>
 );

@@ -1,11 +1,11 @@
 // src/components/packages/Packages.tsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { type AppDispatch, type RootState } from '../../store';
 import {
   addPackage,
   deletePackage,
-  loadPackagesFromDB,
   savePackagesToDB,
   clearPackagesFromDB,
 } from '../../store/packageSlice';
@@ -15,31 +15,11 @@ import ScannerView from './ScannerView';
 import PackageList from './PackageList';
 import PackageForm from './PackageForm';
 
-interface PackagesProps {
-  onBack: () => void;
-  isScannerActive: boolean;
-  showPackageForm: boolean;
-  formContext: 'scan' | 'manual' | 'edit';
-  onScanSuccess: (tracking: string) => void;
-  onOpenScanner: () => void;
-  onOpenManualForm: () => void;
-  onCloseForm: () => void;
-  onCloseScanner: () => void;
-  onOpenEditForm: () => void;
-}
+const Packages: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-const Packages: React.FC<PackagesProps> = ({
-  onBack,
-  isScannerActive,
-  showPackageForm,
-  formContext,
-  onScanSuccess,
-  onOpenScanner,
-  onOpenManualForm,
-  onCloseForm,
-  onCloseScanner,
-  onOpenEditForm,
-}) => {
   const dispatch = useDispatch<AppDispatch>();
   const { packages, loading, error } = useSelector(
     (state: RootState) => state.packages,
@@ -54,9 +34,9 @@ const Packages: React.FC<PackagesProps> = ({
   const [pkgToUndo, setPkgToUndo] = useState<Package | null>(null);
   const toastIdRef = useRef<string | number | null>(null);
 
-  useEffect(() => {
-    dispatch(loadPackagesFromDB());
-  }, [dispatch]);
+  const [isScannerActive, setIsScannerActive] = useState(false);
+  const [showPackageForm, setShowPackageForm] = useState(false);
+  const [formContext, setFormContext] = useState<'scan' | 'manual' | 'edit'>('manual');
 
   const filteredPackages = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -70,16 +50,44 @@ const Packages: React.FC<PackagesProps> = ({
     );
   }, [packages, searchQuery]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    setIsScannerActive(params.get('scanner') === 'true');
+    setShowPackageForm(params.get('form') === 'true');
+  }, [location.search]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (isScannerActive) {
+        setIsScannerActive(false);
+        setSearchParams({});
+      } else if (showPackageForm) {
+        setShowPackageForm(false);
+        setSearchParams({});
+      } else {
+        navigate('/');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isScannerActive, showPackageForm, navigate, setSearchParams]);
+
   const handleLocalScanSuccess = (tracking: string) => {
     setEditingPackage(null);
     setNewScanData({ tracking });
-    onScanSuccess(tracking);
+    setIsScannerActive(false);
+    setShowPackageForm(true);
+    setFormContext('scan');
+    setSearchParams({ form: 'true' });
   };
 
   const handleStartEdit = (pkg: Package) => {
     setNewScanData(null);
     setEditingPackage(pkg);
-    onOpenEditForm();
+    setFormContext('edit');
+    setShowPackageForm(true);
+    setIsScannerActive(false);
+    setSearchParams({ form: 'true' });
   };
 
   const handleUndoDelete = () => {
@@ -116,16 +124,19 @@ const Packages: React.FC<PackagesProps> = ({
   const handleSubmitSuccess = () => {
     setEditingPackage(null);
     setNewScanData(null);
-    onCloseForm();
+    setShowPackageForm(false);
+    setSearchParams({});
     toast.success(formContext === 'edit' ? 'Package updated!' : 'Package added!');
   };
 
   const handleCancelForm = () => {
     setEditingPackage(null);
     setNewScanData(null);
-    onCloseForm();
+    setShowPackageForm(false);
+    setSearchParams({});
     if (formContext === 'scan') {
-      onOpenScanner();
+      setIsScannerActive(true);
+      setSearchParams({ scanner: 'true' });
     }
   };
 
@@ -145,12 +156,9 @@ const Packages: React.FC<PackagesProps> = ({
   if (error) return <p>Error: {error}</p>;
 
   return (
-    // **THE FIX:**
-    // - Removed *all* layout classes (w-full, md:w-3/4, lg:max-w-4xl, bg-white, rounded-xl, shadow-lg, p-6)
-    // - This component now just returns its content, and the parent (App.tsx) handles the "white box" layout.
-    <div className="w-full">
+    <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6"> {/* Added for consistency */}
       <h2 className="text-xl font-semibold mb-4">Manage Packages</h2>
-      <button onClick={onBack} className="mb-4 text-blue-500">
+      <button onClick={() => navigate('/')} className="mb-4 text-blue-500">
         Back to Dashboard
       </button>
 
@@ -158,7 +166,10 @@ const Packages: React.FC<PackagesProps> = ({
       {isScannerActive && (
         <ScannerView
           onScanSuccess={handleLocalScanSuccess}
-          onClose={onCloseScanner}
+          onClose={() => {
+            setIsScannerActive(false);
+            setSearchParams({});
+          }}
         />
       )}
 
@@ -166,7 +177,11 @@ const Packages: React.FC<PackagesProps> = ({
       {!showPackageForm && (
         <div className="flex flex-col md:flex-row justify-between mb-6 gap-4 md:gap-0">
           <button
-            onClick={onOpenScanner}
+            onClick={() => {
+              setIsScannerActive(true);
+              setShowPackageForm(false);
+              setSearchParams({ scanner: 'true' });
+            }}
             className="group inline-flex items-center justify-center px-6 py-3 bg-blue-500 text-white rounded-full font-bold text-base shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105 active:scale-95"
           >
             <span className="mr-4 text-3xl">📷</span>
@@ -174,7 +189,12 @@ const Packages: React.FC<PackagesProps> = ({
           </button>
 
           <button
-            onClick={onOpenManualForm}
+            onClick={() => {
+              setFormContext('manual');
+              setShowPackageForm(true);
+              setIsScannerActive(false);
+              setSearchParams({ form: 'true' });
+            }}
             className="group inline-flex items-center justify-center px-6 py-3 bg-gray-100 text-gray-700 rounded-full font-semibold text-base shadow-sm hover:shadow-md transition-all duration-300"
           >
             <span className="mr-3 text-xl">⌨️</span>

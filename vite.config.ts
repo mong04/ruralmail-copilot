@@ -1,13 +1,15 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
+import tailwindcss from '@tailwindcss/vite'; // Add this import
 import { VitePWA } from 'vite-plugin-pwa';
+import path from 'path';
 
+// https://vitejs.dev/config/
 export default defineConfig({
   base: '/',
   plugins: [
     react(),
-    tailwindcss(),
+    tailwindcss(), // Add the plugin here
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: {
@@ -45,16 +47,26 @@ export default defineConfig({
             src: 'screenshot-mobile.png',
             sizes: '720x1280',  // Portrait for mobile
             type: 'image/png',
-            form_factor: 'narrow',  // Explicit for mobile (though optional; fixes mobile warning)
+            form_factor: 'narrow',  // Explicit for mobile
           },
           {
             src: 'screenshot-desktop.png',
             sizes: '1280x720',  // Landscape for desktop
             type: 'image/png',
-            form_factor: 'wide',  // Fixes desktop warning
+            form_factor: 'wide',
           },
         ],
       },
     }),
   ],
+  // Aliases for cleaner imports
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  // Build options
+  build: {
+    sourcemap: process.env.NODE_ENV !== 'production', // Enable in dev
+  },
 });

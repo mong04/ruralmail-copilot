@@ -1,6 +1,7 @@
 // components/RouteSetup.tsx (REFACTORED)
-import React, { useState, type ChangeEvent, useEffect } from 'react';
+import React, { useState, type ChangeEvent } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom'; // NEW
 import { type AppDispatch, type RootState } from '../../store';
 import {
   addStop,
@@ -8,7 +9,6 @@ import {
   removeStop, // NEW
   reorderStops, // NEW
   clearRouteMemory,
-  loadRouteFromDB,
   saveRouteToDB,
 } from '../../store/routeSlice';
 import Papa from 'papaparse';
@@ -27,7 +27,8 @@ interface CsvRow {
   notes?: string;
 }
 
-const RouteSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const RouteSetup: React.FC = () => { // Remove prop
+  const navigate = useNavigate(); // NEW
   const dispatch = useDispatch<AppDispatch>();
   const { route, loading, error } = useSelector(
     (state: RootState) => state.route
@@ -39,9 +40,7 @@ const RouteSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   // null = no form, 'new' = adding, number = editing
   const [editingIndex, setEditingIndex] = useState<number | 'new' | null>(null);
 
-  useEffect(() => {
-    dispatch(loadRouteFromDB()); // Load on mount
-  }, [dispatch]);
+  // Remove useEffect(loadRouteFromDB) - centralized in main.tsx
 
   // --- New Handlers for Child Components ---
 
@@ -132,7 +131,7 @@ const RouteSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   return (
     <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6">
       <h2 className="text-xl font-semibold mb-4">Set Up Your Fixed Route</h2>
-      <button onClick={onBack} className="mb-4 text-blue-500">
+      <button onClick={() => navigate('/')} className="mb-4 text-blue-500"> {/* Updated */}
         Back to Dashboard
       </button>
 

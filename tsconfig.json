@@ -3,5 +3,17 @@
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
-  ]
+  ],
+  "compilerOptions": {
+    // Target modern ES for Vite/React
+    "target": "ES2020",
+    // Strict mode for better type safety[](https://www.typescriptlang.org/tsconfig#strict)
+    "strict": true,
+    // Skip lib checks for faster builds
+    "skipLibCheck": true,
+    // Module resolution for Node
+    "moduleResolution": "node",
+    // JSX for React
+    "jsx": "react-jsx"
+  }
 }

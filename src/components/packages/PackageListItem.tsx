@@ -14,10 +14,12 @@ interface PackageListItemProps {
   onDelete: () => void;
   onSwipeStart: () => void;
   onSwipeEnd: () => void;
-  /** This style prop is required by react-virtual for positioning */
   style: React.CSSProperties;
 }
 
+/**
+ * PackageListItem component with swipe actions for edit/delete.
+ */
 export const PackageListItem: React.FC<PackageListItemProps> = ({
   pkg,
   onEdit,
@@ -36,7 +38,7 @@ export const PackageListItem: React.FC<PackageListItemProps> = ({
         fullSwipe={true}
         leadingActions={
           <LeadingActions>
-            <SwipeAction onClick={onEdit}>
+            <SwipeAction onClick={onEdit} aria-label="Edit package">
               <div className="flex items-center justify-center h-full px-6 bg-blue-500 text-white font-bold">
                 <span>Edit</span>
               </div>
@@ -45,7 +47,7 @@ export const PackageListItem: React.FC<PackageListItemProps> = ({
         }
         trailingActions={
           <TrailingActions>
-            <SwipeAction onClick={onDelete} destructive={true}>
+            <SwipeAction onClick={onDelete} destructive={true} aria-label="Delete package">
               <div className="flex items-center justify-center h-full px-6 bg-red-600 text-white font-bold">
                 <span>Delete</span>
               </div>
@@ -57,9 +59,9 @@ export const PackageListItem: React.FC<PackageListItemProps> = ({
           type="button"
           onClick={onEdit}
           className="w-full flex items-center justify-between p-4 bg-white rounded-lg shadow-sm border border-gray-200 text-left"
+          aria-label={`Edit package ${pkg.tracking || 'No Tracking'}`}
         >
           <div className="flex-1 min-w-0">
-            {/* **THE FIX IS HERE:** Replaced 'truncate' with 'break-all' */}
             <div className="font-mono font-semibold text-sm text-gray-900 break-all">
               {pkg.tracking || 'No Tracking #'}
             </div>

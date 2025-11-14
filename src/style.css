@@ -1,115 +1,66 @@
-/* src/style.css */
-
-/* 1. Import Tailwind's v4 base/utilities */
 @import "tailwindcss";
 
-/* 2. Configure v4 features */
-@config {
-  /* This tells v4 to look for classes in these files */
-  content: [
-    './index.html',
-    './src/**/*.{js,ts,jsx,tsx}',
-  ];
-  /* This enables the .dark class strategy */
-  dark: 'class'; 
-}
+/* Define dark variant driven by a class */
+@custom-variant dark (&:where(.dark, .dark *));
 
-/* 3. Define your theme using CSS variables */
-:root {
-  /* Light Mode */
-  --background: 240 5% 96%;
-  --foreground: 240 6% 10%;
-  --card: 0 0% 100%;
-  --card-foreground: 240 6% 10%;
-  --primary: 221 83% 53%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 240 5% 90%;
-  --secondary-foreground: 240 6% 20%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --success: 142 70% 45%;
-  --success-foreground: 0 0% 100%;
-  --muted: 240 5% 90%;
-  --muted-foreground: 240 5% 45%;
-  --accent: 240 5% 94%;
-  --accent-foreground: 240 6% 10%;
-  --radius: 0.5rem;
-}
-.dark {
-  /* Dark Mode */
-  --background: 240 6% 10%;
-  --foreground: 240 5% 98%;
-  --card: 240 6% 14%;
-  --card-foreground: 240 5% 98%;
-  --primary: 217 91% 60%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 240 5% 20%;
-  --secondary-foreground: 240 5% 98%;
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 0 0% 100%;
-  --success: 142 60% 55%;
-  --success-foreground: 0 0% 100%;
-  --muted: 240 5% 20%;
-  --muted-foreground: 240 5% 60%;
-  --accent: 240 5% 25%;
-  --accent-foreground: 240 5% 98%;
-}
-
-/* 4. Apply CSS variables to Tailwind's theme (the new v4 @theme way) */
+/* Theme tokens */
 @theme {
-  extend: {
-    colors: {
-      border: 'hsl(var(--muted))',
-      background: 'hsl(var(--background))',
-      foreground: 'hsl(var(--foreground))',
-      primary: {
-        DEFAULT: 'hsl(var(--primary))',
-        foreground: 'hsl(var(--primary-foreground))',
-      },
-      secondary: {
-        DEFAULT: 'hsl(var(--secondary))',
-        foreground: 'hsl(var(--secondary-foreground))',
-      },
-      destructive: {
-        DEFAULT: 'hsl(var(--destructive))',
-        foreground: 'hsl(var(--destructive-foreground))',
-      },
-      success: {
-        DEFAULT: 'hsl(var(--success))',
-        foreground: 'hsl(var(--success-foreground))',
-      },
-      muted: {
-        DEFAULT: 'hsl(var(--muted))',
-        foreground: 'hsl(var(--muted-foreground))',
-      },
-      accent: {
-        DEFAULT: 'hsl(var(--accent))',
-        foreground: 'hsl(var(--accent-foreground))',
-      },
-      card: {
-        DEFAULT: 'hsl(var(--card))',
-        foreground: 'hsl(var(--card-foreground))',
-      },
-    },
-    borderRadius: {
-      lg: 'var(--radius)',
-      md: 'calc(var(--radius) - 2px)',
-      sm: 'calc(var(--radius) - 4px)',
-    },
-  }
+  --color-background: hsl(220 20% 98%);
+  --color-foreground: hsl(222 20% 14%);
+  --color-surface: hsl(0 0% 100%);
+  --color-surface-foreground: hsl(222 20% 14%);
+  --color-surface-muted: hsl(220 14% 96%);
+  --color-brand: hsl(222 84% 56%);
+  --color-brand-foreground: hsl(210 40% 98%);
+  --color-accent: hsl(210 20% 94%);
+  --color-accent-foreground: hsl(222 20% 14%);
+  --color-success: hsl(142 70% 45%);
+  --color-success-foreground: hsl(0 0% 100%);
+  --color-warning: hsl(35 91% 54%);
+  --color-warning-foreground: hsl(23 22% 13%);
+  --color-danger: hsl(0 84% 60%);
+  --color-danger-foreground: hsl(0 0% 100%);
+  --color-muted: hsl(220 10% 46%);
+  --color-subtle: hsl(220 10% 40%);
+  --color-border: hsl(220 14% 90%);
+  --radius-xl: 0.75rem;
+  --radius-lg: calc(0.75rem - 2px);
+  --radius-md: calc(0.75rem - 4px);
+  --shadow-sm: 0 1px 3px rgba(16,24,40,.12), 0 1px 2px rgba(16,24,40,.08);
+  --shadow-lg: 0 8px 28px rgba(16,24,40,.12);
 }
 
-/* 5. Apply base styles to the body */
+/* Dark overrides */
+.dark {
+  --color-background: hsl(222 20% 12%);
+  --color-foreground: hsl(210 40% 98%);
+  --color-surface: hsl(222 20% 16%);
+  --color-surface-foreground: hsl(210 40% 98%);
+  --color-surface-muted: hsl(222 20% 18%);
+  --color-brand: hsl(222 84% 60%);
+  --color-brand-foreground: hsl(210 40% 98%);
+  --color-accent: hsl(220 20% 22%);
+  --color-accent-foreground: hsl(210 40% 98%);
+  --color-success: hsl(142 60% 55%);
+  --color-success-foreground: hsl(0 0% 10%);
+  --color-warning: hsl(35 85% 62%);
+  --color-warning-foreground: hsl(0 0% 10%);
+  --color-danger: hsl(0 72% 51%);
+  --color-danger-foreground: hsl(0 0% 10%);
+  --color-muted: hsl(220 10% 70%);
+  --color-subtle: hsl(220 10% 64%);
+  --color-border: hsl(222 20% 26%);
+}
+
+/* Base resets */
+html, body, #root { height: 100%; }
 body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: ui-sans-serif, system-ui, Avenir, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-
-/* We don't need the animate plugin import, 
-   Vite + Tailwind v4 handle it automatically 
-   if it's a PostCSS plugin. Let's keep it simple. */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

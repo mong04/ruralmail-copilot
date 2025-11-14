@@ -1,47 +1,53 @@
 import React, { useState } from 'react';
 import AddressForm from './components/AddressForm';
 import AddressList from './components/AddressList';
+import { useDispatch, useSelector } from 'react-redux';
+import { type RootState } from '../../store';
+import { addStop, updateStop, removeStop, reorderStops, saveRouteToDB } from './routeSlice';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
 
-/**
- * RouteSetup component orchestrates adding and reviewing stops.
- * Keeps form logic modular and provides a clean, accessible workflow.
- */
 const RouteSetup: React.FC = () => {
-  const [addresses, setAddresses] = useState<string[]>([]);
+  const dispatch = useDispatch();
+  const route = useSelector((state: RootState) => state.route.route);
+  const settings = useSelector((state: RootState) => state.settings);
 
-  const handleAddAddress = (newAddress: string) => {
-    if (!newAddress.trim()) return;
-    setAddresses((prev) => [...prev, newAddress.trim()]);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+
+  const handleSubmit = (stop: any) => {
+    if (editingIndex === null) {
+      dispatch(addStop(stop));
+    } else {
+      dispatch(updateStop({ index: editingIndex, stop }));
+      setEditingIndex(null);
+    }
   };
 
-  const handleRemoveAddress = (index: number) => {
-    setAddresses((prev) => prev.filter((_, i) => i !== index));
-  };
+  const onEdit = (index: number) => setEditingIndex(index);
+  const onRemove = (index: number) => dispatch(removeStop(index));
+  const onReorder = (startIndex: number, endIndex: number) => dispatch(reorderStops({ startIndex, endIndex }));
+  const onSave = () => dispatch(saveRouteToDB(route));
 
   return (
-    <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6">
-      <h2 className="text-xl font-semibold mb-4">Setup Route</h2>
+    <Card className="p-6 space-y-6">
+      <h2 className="text-xl font-semibold">Setup Route</h2>
 
-      <AddressForm onAdd={handleAddAddress} />
-
-      <AddressList
-        addresses={addresses}
-        onRemove={handleRemoveAddress}
+      <AddressForm
+        initialData={editingIndex !== null ? route[editingIndex] : undefined}
+        defaultLocation={settings}
+        onSubmit={handleSubmit}
+        onCancel={() => setEditingIndex(null)}
       />
 
-      {addresses.length > 0 && (
-        <div className="mt-6 flex justify-end">
-          <button
-            className="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 
-              focus:ring-2 focus:ring-green-500 transition"
-            aria-label="Confirm Route"
-            onClick={() => alert('Route confirmed!')}
-          >
-            Confirm Route
-          </button>
+      <AddressList addresses={route} onReorder={onReorder} onEdit={onEdit} onRemove={onRemove} />
+
+      {route.length > 0 && (
+        <div className="flex justify-end gap-3">
+          <Button variant="surface" onClick={onSave} aria-label="Save Route">Save Route</Button>
+          <Button variant="primary" aria-label="Confirm Route">Confirm Route</Button>
         </div>
       )}
-    </div>
+    </Card>
   );
 };
 

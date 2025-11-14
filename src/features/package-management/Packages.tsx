@@ -1,35 +1,29 @@
-// src/components/packages/Packages.tsx
+// src/features/package-management/components/Packages.tsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { type AppDispatch, type RootState } from '../../store';
-import {
-  addPackage,
-  deletePackage,
-  savePackagesToDB,
-  clearPackagesFromDB,
-} from './packageSlice';
+import { addPackage, deletePackage, savePackagesToDB, clearPackagesFromDB } from './packageSlice';
 import { toast } from 'sonner';
 import { type Package } from '../../db';
 import ScannerView from './components/ScannerView';
 import PackageList from './components/PackageList';
 import PackageForm from './components/PackageForm';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { Camera, Keyboard, Trash2, Save } from 'lucide-react';
 
 const Packages: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchParams();
 
   const dispatch = useDispatch<AppDispatch>();
-  const { packages, loading, error } = useSelector(
-    (state: RootState) => state.packages,
-  );
+  const { packages, loading, error } = useSelector((state: RootState) => state.packages);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [editingPackage, setEditingPackage] = useState<Package | null>(null);
-  const [newScanData, setNewScanData] = useState<{ tracking: string } | null>(
-    null,
-  );
+  const [newScanData, setNewScanData] = useState<{ tracking: string } | null>(null);
 
   const [pkgToUndo, setPkgToUndo] = useState<Package | null>(null);
   const toastIdRef = useRef<string | number | null>(null);
@@ -39,14 +33,13 @@ const Packages: React.FC = () => {
   const [formContext, setFormContext] = useState<'scan' | 'manual' | 'edit'>('manual');
 
   const filteredPackages = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return packages;
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return packages;
     return packages.filter(
       (pkg) =>
-        (pkg.tracking && pkg.tracking.toLowerCase().includes(query)) ||
-        (pkg.assignedAddress &&
-          pkg.assignedAddress.toLowerCase().includes(query)) ||
-        (pkg.notes && pkg.notes.toLowerCase().includes(query)),
+        (pkg.tracking && pkg.tracking.toLowerCase().includes(q)) ||
+        (pkg.assignedAddress && pkg.assignedAddress.toLowerCase().includes(q)) ||
+        (pkg.notes && pkg.notes.toLowerCase().includes(q))
     );
   }, [packages, searchQuery]);
 
@@ -152,17 +145,16 @@ const Packages: React.FC = () => {
     }
   };
 
-  if (loading) return <p>Loading packages...</p>;
-  if (error) return <p>Error: {error}</p>;
+  if (loading) return <p className="text-foreground">Loading packages...</p>;
+  if (error) return <p className="text-danger">Error: {error}</p>;
 
   return (
-    <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6"> {/* Added for consistency */}
-      <h2 className="text-xl font-semibold mb-4">Manage Packages</h2>
-      <button onClick={() => navigate('/')} className="mb-4 text-blue-500">
+    <Card className="p-6 space-y-6 md:max-w-4xl mx-auto">
+      <h2 className="text-xl font-semibold text-foreground">Manage Packages</h2>
+      <button onClick={() => navigate('/')} className="text-brand hover:underline" aria-label="Back to Dashboard">
         Back to Dashboard
       </button>
 
-      {/* --- Render the Scanner --- */}
       {isScannerActive && (
         <ScannerView
           onScanSuccess={handleLocalScanSuccess}
@@ -173,48 +165,37 @@ const Packages: React.FC = () => {
         />
       )}
 
-      {/* --- Add Buttons --- */}
       {!showPackageForm && (
-        <div className="flex flex-col md:flex-row justify-between mb-6 gap-4 md:gap-0">
-          <button
+        <div className="flex flex-col md:flex-row justify-between mb-2 gap-3">
+          <Button
             onClick={() => {
               setIsScannerActive(true);
               setShowPackageForm(false);
               setSearchParams({ scanner: 'true' });
             }}
-            className="group inline-flex items-center justify-center px-6 py-3 bg-blue-500 text-white rounded-full font-bold text-base shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105 active:scale-95"
+            variant="primary"
           >
-            <span className="mr-4 text-3xl">📷</span>
-            Scan Package
-          </button>
+            <Camera className="mr-2" size={16} /> Scan Package
+          </Button>
 
-          <button
+          <Button
             onClick={() => {
               setFormContext('manual');
               setShowPackageForm(true);
               setIsScannerActive(false);
               setSearchParams({ form: 'true' });
             }}
-            className="group inline-flex items-center justify-center px-6 py-3 bg-gray-100 text-gray-700 rounded-full font-semibold text-base shadow-sm hover:shadow-md transition-all duration-300"
+            variant="surface"
           >
-            <span className="mr-3 text-xl">⌨️</span>
-            Add Manual Package
-          </button>
+            <Keyboard className="mr-2" size={16} /> Add Manual Package
+          </Button>
         </div>
       )}
 
-      {/* --- Render the Package Form --- */}
       {showPackageForm && (
-        <PackageForm
-          show={showPackageForm}
-          formContext={formContext}
-          initialPackage={editingPackage || newScanData}
-          onSubmitSuccess={handleSubmitSuccess}
-          onCancel={handleCancelForm}
-        />
+        <PackageForm show={showPackageForm} formContext={formContext} initialPackage={editingPackage || newScanData} onSubmitSuccess={handleSubmitSuccess} onCancel={handleCancelForm} />
       )}
 
-      {/* --- Render the Package List --- */}
       {!showPackageForm && (
         <PackageList
           packages={filteredPackages}
@@ -227,25 +208,15 @@ const Packages: React.FC = () => {
         />
       )}
 
-      {/* --- Save/Clear Buttons --- */}
-      <div className="flex space-x-4 pt-6">
-        <button
-          onClick={handleClear}
-          className="flex-1 bg-linear-to-r from-red-500 to-rose-600 text-white py-4 px-6 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center"
-        >
-          <span className="mr-3">🗑️</span>
-          Clear All
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={packages.length === 0}
-          className="flex-1 bg-linear-to-r from-blue-500 to-indigo-600 text-white py-4 px-6 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all duration-300 disabled:from-gray-400 disabled:to-gray-500 disabled:shadow-none disabled:cursor-not-allowed flex items-center justify-center"
-        >
-          <span className="mr-3">💾</span>
-          Save Packages
-        </button>
+      <div className="flex gap-3 pt-2 flex-col md:flex-row">
+        <Button onClick={handleClear} variant="danger" className="flex-1">
+          <Trash2 className="mr-2" size={16} /> Clear All
+        </Button>
+        <Button onClick={handleSave} disabled={packages.length === 0} variant="primary" className="flex-1">
+          <Save className="mr-2" size={16} /> Save Packages
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 };
 

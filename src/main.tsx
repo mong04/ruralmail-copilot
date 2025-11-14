@@ -7,15 +7,12 @@ import App from './App.tsx';
 import './style.css';
 import { Toaster } from 'sonner';
 
-import { loadRouteFromDB } from '../src/features/route-setup/routeSlice.ts';
-import { loadPackagesFromDB } from './features/package-management/packageSlice.ts';
-import { loadSettingsFromDB } from '../src/features/settings/settingsSlice.ts';
-import { loadHudFromDB } from './features/delivery-hud/hudSlice.ts';
+import { loadRouteFromDB } from './features/route-setup/routeSlice';
+import { loadPackagesFromDB } from './features/package-management/packageSlice';
+import { loadSettingsFromDB } from './features/settings/settingsSlice';
+import { loadHudFromDB } from './features/delivery-hud/hudSlice';
+import "mapbox-gl/dist/mapbox-gl.css";
 
-/**
- * Initialize application state by dispatching async thunks.
- * Keeping this logic in one place makes the entry file predictable and clean.
- */
 function initApp() {
   store.dispatch(loadRouteFromDB());
   store.dispatch(loadPackagesFromDB());
@@ -23,7 +20,13 @@ function initApp() {
   store.dispatch(loadHudFromDB());
 }
 
-// Kick off initial state hydration before first render
+const theme = localStorage.getItem("theme");
+if (theme === "dark") {
+  document.documentElement.classList.add("dark");
+} else {
+  document.documentElement.classList.remove("dark")
+}
+
 initApp();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

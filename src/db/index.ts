@@ -21,6 +21,7 @@ interface RuralMailDB extends DBSchema {
 }
 
 export type Stop = {
+  id: string;
   address_line1: string;
   address_line2?: string;
   city?: string;
@@ -43,9 +44,10 @@ export type SettingsData = {
 export type Package = {
   id: string;
   tracking?: string;
-  size: 'small' | 'medium' | 'large';
+  size: 'large' | 'medium' | 'small';
   notes?: string;
-  assignedStop?: number; // Index in route
+  assignedStopId?: string; // Index in route
+  assignedStopNumber?: number;
   assignedAddress?: string; // For matching/input
 };
 

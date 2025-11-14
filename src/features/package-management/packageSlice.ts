@@ -6,7 +6,8 @@ import type { RootState } from '../../store';
 
 // Define AddressMatch type
 type AddressMatch = {
-  stopIndex: number;
+  stopId: string;
+  stopNumber: number;
   address: string;
 } | null;
 
@@ -22,18 +23,12 @@ const initialState: PackageState = {
   error: null,
 };
 
-/**
- * Type guard to check if an item is a Stop.
- * @param {unknown} item - Item to check.
- * @returns {item is Stop} True if item is a Stop.
- */
 function isStop(item: unknown): item is Stop {
   return typeof item === 'object' && item !== null && 'full_address' in item;
 }
 
 /**
  * Async thunk to load packages from DB.
- * @returns {Promise<Package[]>} Loaded packages or empty array.
  */
 export const loadPackagesFromDB = createAsyncThunk('packages/load', async () => {
   const data = await loadPackages();
@@ -42,8 +37,6 @@ export const loadPackagesFromDB = createAsyncThunk('packages/load', async () => 
 
 /**
  * Async thunk to save packages to DB.
- * @param {Package[]} packages - Packages to save.
- * @returns {Promise<Package[]>} Saved packages.
  */
 export const savePackagesToDB = createAsyncThunk('packages/save', async (packages: Package[]) => {
   await savePackages(packages);
@@ -52,18 +45,14 @@ export const savePackagesToDB = createAsyncThunk('packages/save', async (package
 
 /**
  * Async thunk to clear packages from DB.
- * @returns {Promise<Package[]>} Empty array to reset state.
  */
 export const clearPackagesFromDB = createAsyncThunk('packages/clear', async () => {
   await clearPackages();
-  return []; // Return empty array to reset state
+  return [];
 });
 
 /**
  * Async thunk to match address to stop using Fuse.js fuzzy search.
- * Reference: https://www.fusejs.io/options.html for Fuse options.
- * @param {string} address - Address to match.
- * @returns {Promise<AddressMatch[]>} Array of matches.
  */
 export const matchAddressToStop = createAsyncThunk<
   AddressMatch[],
@@ -84,8 +73,6 @@ export const matchAddressToStop = createAsyncThunk<
   });
 
   const results = fuse.search(address, { limit: 5 });
-
-  // Sort by score for better relevance (lower score = better match)
   results.sort((a, b) => (a.score ?? 1) - (b.score ?? 1));
 
   const matches: AddressMatch[] = results
@@ -93,8 +80,9 @@ export const matchAddressToStop = createAsyncThunk<
       const item = result.item;
       if (isStop(item) && item.full_address) {
         return {
-          stopIndex: result.refIndex,
-          address: item.full_address 
+          stopId: (item as Stop).id,
+          stopNumber: result.refIndex,
+          address: item.full_address,
         };
       }
       return null;
@@ -112,44 +100,32 @@ const packageSlice = createSlice({
   name: 'packages',
   initialState,
   reducers: {
-    /**
-     * Reducer to add a package.
-     * @param {PackageState} state - Current state.
-     * @param {PayloadAction<Package>} action - Package to add.
-     */
     addPackage: (state, action: PayloadAction<Package>) => {
       state.packages.push(action.payload);
     },
-    /**
-     * Reducer to clear packages in memory.
-     * @param {PackageState} state - Current state.
-     */
     clearPackagesMemory: (state) => {
       state.packages = [];
     },
-    /**
-     * Reducer to delete a package by ID.
-     * @param {PackageState} state - Current state.
-     * @param {PayloadAction<string>} action - ID of package to delete.
-     */
     deletePackage: (state, action: PayloadAction<string>) => {
-      state.packages = state.packages.filter(
-        (pkg) => pkg.id !== action.payload
-      );
+      state.packages = state.packages.filter(pkg => pkg.id !== action.payload);
     },
-    /**
-     * Reducer to update a package.
-     * @param {PackageState} state - Current state.
-     * @param {PayloadAction<Package>} action - Updated package.
-     */
     updatePackage: (state, action: PayloadAction<Package>) => {
-      const index = state.packages.findIndex(
-        (pkg) => pkg.id === action.payload.id
-      );
+      const index = state.packages.findIndex(pkg => pkg.id === action.payload.id);
       if (index !== -1) {
         state.packages[index] = action.payload;
       }
-    }
+    },
+    /**
+     * Reducer to mark all packages at a stop as delivered.
+     */
+    markPackagesDelivered: (state, action: PayloadAction<{ stopId: string }>) => {
+      state.packages = state.packages.map(pkg =>
+        pkg.assignedStopId === action.payload.stopId
+          ? { ...pkg, delivered: true }
+          : pkg
+      );
+      toast.success(`Packages at stop ${action.payload.stopId} marked delivered`);
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -181,13 +157,20 @@ const packageSlice = createSlice({
         toast.error(state.error);
       })
       .addCase(matchAddressToStop.fulfilled, () => {
-        // Not directly updating state (handled by caller)
+        // handled by caller
       })
       .addCase(matchAddressToStop.rejected, () => {
-        // Not directly updating state (handled by caller)
+        // handled by caller
       });
   },
 });
 
-export const { addPackage, clearPackagesMemory, updatePackage, deletePackage } = packageSlice.actions;
+export const {
+  addPackage,
+  clearPackagesMemory,
+  updatePackage,
+  deletePackage,
+  markPackagesDelivered,
+} = packageSlice.actions;
+
 export default packageSlice.reducer;

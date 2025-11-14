@@ -1,22 +1,15 @@
+// src/features/delivery-hud/hudSlice.ts
 import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { loadHud, saveHud, type HudData } from '../../db';
 import type { RootState } from '../../store';
 
-// Define interface for OpenWeather alerts response (based on docs: https://openweathermap.org/api/one-call-3)
-interface WeatherAlert {
-  sender_name: string;
-  event: string;
-  start: number;
-  end: number;
-  description: string;
-  tags: string[];
-}
-
 interface HudState extends HudData {
   loading: boolean;
   position: { lat: number; lng: number } | null;
+  voiceEnabled: boolean;
+  currentStop: number;
 }
 
 const initialState: HudState = {
@@ -24,11 +17,11 @@ const initialState: HudState = {
   weatherAlerts: [],
   loading: false,
   position: null,
+  voiceEnabled: false,
 };
 
 /**
  * Async thunk to load HUD data from IndexedDB.
- * @returns {Promise<HudData>} Loaded HUD data or default.
  */
 export const loadHudFromDB = createAsyncThunk('hud/load', async () => {
   const data = await loadHud();
@@ -37,8 +30,6 @@ export const loadHudFromDB = createAsyncThunk('hud/load', async () => {
 
 /**
  * Async thunk to save HUD data to IndexedDB.
- * @param {HudData} hud - HUD data to save.
- * @returns {Promise<HudData>} Saved HUD data.
  */
 export const saveHudToDB = createAsyncThunk('hud/save', async (hud: HudData) => {
   await saveHud(hud);
@@ -46,27 +37,44 @@ export const saveHudToDB = createAsyncThunk('hud/save', async (hud: HudData) => 
 });
 
 /**
- * Async thunk to fetch weather alerts using OpenWeatherMap One Call API 3.0.
- * Reference: https://openweathermap.org/api/one-call-3 (alerts are in 'alerts' array).
- * Uses exclude to fetch only alerts for efficiency.
- * @returns {Promise<string[]>} Array of alert descriptions.
+ * Async thunk to fetch current weather and derive adverse driving alerts.
  */
 export const fetchWeatherAlerts = createAsyncThunk(
   'hud/fetchWeather',
   async (_, { getState, rejectWithValue }) => {
     const state = getState() as RootState;
     const { lat, lng } = state.hud.position || { lat: 0, lng: 0 };
-    const token = import.meta.env.VITE_OPENWEATHER_TOKEN;
+    const token = import.meta.env.VITE_OPENWEATHER_KEY;
     if (!token || lat === 0 || lng === 0) {
       return rejectWithValue('No position or token');
     }
 
     try {
       const response = await axios.get(
-        `https://api.openweathermap.org/data/3.0/onecall?lat=${lat}&lon=${lng}&exclude=current,minutely,hourly,daily&appid=${token}`
+        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${token}&units=imperial`
       );
-      const alerts: WeatherAlert[] = response.data.alerts || [];
-      return alerts.map((a) => a.description);
+      const data = response.data;
+
+      const alerts: string[] = [];
+
+      const condition = data.weather?.[0]?.main?.toLowerCase();
+      if (condition && ['snow', 'rain', 'thunderstorm', 'drizzle'].includes(condition)) {
+        alerts.push(`Adverse condition: ${condition}`);
+      }
+
+      if (data.wind?.speed > 25) {
+        alerts.push('High winds may affect driving');
+      }
+
+      if (data.visibility && data.visibility < 1000) {
+        alerts.push('Low visibility warning');
+      }
+
+      if (data.main?.temp < 32) {
+        alerts.push('Freezing temperatures — watch for ice');
+      }
+
+      return alerts;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       toast.error(`Weather fetch failed: ${message}`);
@@ -79,27 +87,28 @@ const hudSlice = createSlice({
   name: 'hud',
   initialState,
   reducers: {
-    /**
-     * Reducer to update current position with haptic feedback.
-     * @param {HudState} state - Current state.
-     * @param {PayloadAction<{ lat: number; lng: number }>} action - New position.
-     */
     updatePosition: (state, action: PayloadAction<{ lat: number; lng: number }>) => {
       state.position = action.payload;
       if (navigator.vibrate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        navigator.vibrate(200);  // Haptic feedback (respects reduced motion)
+        navigator.vibrate(200);
       }
     },
-    /**
-     * Reducer to advance to the next stop with success toast and haptic pattern.
-     * @param {HudState} state - Current state.
-     */
     advanceStop: (state) => {
       state.currentStop += 1;
       toast.success('Stop advanced!');
       if (navigator.vibrate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        navigator.vibrate([100, 50, 100]);  // Pattern for completion
+        navigator.vibrate([100, 50, 100]);
       }
+    },
+    markDelivered: (state, action: PayloadAction<{ stopId: string }>) => {
+      // This reducer doesn’t directly mutate packages (that’s in packagesSlice),
+      // but it can trigger a toast and advance the HUD.
+      toast.success(`Packages at stop ${action.payload.stopId} marked delivered`);
+      state.currentStop += 1;
+    },
+    toggleVoice: (state, action: PayloadAction<boolean>) => {
+      state.voiceEnabled = action.payload;
+      toast.info(`Voice guidance ${action.payload ? 'enabled' : 'disabled'}`);
     },
   },
   extraReducers: (builder) => {
@@ -128,5 +137,5 @@ const hudSlice = createSlice({
   },
 });
 
-export const { updatePosition, advanceStop } = hudSlice.actions;
+export const { updatePosition, advanceStop, markDelivered, toggleVoice } = hudSlice.actions;
 export default hudSlice.reducer;

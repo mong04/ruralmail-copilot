@@ -122,6 +122,7 @@ const routeSlice = createSlice({
     addStop: (state, action: PayloadAction<Stop>) => {
       const stop = {
         ...action.payload,
+        id: action.payload.id ?? crypto.randomUUID(),
         full_address: [
           action.payload.address_line1,
           action.payload.address_line2,

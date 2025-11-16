@@ -1,152 +1,219 @@
 // src/features/delivery-hud/components/DeliveryMap.tsx
-import React, { useEffect, useRef } from "react";
-import mapboxgl from "mapbox-gl";
-import { toast } from "sonner";
-import type { Stop, Package } from "../../../db";
+import React, { useEffect, useRef } from 'react';
+import mapboxgl from 'mapbox-gl';
+import { toast } from 'sonner';
+import type { Stop, Package } from '../../../db';
 
 interface Props {
-  route: Stop[];        // filtered stops to plot
-  fullRoute: Stop[];    // entire route for resolving packages
+  route: Stop[];
+  fullRoute: Stop[];
   packages: Package[];
   currentStop: number;
   voiceEnabled: boolean;
+  position: { lat: number; lng: number } | null;
+  mapStyle: 'streets' | 'satellite';
+  cameraMode: 'task' | 'follow' | 'overview';
 }
+
+import { MapControls } from './MapControls';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
-const DeliveryMap: React.FC<Props> = ({ route, fullRoute, packages, currentStop }) => {
+const DeliveryMap: React.FC<Props> = ({
+  route,
+  fullRoute,
+  packages,
+  currentStop,
+  // voiceEnabled,
+  position,
+  mapStyle,
+  cameraMode,
+}) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
+
+  // Get the correct Mapbox style URL
+  const styleUrl =
+    mapStyle === 'satellite'
+      ? 'mapbox://styles/mapbox/satellite-streets-v12'
+      : 'mapbox://styles/mapbox/streets-v12';
 
   // Initialize map once
   useEffect(() => {
     if (!containerRef.current) {
-      console.error("[Mapbox] Container ref is null");
-      toast.error("Map container not ready.");
+      console.error('[Mapbox] Container ref is null');
+      toast.error('Map container not ready.');
       return;
     }
     if (mapRef.current) return;
 
     try {
-      const centerLng = route?.[currentStop]?.lng ?? -79.59574;
-      const centerLat = route?.[currentStop]?.lat ?? 40.787342;
-
       mapRef.current = new mapboxgl.Map({
-        container: containerRef.current,
-        style: "mapbox://styles/mapbox/streets-v12",
-        center: [centerLng, centerLat],
+        container: containerRef.current!,
+        style: styleUrl,
+        center: [-79.59574, 40.787342], // Default center
         zoom: 12,
       });
 
-      mapRef.current.addControl(new mapboxgl.NavigationControl());
-      console.log("[Mapbox] Map initialized");
+      // ✅ ADDED BACK: Map controls and error handling
+      mapRef.current.addControl(
+        new mapboxgl.NavigationControl({
+          showCompass: false,
+        }),
+        'top-right'
+      );
 
-      mapRef.current.on("error", (ev) => {
-        console.error("[Mapbox] Mapbox emitted error", (ev as { error?: unknown }).error || ev);
-        toast.error("Map error — check token, style, or network.");
+      console.log('[Mapbox] Map initialized');
+
+      mapRef.current.on('error', (ev) => {
+        console.error(
+          '[Mapbox] Mapbox emitted error',
+          (ev as { error?: unknown }).error || ev
+        );
+        toast.error('Map error — check token, style, or network.');
       });
     } catch (e) {
-      console.error("[Mapbox] Map init failed:", e);
-      toast.error("Map initialization failed.");
+      console.error('[Mapbox] Map init failed:', e);
+      toast.error('Map initialization failed.');
     }
-
-    return () => {
-      if (mapRef.current) {
-        markersRef.current.forEach((m) => m.remove());
-        markersRef.current = [];
-        console.log("[Mapbox] Map removed");
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Redraw markers when inputs change
+  // Listen for style changes
+  useEffect(() => {
+    if (mapRef.current) {
+      mapRef.current.setStyle(styleUrl);
+    }
+  }, [styleUrl]);
+
+  // Redraw markers and move camera when inputs change
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    // Clear existing markers
+    // Clear existing route markers
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
-    // Stop markers
+    // Draw Route Stop Markers
     (route ?? []).forEach((stop, idx) => {
-      const { lng, lat } = stop;
-      if (typeof lng !== "number" || typeof lat !== "number") {
-        console.warn("[Mapbox] Invalid stop coordinates", stop);
-        return;
-      }
-      const el = document.createElement("div");
-      el.style.width = "12px";
-      el.style.height = "12px";
-      el.style.borderRadius = "50%";
-      el.style.background = idx === currentStop ? "#ef4444" : "#2563eb";
-      el.style.boxShadow = "0 0 0 2px white";
-      const marker = new mapboxgl.Marker(el).setLngLat([lng, lat]).addTo(map);
+      const el = document.createElement('div');
+      el.style.width = '12px';
+      el.style.height = '12px';
+      el.style.borderRadius = '50%';
+      el.style.background = idx === currentStop ? '#ef4444' : '#2563eb'; // Red for current, blue for others
+      el.style.boxShadow = '0 0 0 2px white';
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([stop.lng, stop.lat])
+        .addTo(map);
       markersRef.current.push(marker);
     });
-    // Package markers (resolve by ID first, then number)
-    (packages ?? []).forEach((pkg) => {
-      let stop: Stop | undefined;
 
-      if (pkg.assignedStopId) {
-        console.log("[Mapbox] Resolving by ID:", pkg.assignedStopId);
-        stop = (fullRoute ?? []).find((s) => s.id === pkg.assignedStopId);
-      } else if (typeof pkg.assignedStopNumber === "number") {
-        console.log("[Mapbox] Resolving by index:", pkg.assignedStopNumber);
-        stop = (fullRoute ?? [])[pkg.assignedStopNumber];
-      } else {
-        console.warn("[Mapbox] Package missing stop reference", pkg);
-        return;
-      }
-
-      if (!stop) {
-        console.warn("[Mapbox] No stop found for package", pkg, {
-          assignedStopId: pkg.assignedStopId,
-          assignedStopNumber: pkg.assignedStopNumber,
-          fullRouteIds: (fullRoute ?? []).map((s) => s.id),
-        });
-        return;
-      }
-
-      const { lng, lat } = stop;
-      if (typeof lng !== "number" || typeof lat !== "number") {
-        console.warn("[Mapbox] Invalid stop coordinates for package", pkg, stop);
-        return;
-      }
-
-      const el = document.createElement("div");
-      el.style.width = "8px";
-      el.style.height = "8px";
-      el.style.borderRadius = "50%";
-      el.style.background = "#10b981";
-      el.style.boxShadow = "0 0 0 1px white";
-      new mapboxgl.Marker(el).setLngLat([lng, lat]).addTo(mapRef.current!);
-    });
-
-    // Re-center to current stop if available
-    const centerStop = route?.[currentStop];
-    if (centerStop && typeof centerStop.lng === "number" && typeof centerStop.lat === "number") {
-      map.setCenter([centerStop.lng, centerStop.lat]);
-    }
-
-    // Fit bounds to filtered route
-    if ((route ?? []).length > 0) {
-      const bounds = new mapboxgl.LngLatBounds();
-      (route ?? []).forEach((s) => {
-        if (typeof s.lng === "number" && typeof s.lat === "number") {
-          bounds.extend([s.lng, s.lat]);
+    // Draw Package Markers (undelivered only)
+    (packages ?? [])
+      .filter((pkg) => !pkg.delivered)
+      .forEach((pkg) => {
+        let stop: Stop | undefined;
+        if (pkg.assignedStopId) {
+          stop = (fullRoute ?? []).find((s) => s.id === pkg.assignedStopId);
+        } else if (typeof pkg.assignedStopNumber === 'number') {
+          stop = (fullRoute ?? [])[pkg.assignedStopNumber];
         }
-      });
-      map.fitBounds(bounds, { padding: 40, maxZoom: 14 });
-      console.log("[Mapbox] Bounds fitted to route", route.length);
-    }
-  }, [route, fullRoute, packages, currentStop]);
+        if (!stop || typeof stop.lng !== 'number') return; // Skip if no valid stop
 
-  return <div ref={containerRef} className="w-full h-full" />;
+        const el = document.createElement('div');
+        el.style.width = '8px';
+        el.style.height = '8px';
+        el.style.borderRadius = '50%';
+        el.style.background = '#10b981'; // Green for packages
+        el.style.boxShadow = '0 0 0 1px white';
+        new mapboxgl.Marker(el)
+          .setLngLat([stop.lng, stop.lat])
+          .addTo(mapRef.current!);
+      });
+
+    // Draw User Position Marker
+    if (position) {
+      if (!userMarkerRef.current) {
+        const el = document.createElement('div');
+        el.style.width = '16px';
+        el.style.height = '16px';
+        el.style.borderRadius = '50%';
+        el.style.background = '#007cbf'; // Blue dot for user
+        el.style.border = '2px solid white';
+        el.style.boxShadow = '0 0 4px 2px rgba(0,0,0,0.1)';
+        userMarkerRef.current = new mapboxgl.Marker(el)
+          .setLngLat([position.lng, position.lat])
+          .addTo(map);
+      } else {
+        userMarkerRef.current.setLngLat([position.lng, position.lat]);
+      }
+    }
+
+    // --- Update Camera ---
+    const centerStop = route?.[currentStop];
+
+    if (cameraMode === 'overview') {
+      const bounds = new mapboxgl.LngLatBounds();
+      packages
+        .filter((pkg) => !pkg.delivered)
+        .forEach((pkg) => {
+          let stop: Stop | undefined;
+          if (pkg.assignedStopId) {
+            stop = (fullRoute ?? []).find((s) => s.id === pkg.assignedStopId);
+          } else if (typeof pkg.assignedStopNumber === 'number') {
+            stop = (fullRoute ?? [])[pkg.assignedStopNumber];
+          }
+          if (stop && typeof stop.lng === 'number' && typeof stop.lat === 'number') {
+            bounds.extend([stop.lng, stop.lat]);
+          }
+        });
+
+      if (!bounds.isEmpty()) {
+        map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 500 });
+      }
+    } else if (cameraMode === 'follow' && position) {
+      map.easeTo({
+        center: [position.lng, position.lat],
+        zoom: 16,
+        duration: 500,
+      });
+    } else {
+      // "Task" mode (default)
+      if (position && centerStop) {
+        const bounds = new mapboxgl.LngLatBounds();
+        bounds.extend([position.lng, position.lat]);
+        bounds.extend([centerStop.lng, centerStop.lat]);
+        map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 500 });
+      } else if (centerStop) {
+        map.easeTo({
+          center: [centerStop.lng, centerStop.lat],
+          duration: 500,
+        });
+      } else if (position) {
+        map.easeTo({
+          center: [position.lng, position.lat],
+          duration: 500,
+        });
+      }
+    }
+  }, [
+    route,
+    fullRoute,
+    packages,
+    currentStop,
+    position,
+    cameraMode,
+  ]);
+
+  return (
+    <div className="w-full h-full relative">
+      <div ref={containerRef} className="w-full h-full" />
+      <MapControls />
+    </div>
+  );
 };
 
 export default DeliveryMap;

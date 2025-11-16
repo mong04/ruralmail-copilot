@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
 import AddressForm from './components/AddressForm';
 import AddressList from './components/AddressList';
-import { useDispatch, useSelector } from 'react-redux';
-import { type RootState } from '../../store';
+import { useAppDispatch, useAppSelector } from '../../store';
 import { addStop, updateStop, removeStop, reorderStops, saveRouteToDB } from './routeSlice';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 
 const RouteSetup: React.FC = () => {
-  const dispatch = useDispatch();
-  const route = useSelector((state: RootState) => state.route.route);
-  const settings = useSelector((state: RootState) => state.settings);
+  const dispatch = useAppDispatch();
+  const route = useAppSelector((state) => state.route.route);
+  const settings = useAppSelector((state) => state.settings);
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 

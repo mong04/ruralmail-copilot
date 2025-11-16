@@ -10,6 +10,8 @@ interface HudState extends HudData {
   position: { lat: number; lng: number } | null;
   voiceEnabled: boolean;
   currentStop: number;
+  mapStyle: 'streets' | 'satellite';
+  cameraMode: 'task' | 'follow' | 'overview';
 }
 
 const initialState: HudState = {
@@ -18,6 +20,8 @@ const initialState: HudState = {
   loading: false,
   position: null,
   voiceEnabled: false,
+  mapStyle: 'streets',
+  cameraMode: 'task',
 };
 
 /**
@@ -110,6 +114,12 @@ const hudSlice = createSlice({
       state.voiceEnabled = action.payload;
       toast.info(`Voice guidance ${action.payload ? 'enabled' : 'disabled'}`);
     },
+    setMapStyle: (state, action: PayloadAction<HudState['mapStyle']>) => {
+      state.mapStyle = action.payload;
+    },
+    setCameraMode: (state, action: PayloadAction<HudState['cameraMode']>) => {
+      state.cameraMode = action.payload;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -137,5 +147,12 @@ const hudSlice = createSlice({
   },
 });
 
-export const { updatePosition, advanceStop, markDelivered, toggleVoice } = hudSlice.actions;
+export const { 
+  updatePosition, 
+  advanceStop, 
+  markDelivered, 
+  toggleVoice,
+  setMapStyle,
+  setCameraMode, 
+} = hudSlice.actions;
 export default hudSlice.reducer;

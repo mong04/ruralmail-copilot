@@ -30,35 +30,40 @@ export type Stop = {
   lat: number;
   lng: number;
   notes?: string;
-  full_address?: string;  // Computed on load/save
+  full_address?: string; // Computed on load/save
 };
 
 export type RouteData = Stop[];
 
+// ✅ ADDED new fields to SettingsData
 export type SettingsData = {
   defaultCity?: string;
   defaultState?: string;
   defaultZip?: string;
+  defaultRouteName?: string; // e.g., "Route 7"
+  preferredNavApp?: 'in-app' | 'google' | 'apple' | 'waze';
+  theme?: 'light' | 'dark'; // ✅ ADDED
 };
 
 export type Package = {
   id: string;
   tracking?: string;
   size: 'large' | 'medium' | 'small';
-  notes?: string;
-  assignedStopId?: string; // Index in route
+  notes?: string; // This is for "Load Location / Notes"
+  assignedStopId?: string;
   assignedStopNumber?: number;
-  assignedAddress?: string; // For matching/input
+  assignedAddress?: string; // The canonical, matched address
+  delivered?: boolean;
 };
 
 export type PackageData = {
-  date: string;  // YYYY-MM-DD for daily
+  date: string; // YYYY-MM-DD for daily
   packages: Package[];
 };
 
 export type HudData = {
   currentStop: number;
-  weatherAlerts: string[];  // Cached alerts
+  weatherAlerts: string[]; // Cached alerts
 };
 
 /**
@@ -132,7 +137,10 @@ export async function saveSettings(settings: SettingsData) {
  */
 export async function loadSettings(): Promise<SettingsData> {
   const db = await getDB();
-  return (await db.get('settings', 'defaults')) || {};
+  const data = await db.get('settings', 'defaults');
+  // ✅ FIX: Explicitly cast the empty object to SettingsData
+  // to satisfy the strict return type.
+  return data || ({} as SettingsData);
 }
 
 /**

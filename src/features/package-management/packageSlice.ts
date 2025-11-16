@@ -67,7 +67,7 @@ export const matchAddressToStop = createAsyncThunk<
   }
 
   const fuse = new Fuse(route, {
-    keys: ['full_address'],
+    keys: ['full_address', 'notes'], // Also search notes for 'Smith Farm' etc.
     threshold: 0.3,
     ignoreLocation: true,
   });
@@ -119,12 +119,17 @@ const packageSlice = createSlice({
      * Reducer to mark all packages at a stop as delivered.
      */
     markPackagesDelivered: (state, action: PayloadAction<{ stopId: string }>) => {
-      state.packages = state.packages.map(pkg =>
-        pkg.assignedStopId === action.payload.stopId
-          ? { ...pkg, delivered: true }
-          : pkg
-      );
-      toast.success(`Packages at stop ${action.payload.stopId} marked delivered`);
+      let count = 0;
+      state.packages = state.packages.map(pkg => {
+        if (pkg.assignedStopId === action.payload.stopId && !pkg.delivered) {
+          count++;
+          return { ...pkg, delivered: true }; // ✅ FIX: Set delivered status
+        }
+        return pkg;
+      });
+      if (count > 0) {
+        toast.success(`${count} package(s) marked delivered`);
+      }
     },
   },
   extraReducers: (builder) => {
@@ -143,6 +148,7 @@ const packageSlice = createSlice({
       .addCase(savePackagesToDB.fulfilled, (state, action) => {
         state.loading = false;
         state.packages = action.payload;
+        toast.success('Packages saved!');
       })
       .addCase(savePackagesToDB.rejected, (state, action) => {
         state.loading = false;
@@ -151,6 +157,7 @@ const packageSlice = createSlice({
       })
       .addCase(clearPackagesFromDB.fulfilled, (state) => {
         state.packages = [];
+        toast.success('All packages cleared.');
       })
       .addCase(clearPackagesFromDB.rejected, (state, action) => {
         state.error = action.error.message || 'Failed to clear packages';

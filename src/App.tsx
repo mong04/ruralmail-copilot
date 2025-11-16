@@ -1,10 +1,17 @@
 import { useState, useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './AppRouter';
-import { Toaster } from 'sonner';
+import { useAppSelector } from './store'; // ✅ Import the hook
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  // ✅ FIX: Get the theme from the Redux store
+  const theme = useAppSelector((state) => state.settings.theme);
+
+  // ✅ FIX: This effect applies the theme to the <html> tag whenever it changes in Redux
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
 
   useEffect(() => {
     const storedLogin = localStorage.getItem('isLoggedIn');
@@ -40,7 +47,7 @@ const App: React.FC = () => {
 
   return (
     <>
-      <Toaster position="top-center" richColors />
+      {/* ✅ The duplicate Toaster component is now gone */}
       <RouterProvider router={router} />
     </>
   );

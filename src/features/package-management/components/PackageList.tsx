@@ -1,147 +1,143 @@
 // src/features/package-management/components/PackageList.tsx
-import React, { useRef, useMemo, useState, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import { type RootState } from '../../../store';
 import { type Package, type Stop } from '../../../db';
 import { SwipeableList } from 'react-swipeable-list';
 import 'react-swipeable-list/dist/styles.css';
 import { PackageListItem } from './PackageListItem';
-import { GroupHeader } from './GroupHeader';
-import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
-import { useIsMobile } from '../../../hooks/useIsMobile';
+import { GroupHeader, type StopNoteType } from './GroupHeader';
+import { Search } from 'lucide-react';
 import { Card } from '../../../components/ui/Card';
-import { Clipboard } from 'lucide-react';
 
 interface PackageListProps {
-  packages: Package[];
-  allPackages: Package[];
-  totalCount: number;
+  packages: Package[]; // This is already the *filtered* list
   searchQuery: string;
   onSearchChange: (query: string) => void;
   onEdit: (pkg: Package) => void;
   onDelete: (pkg: Package) => void;
 }
 
-type VirtualRow = { type: 'header'; stopIndex: number; count: number; title: string } | { type: 'package'; pkg: Package };
+/**
+ * Helper to check route notes for keywords.
+ */
+const getNoteType = (notes: string | undefined): StopNoteType | null => {
+  if (!notes) return null;
+  const lowerNotes = notes.toLowerCase();
+  if (lowerNotes.includes('vacant')) return 'vacant';
+  if (lowerNotes.includes('forward')) return 'forward';
+  if (lowerNotes.trim().length > 0) return 'note';
+  return null;
+};
 
-const PackageList: React.FC<PackageListProps> = ({ allPackages, totalCount, searchQuery, onSearchChange, onEdit, onDelete }) => {
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+// This is the new data structure for our list
+interface GroupedStop {
+  stopIndex: number;
+  stop: Stop | null; // null for "Unassigned"
+  packages: Package[];
+  noteType: StopNoteType | null;
+}
+
+const PackageList: React.FC<PackageListProps> = ({
+  packages,
+  searchQuery,
+  onSearchChange,
+  onEdit,
+  onDelete,
+}) => {
   const route = useSelector((state: RootState) => state.route.route) as Stop[];
-  const isMobile = useIsMobile();
 
-  const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set([-1]));
+  // This logic now creates the groups for our cards
+  const groupedStops = useMemo(() => {
+    const groups: Record<number, GroupedStop> = {
+      [-1]: {
+        stopIndex: -1,
+        stop: null,
+        packages: [],
+        noteType: null,
+      },
+    };
 
-  const toggleGroup = useCallback((stopIndex: number) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(stopIndex)) next.delete(stopIndex);
-      else next.add(stopIndex);
-      return next;
+    // Initialize all route stops, even if they have 0 packages in the filtered list
+    // This ensures cards are stable, though we will only show ones with packages.
+    route.forEach((stop, index) => {
+      groups[index] = {
+        stopIndex: index,
+        stop: stop,
+        packages: [],
+        noteType: getNoteType(stop.notes),
+      };
     });
-  }, []);
 
-  const { flatRows } = useMemo(() => {
-    const groups: { [key: number]: Package[] } = { [-1]: [] };
-    for (const pkg of allPackages) {
+    // Populate packages into the groups
+    for (const pkg of packages) {
       const stopIndex = pkg.assignedStopNumber ?? -1;
-      if (!groups[stopIndex]) groups[stopIndex] = [];
-      groups[stopIndex].push(pkg);
+      if (groups[stopIndex]) {
+        groups[stopIndex].packages.push(pkg);
+      } else {
+        // This case should not happen if route is loaded, but a good fallback
+        groups[-1].packages.push(pkg);
+      }
     }
 
-    const flatRows: VirtualRow[] = [];
-    Object.entries(groups)
-      .sort(([a], [b]) => Number(a) - Number(b))
-      .forEach(([key, pkgs]) => {
-        const stopIndex = Number(key);
-        const title = stopIndex === -1 ? 'Unassigned' : route[stopIndex]?.full_address ?? `Stop ${stopIndex + 1}`;
-        flatRows.push({ type: 'header', stopIndex, count: pkgs.length, title });
-        if (expandedGroups.has(stopIndex)) {
-          pkgs.forEach((pkg) => flatRows.push({ type: 'package', pkg }));
-        }
-      });
-    return { flatRows };
-  }, [allPackages, expandedGroups, route]);
-
-  const virtualizer = useVirtualizer({
-    count: flatRows.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => 64,
-  });
-
-  const items = virtualizer.getVirtualItems();
-
-  const renderListContent = useCallback(() => {
-    if (items.length === 0) return <p className="text-center text-muted">No packages</p>;
-
-    return (
-      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-        {items.map((virtualRow: VirtualItem) => {
-          const row = flatRows[virtualRow.index];
-          const style = {
-            position: 'absolute' as const,
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: `${virtualRow.size}px`,
-            transform: `translateY(${virtualRow.start}px)`,
-          };
-
-          if (row.type === 'header') {
-            return (
-              <GroupHeader
-                key={row.stopIndex}
-                title={row.title}
-                count={row.count}
-                isExpanded={expandedGroups.has(row.stopIndex)}
-                onToggle={() => toggleGroup(row.stopIndex)}
-                style={style}
-              />
-            );
-          }
-
-          return (
-            <SwipeableList key={row.pkg.id} destructiveCallbackDelay={300} style={{ ...style, position: 'absolute' as const, paddingBottom: '8px' }}>
-              <PackageListItem
-                pkg={row.pkg}
-                onEdit={() => onEdit(row.pkg)}
-                onDelete={() => onDelete(row.pkg)}
-                onSwipeStart={() => {}}
-                onSwipeEnd={() => {}}
-                style={{}}
-              />
-            </SwipeableList>
-          );
-        })}
-      </div>
-    );
-  }, [items, flatRows, expandedGroups, toggleGroup, onEdit, onDelete, virtualizer]);
+    // Sort and filter: sort by stop index, and only show groups that have packages
+    return Object.values(groups)
+      .filter((group) => group.packages.length > 0)
+      .sort((a, b) => a.stopIndex - b.stopIndex);
+  }, [packages, route]);
 
   return (
-    <Card className="p-4 mb-8" role="region" aria-label="Package List">
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <Clipboard className="text-foreground" size={20} /> Today’s Packages ({totalCount})
-      </h3>
-
-      <div className="mb-4">
+    // ✅ NO MORE 'overflow-y-auto' or 'max-h'. This list just grows.
+    <div className="flex flex-col h-full">
+      {/* Search Bar */}
+      <div className="relative mb-4">
         <input
           type="search"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search tracking or address..."
-          className="w-full h-11 px-3 border border-border rounded-lg bg-surface-muted focus:ring-2 focus:ring-brand"
+          placeholder="Search Package ID, Address, or Notes..."
+          className="w-full h-12 pl-10 pr-4 border-2 border-border rounded-xl bg-surface-muted focus:ring-2 focus:ring-brand focus:border-brand"
           aria-label="Search packages"
         />
+        <Search className="absolute left-3 top-3.5 text-muted" size={20} />
       </div>
 
-      <div
-        ref={scrollContainerRef}
-        className={`overflow-y-auto bg-surface-muted rounded-xl p-2 border border-border ${isMobile ? 'max-h-[60vh]' : 'max-h-[70vh]'}`}
-        role="list"
-        aria-label="Package items"
-      >
-        {renderListContent()}
+      {/* ✅ NEW: Card-based list */}
+      <div className="space-y-4">
+        {groupedStops.length > 0 ? (
+          groupedStops.map(({ stopIndex, stop, packages, noteType }) => (
+            <Card key={stopIndex} className="overflow-hidden shadow-sm">
+              <GroupHeader
+                title={stop ? `Stop ${stopIndex + 1}: ${stop.full_address}` : 'Unassigned'}
+                count={packages.length}
+                noteType={noteType}
+              />
+              <div className="divide-y divide-border">
+                {packages.map((pkg) => (
+                  // SwipeableList wraps each item, not the whole card
+                  <SwipeableList key={pkg.id} destructiveCallbackDelay={300}>
+                    <PackageListItem
+                      pkg={pkg}
+                      onEdit={() => onEdit(pkg)}
+                      onDelete={() => onDelete(pkg)}
+                      onSwipeStart={() => {}}
+                      onSwipeEnd={() => {}}
+                      style={{}} // Style is no longer needed here
+                    />
+                  </SwipeableList>
+                ))}
+              </div>
+            </Card>
+          ))
+        ) : (
+          <div className="text-center text-muted p-10">
+            {searchQuery
+              ? 'No packages match your search.'
+              : 'No packages for today. Tap "Scan" to add one!'}
+          </div>
+        )}
       </div>
-    </Card>
+    </div>
   );
 };
 

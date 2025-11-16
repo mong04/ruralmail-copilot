@@ -51,6 +51,7 @@ export const loadRouteFromDB = createAsyncThunk('route/load', async () => {
  */
 export const saveRouteToDB = createAsyncThunk('route/save', async (route: RouteData) => {
   await saveRoute(route);
+  toast.success('Route saved!');
   return route;
 });
 
@@ -122,7 +123,8 @@ const routeSlice = createSlice({
     addStop: (state, action: PayloadAction<Stop>) => {
       const stop = {
         ...action.payload,
-        id: action.payload.id ?? crypto.randomUUID(),
+        id: action.payload.id ?? crypto.randomUUID(), // ✅ FIX: Ensure ID is set
+        notes: action.payload.notes || '', // ✅ FIX: Ensure notes are carried over
         full_address: [
           action.payload.address_line1,
           action.payload.address_line2,
@@ -141,14 +143,20 @@ const routeSlice = createSlice({
     updateStop: (state, action: PayloadAction<UpdateStopPayload>) => {
       const { index, stop } = action.payload;
       if (state.route[index]) {
-        stop.full_address = [
-          stop.address_line1,
-          stop.address_line2,
-          stop.city,
-          stop.state,
-          stop.zip,
-        ].filter(Boolean).join(', ');
-        state.route[index] = stop;
+        // ✅ FIX: Ensure all fields are preserved, including existing ID
+        const updatedStop = {
+          ...state.route[index], // Preserve existing ID
+          ...stop, // Apply changes
+          notes: stop.notes || '', // Ensure notes are carried over
+          full_address: [
+            stop.address_line1,
+            stop.address_line2,
+            stop.city,
+            stop.state,
+            stop.zip,
+          ].filter(Boolean).join(', '),
+        };
+        state.route[index] = updatedStop;
       }
     },
     /**

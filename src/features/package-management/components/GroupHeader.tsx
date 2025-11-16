@@ -1,20 +1,38 @@
 // src/features/package-management/components/GroupHeader.tsx
 import React from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Badge } from '../../../components/ui/Badge';
+
+// Define the types of notes we look for
+export type StopNoteType = 'forward' | 'vacant' | 'note';
 
 interface GroupHeaderProps {
   title: string;
   count: number;
-  isExpanded: boolean;
-  onToggle: () => void;
-  style: React.CSSProperties;
+  noteType: StopNoteType | null;
+  style?: React.CSSProperties; // Style is optional now
 }
 
-export const GroupHeader: React.FC<GroupHeaderProps> = ({ title, count, isExpanded, onToggle, style }) => {
+export const GroupHeader: React.FC<GroupHeaderProps> = ({
+  title,
+  count,
+  noteType,
+  style,
+}) => {
   return (
-    <div style={style} className="p-2 bg-surface-muted text-foreground font-semibold flex justify-between items-center cursor-pointer" onClick={onToggle}>
-      {title} ({count})
-      {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+    // This is now a static header, not a button
+    <div
+      style={style}
+      className="p-3 bg-surface-muted text-foreground font-semibold flex justify-between items-center border-b border-border"
+    >
+      <div className="flex-1 flex items-center gap-2 min-w-0">
+        <span className="truncate flex-1 font-bold">{title}</span>
+        <span className="text-muted font-medium">({count})</span>
+      </div>
+      <div className="shrink-0 ml-2">
+        {noteType === 'forward' && <Badge variant="warning">FORWARD</Badge>}
+        {noteType === 'vacant' && <Badge variant="danger">VACANT</Badge>}
+        {noteType === 'note' && <Badge variant="muted">Note</Badge>}
+      </div>
     </div>
   );
 };

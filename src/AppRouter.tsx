@@ -5,11 +5,13 @@ import RouteSetup from './features/route-setup/RouteSetup';
 import Settings from './features/settings/Settings';
 import Packages from './features/package-management/Packages';
 import Delivery from './features/delivery-hud/Delivery';
-import Layout from './components/layout/Layout';
+// Import the new layout
+import BottomNavLayout from './components/layout/BottomNavLayout';
 
 export const router = createHashRouter([
   {
-    element: <Layout />,
+    // Use the new layout as the wrapper
+    element: <BottomNavLayout />,
     children: [
       {
         path: '/',
@@ -30,6 +32,7 @@ export const router = createHashRouter([
     ],
   },
   {
+    // The delivery route remains full-screen, outside the layout
     path: '/delivery',
     element: <Delivery />,
   },

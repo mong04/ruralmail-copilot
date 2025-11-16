@@ -11,7 +11,7 @@ import { loadRouteFromDB } from './features/route-setup/routeSlice';
 import { loadPackagesFromDB } from './features/package-management/packageSlice';
 import { loadSettingsFromDB } from './features/settings/settingsSlice';
 import { loadHudFromDB } from './features/delivery-hud/hudSlice';
-import "mapbox-gl/dist/mapbox-gl.css";
+import 'mapbox-gl/dist/mapbox-gl.css';
 
 function initApp() {
   store.dispatch(loadRouteFromDB());
@@ -20,19 +20,24 @@ function initApp() {
   store.dispatch(loadHudFromDB());
 }
 
-const theme = localStorage.getItem("theme");
-if (theme === "dark") {
-  document.documentElement.classList.add("dark");
-} else {
-  document.documentElement.classList.remove("dark")
-}
+// ✅ REMOVED: This logic is now handled by the Redux store's initialState
+// const theme = localStorage.getItem("theme");
+// if (theme === "dark") {
+//   document.documentElement.classList.add("dark");
+// } else {
+//   document.documentElement.classList.remove("dark")
+// }
 
 initApp();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Provider store={store}>
-      <Toaster />
+      {/* ✅ THE FIX: 
+        We'll set the position to 'top-center' and add a small 'gap'
+        so it's not flush with the very top edge of the screen.
+      */}
+      <Toaster position="top-center" richColors gap={16} />
       <App />
     </Provider>
   </React.StrictMode>

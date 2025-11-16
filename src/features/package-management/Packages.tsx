@@ -1,36 +1,43 @@
 // src/features/package-management/components/Packages.tsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { type AppDispatch, type RootState } from '../../store';
-import { addPackage, deletePackage, savePackagesToDB, clearPackagesFromDB } from './packageSlice';
+import {
+  addPackage,
+  deletePackage,
+  // ✅ No longer importing save/clear here
+} from './packageSlice';
 import { toast } from 'sonner';
 import { type Package } from '../../db';
 import ScannerView from './components/ScannerView';
 import PackageList from './components/PackageList';
 import PackageForm from './components/PackageForm';
-import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Camera, Keyboard, Trash2, Save } from 'lucide-react';
+import { Camera, Keyboard } from 'lucide-react'; // ✅ Removed Trash2, Save
+import { cn } from '../../lib/utils';
 
 const Packages: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const dispatch = useDispatch<AppDispatch>();
   const { packages, loading, error } = useSelector((state: RootState) => state.packages);
+  const route = useSelector((state: RootState) => state.route.route);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [editingPackage, setEditingPackage] = useState<Package | null>(null);
+  const [editingPackage, setEditingPackage] = useState<Partial<Package> | null>(null);
   const [newScanData, setNewScanData] = useState<{ tracking: string } | null>(null);
 
-  const [pkgToUndo, setPkgToUndo] = useState<Package | null>(null);
+  const [formContext, setFormContext] = useState<'scan' | 'manual' | 'edit'>('manual');
+
+  // ✅ THE FIX: Use useRef to avoid stale closures in the toast callback.
+  const pkgToUndoRef = useRef<Package | null>(null);
   const toastIdRef = useRef<string | number | null>(null);
 
-  const [isScannerActive, setIsScannerActive] = useState(false);
-  const [showPackageForm, setShowPackageForm] = useState(false);
-  const [formContext, setFormContext] = useState<'scan' | 'manual' | 'edit'>('manual');
+  // Read state from URL
+  const isScannerActive = searchParams.get('scanner') === 'true';
+  const isFormActive = searchParams.get('form') === 'true';
 
   const filteredPackages = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -43,51 +50,43 @@ const Packages: React.FC = () => {
     );
   }, [packages, searchQuery]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    setIsScannerActive(params.get('scanner') === 'true');
-    setShowPackageForm(params.get('form') === 'true');
-  }, [location.search]);
-
+  // Close scanner/form if URL changes (e.g., back button)
   useEffect(() => {
     const handlePopState = () => {
       if (isScannerActive) {
-        setIsScannerActive(false);
-        setSearchParams({});
-      } else if (showPackageForm) {
-        setShowPackageForm(false);
-        setSearchParams({});
+        setSearchParams({}, { replace: true });
+      } else if (isFormActive) {
+        setSearchParams({}, { replace: true });
       } else {
         navigate('/');
       }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [isScannerActive, showPackageForm, navigate, setSearchParams]);
+  }, [isScannerActive, isFormActive, navigate, setSearchParams]);
 
   const handleLocalScanSuccess = (tracking: string) => {
     setEditingPackage(null);
     setNewScanData({ tracking });
-    setIsScannerActive(false);
-    setShowPackageForm(true);
     setFormContext('scan');
-    setSearchParams({ form: 'true' });
+    // Close scanner, open form
+    setSearchParams({ form: 'true' }, { replace: true });
   };
 
   const handleStartEdit = (pkg: Package) => {
     setNewScanData(null);
     setEditingPackage(pkg);
     setFormContext('edit');
-    setShowPackageForm(true);
-    setIsScannerActive(false);
     setSearchParams({ form: 'true' });
   };
 
   const handleUndoDelete = () => {
-    if (pkgToUndo) {
-      dispatch(addPackage(pkgToUndo));
+    // ✅ THE FIX: Read from the ref's .current property.
+    // This will *always* have the correct, most recent value.
+    if (pkgToUndoRef.current) {
+      dispatch(addPackage(pkgToUndoRef.current));
       toast.success('Action undone!');
-      setPkgToUndo(null);
+      pkgToUndoRef.current = null; // Clear the ref
       if (toastIdRef.current) {
         toast.dismiss(toastIdRef.current);
         toastIdRef.current = null;
@@ -97,126 +96,136 @@ const Packages: React.FC = () => {
 
   const handleDeletePackage = (pkg: Package) => {
     dispatch(deletePackage(pkg.id));
-    setPkgToUndo(pkg);
-    toastIdRef.current = toast.success('Package deleted.', {
+    // ✅ THE FIX: Set the ref's .current property.
+    pkgToUndoRef.current = pkg;
+    toastIdRef.current = toast.error('Package deleted.', {
       action: {
         label: 'Undo',
-        onClick: handleUndoDelete,
+        onClick: handleUndoDelete, // This callback will now read the .current value
       },
-      onDismiss: () => {
-        setPkgToUndo(null);
-        toastIdRef.current = null;
-      },
-      onAutoClose: () => {
-        setPkgToUndo(null);
-        toastIdRef.current = null;
-      },
+      duration: 5000,
+      // Clear the ref on dismiss/autoclose
+      onDismiss: () => (pkgToUndoRef.current = null),
+      onAutoClose: () => (pkgToUndoRef.current = null),
     });
   };
 
   const handleSubmitSuccess = () => {
     setEditingPackage(null);
     setNewScanData(null);
-    setShowPackageForm(false);
-    setSearchParams({});
+    setSearchParams({}); // Close form
     toast.success(formContext === 'edit' ? 'Package updated!' : 'Package added!');
+    setFormContext('manual');
   };
 
   const handleCancelForm = () => {
     setEditingPackage(null);
     setNewScanData(null);
-    setShowPackageForm(false);
-    setSearchParams({});
+    setSearchParams({}); // Close form
     if (formContext === 'scan') {
-      setIsScannerActive(true);
-      setSearchParams({ scanner: 'true' });
+      // If we cancelled a scan, go back to scanning
+      setSearchParams({ scanner: 'true' }, { replace: true });
     }
+    setFormContext('manual');
   };
 
-  const handleSave = () => {
-    dispatch(savePackagesToDB(packages));
-    toast.success('Packages saved!');
+  const handleScanRequest = () => {
+    setSearchParams({ scanner: 'true' }, { replace: true });
   };
 
-  const handleClear = () => {
-    if (window.confirm('Clear all packages? This cannot be undone.')) {
-      dispatch(clearPackagesFromDB());
-      toast.success('All packages cleared.');
-    }
-  };
+  // ✅ REMOVED: handleSave and handleClear. They now live in PackagesActionBar.
+
+  const today = new Date().toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
 
   if (loading) return <p className="text-foreground">Loading packages...</p>;
   if (error) return <p className="text-danger">Error: {error}</p>;
 
+  if (route.length === 0) {
+    return (
+      <div className="text-center space-y-4">
+        <h2 className="text-xl font-semibold text-danger">Route Not Found</h2>
+        <p className="text-muted">
+          You must set up your route before you can add packages.
+        </p>
+        <Button onClick={() => navigate('/route-setup')}>
+          Go to Route Setup
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <Card className="p-6 space-y-6 md:max-w-4xl mx-auto">
-      <h2 className="text-xl font-semibold text-foreground">Manage Packages</h2>
-      <button onClick={() => navigate('/')} className="text-brand hover:underline" aria-label="Back to Dashboard">
-        Back to Dashboard
-      </button>
+    <div className="flex flex-col">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold text-foreground">
+          Daily Packages - {today}
+        </h2>
+        <span className="text-lg font-semibold text-muted">{packages.length} total</span>
+      </div>
 
-      {isScannerActive && (
-        <ScannerView
-          onScanSuccess={handleLocalScanSuccess}
-          onClose={() => {
-            setIsScannerActive(false);
-            setSearchParams({});
+      {/* Action Buttons */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <Button
+          onClick={handleScanRequest}
+          variant="primary"
+          size="lg"
+        >
+          <Camera className="mr-2" size={20} /> Scan
+        </Button>
+        <Button
+          onClick={() => {
+            setEditingPackage(null);
+            setNewScanData(null);
+            setFormContext('manual');
+            setSearchParams({ form: 'true' });
           }}
-        />
-      )}
+          variant="surface"
+          size="lg"
+        >
+          <Keyboard className="mr-2" size={20} /> Manual
+        </Button>
+      </div>
 
-      {!showPackageForm && (
-        <div className="flex flex-col md:flex-row justify-between mb-2 gap-3">
-          <Button
-            onClick={() => {
-              setIsScannerActive(true);
-              setShowPackageForm(false);
-              setSearchParams({ scanner: 'true' });
-            }}
-            variant="primary"
-          >
-            <Camera className="mr-2" size={16} /> Scan Package
-          </Button>
-
-          <Button
-            onClick={() => {
-              setFormContext('manual');
-              setShowPackageForm(true);
-              setIsScannerActive(false);
-              setSearchParams({ form: 'true' });
-            }}
-            variant="surface"
-          >
-            <Keyboard className="mr-2" size={16} /> Add Manual Package
-          </Button>
-        </div>
-      )}
-
-      {showPackageForm && (
-        <PackageForm show={showPackageForm} formContext={formContext} initialPackage={editingPackage || newScanData} onSubmitSuccess={handleSubmitSuccess} onCancel={handleCancelForm} />
-      )}
-
-      {!showPackageForm && (
+      {/* Main List */}
+      <div
+        className={cn(
+          'flex flex-col min-h-0', // min-h-0 is still good for flex children
+          isFormActive ? 'hidden' : 'flex'
+        )}
+      >
         <PackageList
           packages={filteredPackages}
-          allPackages={packages}
-          totalCount={packages.length}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onEdit={handleStartEdit}
           onDelete={handleDeletePackage}
         />
+      </div>
+
+      {/* ✅ REMOVED: Global Save/Clear buttons are gone from here */}
+
+      {/* Scanner Modal */}
+      {isScannerActive && (
+        <ScannerView
+          onScanSuccess={handleLocalScanSuccess}
+          onClose={() => setSearchParams({})}
+        />
       )}
 
-      <div className="flex gap-3 pt-2 flex-col md:flex-row">
-        <Button onClick={handleClear} variant="danger" className="flex-1">
-          <Trash2 className="mr-2" size={16} /> Clear All
-        </Button>
-        <Button onClick={handleSave} disabled={packages.length === 0} variant="primary" className="flex-1">
-          <Save className="mr-2" size={16} /> Save Packages
-        </Button>
-      </div>
-    </Card>
+      {/* Package Form Modal */}
+      <PackageForm
+        show={isFormActive}
+        formContext={formContext}
+        initialPackage={editingPackage || newScanData}
+        onSubmitSuccess={handleSubmitSuccess}
+        onCancel={handleCancelForm}
+        onScanRequest={handleScanRequest}
+      />
+    </div>
   );
 };
 

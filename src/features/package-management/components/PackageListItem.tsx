@@ -3,6 +3,8 @@ import React from 'react';
 import { type Package } from '../../../db';
 import { SwipeableListItem, SwipeAction, LeadingActions, TrailingActions } from 'react-swipeable-list';
 import { Badge } from '../../../components/ui/Badge';
+import { ChevronRight, Edit, Trash2 } from 'lucide-react';
+import { cn } from '../../../lib/utils';
 
 interface PackageListItemProps {
   pkg: Package;
@@ -14,8 +16,12 @@ interface PackageListItemProps {
 }
 
 export const PackageListItem: React.FC<PackageListItemProps> = ({ pkg, onEdit, onDelete, onSwipeStart, onSwipeEnd, style }) => {
-  const sizeLabel =
-    pkg.size === 'small' ? <Badge variant="success">SMALL</Badge> : pkg.size === 'medium' ? <Badge>MEDIUM</Badge> : <Badge variant="warning">LARGE</Badge>;
+  const sizeMap: Record<Package['size'], { label: string; variant: 'default' | 'success' | 'warning' }> = {
+    small: { label: 'Small', variant: 'success' },
+    medium: { label: 'Medium', variant: 'default' },
+    large: { label: 'Large', variant: 'warning' },
+  };
+  const sizeInfo = sizeMap[pkg.size] || sizeMap.medium;
 
   return (
     <div style={style}>
@@ -28,14 +34,18 @@ export const PackageListItem: React.FC<PackageListItemProps> = ({ pkg, onEdit, o
         leadingActions={
           <LeadingActions>
             <SwipeAction onClick={onEdit} aria-label="Edit package">
-              <div className="flex items-center justify-center h-full px-6 bg-brand text-brand-foreground font-bold">Edit</div>
+              <div className="flex items-center justify-center h-full px-6 bg-brand text-brand-foreground font-bold">
+                <Edit size={20} className="mr-2" /> Edit
+              </div>
             </SwipeAction>
           </LeadingActions>
         }
         trailingActions={
           <TrailingActions>
             <SwipeAction onClick={onDelete} destructive={true} aria-label="Delete package">
-              <div className="flex items-center justify-center h-full px-6 bg-danger text-danger-foreground font-bold">Delete</div>
+              <div className="flex items-center justify-center h-full px-6 bg-danger text-danger-foreground font-bold">
+                <Trash2 size={20} className="mr-2" /> Delete
+              </div>
             </SwipeAction>
           </TrailingActions>
         }
@@ -43,19 +53,28 @@ export const PackageListItem: React.FC<PackageListItemProps> = ({ pkg, onEdit, o
         <button
           type="button"
           onClick={onEdit}
-          className="w-full flex items-center justify-between p-4 bg-surface rounded-lg shadow-sm border border-border text-left"
+          className="w-full flex items-center justify-between p-3 bg-surface hover:bg-surface-muted text-left transition-colors"
           aria-label={`Edit package ${pkg.tracking || 'No Tracking'}`}
         >
           <div className="flex-1 min-w-0">
-            <div className="font-mono font-semibold text-sm break-all">{pkg.tracking || 'No Tracking #'}</div>
-            <div className="flex items-center mt-1 gap-3 text-sm text-muted">
-              {sizeLabel}
-              {pkg.notes && <span className="ml-auto text-warning">• {pkg.notes}</span>}
+            <div className="font-mono font-semibold text-sm break-all">
+              {pkg.tracking || 'No Tracking #'}
+            </div>
+            <div className="flex items-center flex-wrap mt-1 gap-2 text-sm text-muted">
+              <Badge variant={sizeInfo.variant}>{sizeInfo.label}</Badge>
+              {pkg.notes && (
+                <span
+                  className={cn(
+                    'font-medium truncate',
+                    pkg.notes.toLowerCase().includes('fragile') ? 'text-danger' : 'text-muted'
+                  )}
+                >
+                  • {pkg.notes}
+                </span>
+              )}
             </div>
           </div>
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" className="text-muted md:hidden">
-            <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-          </svg>
+          <ChevronRight className="shrink-0 w-5 h-5 text-muted ml-2" />
         </button>
       </SwipeableListItem>
     </div>

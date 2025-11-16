@@ -11,7 +11,7 @@ type AddressMatch = {
   address: string;
 } | null;
 
-interface PackageState {
+export interface PackageState {
   packages: Package[];
   loading: boolean;
   error: string | null;

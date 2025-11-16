@@ -2,7 +2,7 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { loadSettings, saveSettings, type SettingsData } from '../../db';
 
 // ✅ The state now fully mirrors the DB type
-interface SettingsState extends SettingsData {
+export interface SettingsState extends SettingsData {
   loading: boolean;
   lastSaved: string | null; // ✅ Add lastSaved for peace of mind
 }

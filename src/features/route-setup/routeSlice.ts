@@ -23,7 +23,7 @@ interface ReorderStopsPayload {
 }
 
 // Initial state
-interface RouteState {
+export interface RouteState {
   route: RouteData;
   loading: boolean;
   error: string | null;

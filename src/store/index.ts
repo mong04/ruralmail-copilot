@@ -6,17 +6,20 @@ import settingsReducer from '../../src/features/settings/settingsSlice';
 import packageReducer from '../features/package-management/packageSlice';
 import hudReducer from '../features/delivery-hud/hudSlice';
 
+// 1. Create the combined reducer object and export it
+export const rootReducer = {
+  route: routeReducer,
+  settings: settingsReducer,
+  packages: packageReducer,
+  hud: hudReducer,
+};
+
 /**
  * Configures the Redux store with slices.
  * DevTools enabled only in development (per Redux docs: https://redux-toolkit.js.org/api/configureStore).
  */
 export const store = configureStore({
-  reducer: {
-    route: routeReducer,
-    settings: settingsReducer,
-    packages: packageReducer,
-    hud: hudReducer,
-  },
+  reducer: rootReducer, // 2. Use the rootReducer here
   devTools: process.env.NODE_ENV !== 'production',
 });
 

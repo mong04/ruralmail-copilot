@@ -1,15 +1,16 @@
 // src/features/delivery-hud/components/DeliveryHUDPanel.tsx
-import React from 'react'; // ✅ Import React to use forwardRef
+import React from 'react';
 import { motion } from 'framer-motion';
 import { type Package, type Stop } from '../../../db';
 import { MapPin, Check, X } from 'lucide-react';
+import { DynamicHudAlert, type DynamicHudAlertProps } from './DynamicHudAlert';
 
 interface HUDProps {
   currentStop: number;
   route: Stop[]; // filtered activeStops
   fullRoute: Stop[];
   packages: Package[];
-  weatherAlerts: string[];
+  hudAlertData: DynamicHudAlertProps['hudAlertData']; // Use the prop type from the component
   onAdvanceStop: () => void;
   onNavigate: () => void;
   onExit: () => void;
@@ -22,7 +23,7 @@ const DeliveryHUDPanel = React.forwardRef<HTMLDivElement, HUDProps>(
       route,
       fullRoute,
       packages,
-      weatherAlerts,
+      hudAlertData,
       onAdvanceStop,
       onNavigate,
       onExit,
@@ -57,10 +58,9 @@ const DeliveryHUDPanel = React.forwardRef<HTMLDivElement, HUDProps>(
     }
 
     const currentStopId = currentStopObj.id;
-    // ✅ Robust package filtering
     const pkgs = packages.filter(
       (p) =>
-        !p.delivered && // Only show undelivered packages
+        !p.delivered &&
         (p.assignedStopId === currentStopId ||
           (typeof p.assignedStopNumber === 'number' &&
             fullRoute[p.assignedStopNumber]?.id === currentStopId))
@@ -88,20 +88,19 @@ const DeliveryHUDPanel = React.forwardRef<HTMLDivElement, HUDProps>(
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
         className="bottom-0 left-0 right-0 z-10 p-4 bg-surface rounded-t-xl shadow-lg border border-border"
       >
-        <h2 className="text-xl font-bold mb-2">
-          {currentStopObj.full_address}
-        </h2>
+        <div className="grid grid-cols-2 gap-x-4">
+            <div>
+                <h2 className="text-xl font-bold mb-1 truncate">{currentStopObj.full_address}</h2>
+                <p className="text-sm text-muted-foreground">
+                    Packages: {pkgs.length}
+                    {packageDetails.length > 0 ? ` (${packageDetails.join(', ')})` : ''}
+                </p>
+            </div>
+            <div className="flex items-start justify-end pt-1">
+                <DynamicHudAlert hudAlertData={hudAlertData} />
+            </div>
+        </div>
 
-        <p className="mb-2">
-          Packages: {pkgs.length}
-          {packageDetails.length > 0 ? ` (${packageDetails.join(', ')})` : ''}
-        </p>
-
-        <p className="mb-2 text-danger">
-          {weatherAlerts.length > 0 ? weatherAlerts.join(', ') : 'No alerts'}
-        </p>
-
-        {/* ✅ Updated button layout */}
         <div className="flex justify-between mt-4 gap-2">
           <button
             onClick={onExit}

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite'; // Add this import
 import { VitePWA } from 'vite-plugin-pwa';
@@ -69,5 +69,13 @@ export default defineConfig({
   // Build options
   build: {
     sourcemap: process.env.NODE_ENV !== 'production', // Enable in dev
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true, // Optional: This adds 'test', 'expect', etc. globally
+    setupFiles: [
+      './src/setupTests.ts',
+      'vitest-canvas-mock'
+    ] // Optional: Good for global setup
   },
 });

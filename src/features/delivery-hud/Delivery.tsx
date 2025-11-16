@@ -2,10 +2,14 @@
 import React, { useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '../../store';
 import {
-  fetchWeatherAlerts,
+  fetchForecast,
+  fetchSevereAlerts,
   updatePosition,
-  // toggleVoice,
   advanceStop,
+  dismissBriefing,
+  selectWeatherBriefingData,
+  selectLookAheadData,
+  selectDynamicHudAlert,
 } from './hudSlice';
 import { markPackagesDelivered } from '../package-management/packageSlice';
 import DeliveryMap from './components/DeliveryMap';
@@ -13,6 +17,8 @@ import DeliveryHUDPanel from './components/DeliveryHUDPanel';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { MapControls } from './components/MapControls';
+import { LookAheadWidget } from './components/LookAheadWidget';
+import { RouteWeatherBriefing } from './components/RouteWeatherBriefing';
 
 const Delivery: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -23,38 +29,49 @@ const Delivery: React.FC = () => {
   const hud = useAppSelector((state) => state.hud);
   const settings = useAppSelector((state) => state.settings);
 
+  // New Weather Data Selectors
+  const briefingData = useAppSelector(selectWeatherBriefingData);
+  const lookAheadData = useAppSelector(selectLookAheadData);
+  const hudAlertData = useAppSelector(selectDynamicHudAlert);
+
   const route = routeState.route; // full Stop[]
   const packages = packageState.packages ?? []; // Package[]
   const {
     currentStop,
-    weatherAlerts,
     position,
     voiceEnabled,
     mapStyle,
     cameraMode,
+    forecast, // Keep for one-time fetch logic
   } = hud;
 
   // Active stops: only those with packages
   const activeStops = (route ?? []).filter((stop, idx) =>
     packages.some(
       (pkg) =>
-        !pkg.delivered && // ✅ Only count stops with *undelivered* packages
+        !pkg.delivered &&
         ((pkg.assignedStopId && pkg.assignedStopId === stop.id) ||
           (typeof pkg.assignedStopNumber === 'number' &&
             pkg.assignedStopNumber === idx))
     )
   );
 
-  // Poll weather every 15 minutes
+  // Fetch forecast once we have a position
   useEffect(() => {
-    dispatch(fetchWeatherAlerts()); // Fetch weather immediately
+    if (position && !forecast) {
+      dispatch(fetchForecast());
+    }
+  }, [dispatch, position, forecast]);
+
+  // Poll for severe alerts every 30 minutes
+  useEffect(() => {
+    dispatch(fetchSevereAlerts()); // Fetch immediately on load
     const interval = setInterval(() => {
-      if (position) {
-        dispatch(fetchWeatherAlerts());
-      }
-    }, 15 * 60 * 1000);
+      dispatch(fetchSevereAlerts());
+    }, 30 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [dispatch, position]);
+  }, [dispatch]);
+
 
   // Watch geolocation
   useEffect(() => {
@@ -104,7 +121,6 @@ const Delivery: React.FC = () => {
       case 'in-app':
       default:
         toast.info('In-app navigation selected (coming soon!)');
-      // In the future, we would trigger the Mapbox Directions API here.
     }
   };
 
@@ -112,33 +128,39 @@ const Delivery: React.FC = () => {
     <div className="h-screen w-screen flex flex-col overflow-hidden">
       <div className="grow relative">
         <DeliveryMap
-          route={activeStops} // filtered stops only
-          fullRoute={route} // full route still passed for resolving
+          route={activeStops}
+          fullRoute={route}
           packages={packages}
-          currentStop={currentStop} // index into activeStops now
+          currentStop={currentStop}
           voiceEnabled={voiceEnabled}
           position={position}
-          mapStyle={mapStyle} // ✅ PASS PROP
-          cameraMode={cameraMode} // ✅ PASS PROP
+          mapStyle={mapStyle}
+          cameraMode={cameraMode}
         />
         <MapControls />
+        <LookAheadWidget lookAheadData={lookAheadData} />
       </div>
 
       <DeliveryHUDPanel
         currentStop={currentStop}
-        route={activeStops} // HUD only sees active stops
-        fullRoute={route} // ✅ Pass full route
+        route={activeStops}
+        fullRoute={route}
         packages={packages}
-        weatherAlerts={weatherAlerts}
+        hudAlertData={hudAlertData} // Pass new data down
         onAdvanceStop={() => {
           const stopId = activeStops[currentStop]?.id;
           if (stopId) {
             dispatch(markPackagesDelivered({ stopId }));
           }
-          dispatch(advanceStop()); // increments index through activeStops
+          dispatch(advanceStop());
         }}
-        onNavigate={handleNavigate} // ✅ Pass the handler
+        onNavigate={handleNavigate}
         onExit={() => navigate('/')}
+      />
+
+      <RouteWeatherBriefing 
+        briefingData={briefingData}
+        onDismiss={() => dispatch(dismissBriefing())}
       />
 
       <button

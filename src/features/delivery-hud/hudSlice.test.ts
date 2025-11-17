@@ -52,7 +52,7 @@ const mockNoAlerts: AlertData[] = [];
 // --- Mock Initial State ---
 const hudInitialState: HudState = {
   currentStop: 0,
-  loading: false,
+  status: 'idle',
   position: { lat: 40, lng: -79 },
   voiceEnabled: false,
   mapStyle: 'streets',
@@ -168,32 +168,29 @@ describe('hudSlice async thunks', () => {
 
   describe('fetchForecast', () => {
     it('handles pending state', () => {
-      // FIX: The second argument should be 'undefined'
-      const state = hudReducer(hudInitialState, fetchForecast.pending('', undefined));
-      expect(state.loading).toBe(true);
+      const state = hudReducer({ ...hudInitialState, status: 'idle' }, fetchForecast.pending('', { lat: 0, lng: 0 }));
+      expect(state.status).toBe('loading');
     });
 
     it('handles fulfilled state', () => {
       const action = { type: fetchForecast.fulfilled.type, payload: mockClearForecast };
-      const state = hudReducer(hudInitialState, action);
-      expect(state.loading).toBe(false);
+      const state = hudReducer({ ...hudInitialState, status: 'loading' }, action);
+      expect(state.status).toBe('succeeded');
       expect(state.forecast).toEqual(mockClearForecast);
     });
 
     it('handles rejected state', () => {
       const action = { type: fetchForecast.rejected.type, error: { message: 'Fetch failed' } };
-      // FIX: This was a typo, changed 'initialSection' to 'hudInitialState'
-      const state = hudReducer(hudInitialState, action);
-      expect(state.loading).toBe(false);
+      const state = hudReducer({ ...hudInitialState, status: 'loading' }, action);
+      expect(state.status).toBe('failed');
       expect(state.forecast).toBe(null);
     });
   });
 
   describe('fetchSevereAlerts', () => {
     it('handles pending state', () => {
-      // FIX: The second argument should be 'undefined'
-      const state = hudReducer(hudInitialState, fetchSevereAlerts.pending('', undefined));
-      expect(state.loading).toBe(false); // Correct, no loading state for this thunk
+      const state = hudReducer({ ...hudInitialState, status: 'succeeded' }, fetchSevereAlerts.pending('', { lat: 0, lng: 0 }));
+      expect(state.status).toBe('succeeded'); // Correct, status should not change for this thunk
     });
 
     it('handles fulfilled state', () => {

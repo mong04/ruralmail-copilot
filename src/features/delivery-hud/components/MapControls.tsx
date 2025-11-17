@@ -1,9 +1,7 @@
 // src/features/delivery-hud/components/MapControls.tsx
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '../../../store';
-// ✅ ADDED toggleVoice
-import { setMapStyle, setCameraMode, toggleVoice } from '../hudSlice';
-// ✅ ADDED MapPin, Navigation, Volume2, VolumeX
+import { setMapStyle, cycleCameraMode, toggleVoice } from '../hudSlice';
 import {
   Layers,
   Compass,
@@ -16,7 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../../components/ui/Button';
-import { toast } from 'sonner'; // ✅ Import toast for error handling
+import { toast } from 'sonner';
 
 // Re-usable toggle button
 const ToggleBtn: React.FC<{
@@ -41,108 +39,111 @@ const ToggleBtn: React.FC<{
 
 export const MapControls: React.FC = () => {
   const dispatch = useAppDispatch();
-  // ✅ Get position to check if 'Follow' is possible
   const { mapStyle, cameraMode, voiceEnabled, position } = useAppSelector(
     (state) => state.hud
   );
-  const [isOpen, setIsOpen] = useState(false);
+  const [isLayersOpen, setLayersOpen] = useState(false);
+  const layersControlRef = useRef<HTMLDivElement>(null);
 
-  // ✅ NEW: Smart click handler for "Follow"
-  const handleFollowClick = () => {
-    if (position) {
-      dispatch(setCameraMode('follow'));
+  // Effect to handle clicks outside the layers control to close it
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        layersControlRef.current &&
+        !layersControlRef.current.contains(event.target as Node)
+      ) {
+        setLayersOpen(false);
+      }
+    };
+
+    // Add listener only when the menu is open
+    if (isLayersOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    // Cleanup: remove the listener when the component unmounts or the menu closes
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isLayersOpen]); // Re-run the effect if isLayersOpen changes
+
+  const handleCameraCycle = () => {
+    // Prevent cycling to 'follow' if position is not available
+    if (cameraMode === 'task' && !position) {
+      dispatch(cycleCameraMode()); // Cycle from task to overview, skipping follow
+      dispatch(cycleCameraMode());
+      toast.error('Current location not available for "Follow" mode.');
     } else {
-      toast.error('Current location not available yet.');
+      dispatch(cycleCameraMode());
     }
   };
 
+  const getCameraIcon = () => {
+    switch (cameraMode) {
+      case 'task':
+        return LocateFixed;
+      case 'follow':
+        return Navigation;
+      case 'overview':
+        return Compass;
+      default:
+        return LocateFixed;
+    }
+  };
+  const CameraIcon = getCameraIcon();
+
   return (
-    // ✅ YOUR FIX (Position):
-    // Using your hard-coded value that you found works perfectly.
-    <div className="absolute bottom-4 right-4 z-30">
+    <div className="absolute bottom-4 right-4 z-30 flex flex-col items-end gap-2">
+      {/* Layer Controls */}
+      <div className="relative flex flex-col items-end" ref={layersControlRef}>
+        {isLayersOpen && (
+          <div className="flex gap-2 mr-2 mb-1 p-1.5 bg-surface rounded-xl shadow-lg border border-border">
+            <ToggleBtn
+              label="Street"
+              icon={MapPin}
+              isActive={mapStyle === 'streets'}
+              onClick={() => dispatch(setMapStyle('streets'))}
+            />
+            <ToggleBtn
+              label="Satellite"
+              icon={Globe2}
+              isActive={mapStyle === 'satellite'}
+              onClick={() => dispatch(setMapStyle('satellite'))}
+            />
+          </div>
+        )}
+        <Button
+          variant="surface"
+          size="lg"
+          className="w-12 h-12 p-0 shadow-lg"
+          onClick={() => setLayersOpen(!isLayersOpen)}
+          aria-label="Map Layers"
+        >
+          <Layers size={20} />
+        </Button>
+      </div>
+
+      {/* Camera Mode Button */}
       <Button
         variant="surface"
         size="lg"
         className="w-12 h-12 p-0 shadow-lg"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-label="Map Layers"
+        onClick={handleCameraCycle}
+        aria-label="Cycle Camera Mode"
       >
-        <Layers size={20} />
+        <CameraIcon size={20} />
       </Button>
 
-      {isOpen && (
-        // ✅ POSITION: Menu now opens *upwards* from the button
-        <div className="absolute bottom-14 right-0 w-72 bg-surface rounded-xl shadow-lg border border-border p-3 space-y-3">
-          {/* Map Style Section */}
-          <div>
-            <label className="text-xs font-semibold text-muted pl-1">
-              Map Type
-            </label>
-            <div className="flex justify-between gap-2 mt-1">
-              <ToggleBtn
-                label="Street"
-                icon={MapPin} // This will now be found
-                isActive={mapStyle === 'streets'}
-                onClick={() => dispatch(setMapStyle('streets'))}
-              />
-              <ToggleBtn
-                label="Satellite"
-                icon={Globe2}
-                isActive={mapStyle === 'satellite'}
-                onClick={() => dispatch(setMapStyle('satellite'))}
-              />
-            </div>
-          </div>
-
-          {/* Camera Mode Section */}
-          <div>
-            <label className="text-xs font-semibold text-muted pl-1">
-              Camera View
-            </label>
-            <div className="flex justify-between gap-2 mt-1">
-              <ToggleBtn
-                label="Task" // Renamed
-                icon={LocateFixed}
-                isActive={cameraMode === 'task'}
-                onClick={() => dispatch(setCameraMode('task'))}
-              />
-              <ToggleBtn
-                label="Follow" // New
-                icon={Navigation}
-                isActive={cameraMode === 'follow'}
-                onClick={handleFollowClick} // ✅ Use smart handler
-              />
-              <ToggleBtn
-                label="Overview"
-                icon={Compass}
-                isActive={cameraMode === 'overview'}
-                onClick={() => dispatch(setCameraMode('overview'))}
-              />
-            </div>
-          </div>
-
-          {/* ✅ NEW: Voice Toggle Section */}
-          <div>
-            <label className="text-xs font-semibold text-muted pl-1">
-              Audio
-            </label>
-            <div className="flex justify-between gap-2 mt-1">
-              <ToggleBtn
-                label="Voice On"
-                icon={Volume2}
-                isActive={voiceEnabled}
-                onClick={() => dispatch(toggleVoice(true))}
-              />
-              <ToggleBtn
-                label="Voice Off"
-                icon={VolumeX}
-                isActive={!voiceEnabled}
-                onClick={() => dispatch(toggleVoice(false))}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Voice Toggle Button */}
+      <Button
+        variant="surface"
+        size="lg"
+        className="w-12 h-12 p-0 shadow-lg"
+        onClick={() => dispatch(toggleVoice(!voiceEnabled))}
+        aria-label="Toggle Voice Guidance"
+      >
+        {voiceEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+      </Button>
     </div>
   );
 };

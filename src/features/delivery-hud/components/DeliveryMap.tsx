@@ -1,8 +1,11 @@
-// src/features/delivery-hud/components/DeliveryMap.tsx
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, type ReactNode } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { toast } from 'sonner';
 import type { Stop, Package } from '../../../db';
+// import { MapControls } from './MapControls';
+// import { LookAheadWidget } from './LookAheadWidget';
+// import { useAppSelector } from '../../../store';
+// import { selectLookAheadData } from '../hudSlice';
 
 interface Props {
   route: Stop[];
@@ -13,11 +16,11 @@ interface Props {
   position: { lat: number; lng: number } | null;
   mapStyle: 'streets' | 'satellite';
   cameraMode: 'task' | 'follow' | 'overview';
+  children?: ReactNode;
 }
 
-import { MapControls } from './MapControls';
-
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
+
 
 const DeliveryMap: React.FC<Props> = ({
   route,
@@ -28,11 +31,13 @@ const DeliveryMap: React.FC<Props> = ({
   position,
   mapStyle,
   cameraMode,
+  children,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  // const lookAheadData = useAppSelector(selectLookAheadData);
 
   // Get the correct Mapbox style URL
   const styleUrl =
@@ -211,7 +216,7 @@ const DeliveryMap: React.FC<Props> = ({
   return (
     <div className="w-full h-full relative">
       <div ref={containerRef} className="w-full h-full" />
-      <MapControls />
+      {children}
     </div>
   );
 };

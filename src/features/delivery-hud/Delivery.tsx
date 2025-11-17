@@ -42,7 +42,7 @@ const Delivery: React.FC = () => {
     voiceEnabled,
     mapStyle,
     cameraMode,
-    forecast, // Keep for one-time fetch logic
+    status,  // Use status instead of loading
   } = hud;
 
   // Active stops: only those with packages
@@ -56,41 +56,39 @@ const Delivery: React.FC = () => {
     )
   );
 
-  // Fetch forecast once we have a position
-  useEffect(() => {
-    if (position && !forecast) {
-      dispatch(fetchForecast());
-    }
-  }, [dispatch, position, forecast]);
-
-  // Poll for severe alerts every 30 minutes
-  useEffect(() => {
-    dispatch(fetchSevereAlerts()); // Fetch immediately on load
-    const interval = setInterval(() => {
-      dispatch(fetchSevereAlerts());
-    }, 30 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [dispatch]);
-
 
   // Watch geolocation
   useEffect(() => {
     if ('geolocation' in navigator) {
-      const watcher = navigator.geolocation.watchPosition(
+      // We only need to get the position once to fetch weather.
+      // watchPosition is better for continuous tracking on the map.
+      const watcher = navigator.geolocation.watchPosition( 
         (pos) => {
-          dispatch(
-            updatePosition({
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-            })
-          );
+          const newPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          dispatch(updatePosition(newPosition));
+
+          // Fetch weather only if we don't have it and are not currently loading it.
+          // We only want to fetch if the status is 'idle'.
+          if (status === 'idle') {
+            dispatch(fetchForecast(newPosition));
+            dispatch(fetchSevereAlerts(newPosition));
+          }
         },
-        (err) => console.error('Geolocation error:', err),
+        (err) => {
+          console.error('Geolocation error:', err);
+          toast.error("Geolocation failed. Weather features disabled.", {
+            description: "Please enable location permissions in your browser.",
+          });
+        },
         { enableHighAccuracy: true }
       );
       return () => navigator.geolocation.clearWatch(watcher);
+    } else { 
+      toast.error("Geolocation is not supported by this browser.", {
+        description: "Weather features will be disabled.",
+      });
     }
-  }, [dispatch]);
+  }, [dispatch, status]); // Dependency is now on status
 
   // New navigation handler
   const handleNavigate = () => {
@@ -125,7 +123,7 @@ const Delivery: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden">
+    <div className="z-30 h-screen w-screen flex flex-col overflow-hidden">
       <div className="grow relative">
         <DeliveryMap
           route={activeStops}
@@ -136,9 +134,10 @@ const Delivery: React.FC = () => {
           position={position}
           mapStyle={mapStyle}
           cameraMode={cameraMode}
-        />
-        <MapControls />
-        <LookAheadWidget lookAheadData={lookAheadData} />
+        >
+          <MapControls />
+          <LookAheadWidget lookAheadData={lookAheadData} status={status} />
+        </DeliveryMap>
       </div>
 
       <DeliveryHUDPanel
@@ -158,6 +157,7 @@ const Delivery: React.FC = () => {
         onExit={() => navigate('/')}
       />
 
+      {/* This is correct and will now work */}
       <RouteWeatherBriefing 
         briefingData={briefingData}
         onDismiss={() => dispatch(dismissBriefing())}

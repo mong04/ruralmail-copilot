@@ -37,7 +37,7 @@ export interface AlertData {
 }
 
 export interface HudState extends Omit<HudData, 'weatherAlerts'> {
-  loading: boolean;
+  status: 'idle' | 'loading' | 'succeeded' | 'failed';
   position: { lat: number; lng: number } | null;
   voiceEnabled: boolean;
   currentStop: number;
@@ -50,7 +50,7 @@ export interface HudState extends Omit<HudData, 'weatherAlerts'> {
 
 const initialState: HudState = {
   currentStop: 0,
-  loading: false,
+  status: 'idle',
   position: null,
   voiceEnabled: false,
   mapStyle: 'streets',
@@ -82,12 +82,11 @@ export const saveHudToDB = createAsyncThunk('hud/save', async (hud: HudData) => 
  */
 export const fetchForecast = createAsyncThunk(
   'hud/fetchForecast',
-  async (_, { getState, rejectWithValue }) => {
-    const state = getState() as RootState;
-    const { lat, lng } = state.hud.position || {};
-    const token = import.meta.env.VITE_OPENWEATHER_KEY;
+  async (position: { lat: number; lng: number }, { rejectWithValue }) => {
+    const { lat, lng } = position;
+    const token = import.meta.env.VITE_OPENWEATHER_TOKEN;
 
-    if (!token || !lat || !lng) {
+    if (!token) {
       return rejectWithValue('No position or token');
     }
 
@@ -98,7 +97,8 @@ export const fetchForecast = createAsyncThunk(
       return response.data as ForecastData;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      toast.error(`Forecast fetch failed: ${message}`);
+      console.error('Forecast fetch failed:', err); // Add console log for debugging
+      toast.error(`Forecast fetch failed: ${message}`); // Keep user-facing toast
       return rejectWithValue('Fetch error');
     }
   }
@@ -109,12 +109,11 @@ export const fetchForecast = createAsyncThunk(
  */
 export const fetchSevereAlerts = createAsyncThunk(
   'hud/fetchSevereAlerts',
-  async (_, { getState, rejectWithValue }) => {
-    const state = getState() as RootState;
-    const { lat, lng } = state.hud.position || {};
-    const token = import.meta.env.VITE_OPENWEATHER_KEY;
+  async (position: { lat: number; lng: number }, { rejectWithValue }) => {
+    const { lat, lng } = position;
+    const token = import.meta.env.VITE_OPENWEATHER_TOKEN;
 
-    if (!token || !lat || !lng) {
+    if (!token) {
       return rejectWithValue('No position or token');
     }
 
@@ -164,6 +163,13 @@ const hudSlice = createSlice({
     setCameraMode: (state, action: PayloadAction<HudState['cameraMode']>) => {
       state.cameraMode = action.payload;
     },
+    cycleCameraMode: (state) => {
+      const modes: HudState['cameraMode'][] = ['task', 'follow', 'overview'];
+      const currentIndex = modes.indexOf(state.cameraMode);
+      const nextIndex = (currentIndex + 1) % modes.length;
+      state.cameraMode = modes[nextIndex];
+      toast.info(`Camera set to: ${modes[nextIndex]}`);
+    },
     dismissBriefing: (state) => {
       state.briefingDismissed = true;
     },
@@ -174,16 +180,18 @@ const hudSlice = createSlice({
         state.currentStop = action.payload.currentStop;
       })
       .addCase(fetchForecast.pending, (state) => {
-        state.loading = true;
+        state.status = 'loading';
       })
       .addCase(fetchForecast.fulfilled, (state, action) => {
-        state.loading = false;
+        state.status = 'succeeded';
         state.forecast = action.payload;
       })
       .addCase(fetchForecast.rejected, (state) => {
-        state.loading = false;
+        state.status = 'failed';
       })
       .addCase(fetchSevereAlerts.fulfilled, (state, action) => {
+        // Note: We don't change primary status for this background task,
+        // but you could add a separate status for alerts if needed.
         state.severeAlerts = action.payload;
       });
   },
@@ -196,6 +204,7 @@ export const {
   toggleVoice,
   setMapStyle,
   setCameraMode, 
+  cycleCameraMode,
   dismissBriefing,
 } = hudSlice.actions;
 
@@ -210,9 +219,9 @@ const getWeatherIcon = (weatherId: number): string => {
     if (weatherId >= 300 && weatherId < 400) return 'CloudDrizzle'; // Drizzle
     if (weatherId >= 500 && weatherId < 600) return 'CloudDrizzle'; // Rain
     if (weatherId >= 600 && weatherId < 700) return 'CloudSnow'; // Snow
-    if (weatherId >= 700 && weatherId < 800) return 'Wind'; // Atmosphere
+    if (weatherId >= 700 && weatherId < 800) return 'Cloud'; // Atmosphere (e.g., fog, haze) -> Use Cloud
     if (weatherId === 800) return 'Sun'; // Clear
-    if (weatherId > 800) return 'CloudSun'; // Clouds
+    if (weatherId > 800) return 'Cloud'; // Clouds -> Use Cloud
     return 'Sun';
 };
 
@@ -273,9 +282,25 @@ export const selectLookAheadData = createSelector(
   }
 );
 
+/**
+ * Selects the most relevant forecast entry from the list based on the current time.
+ * This selector does NOT need to be memoized with reselect because it depends on `Date.now()`,
+ * which should always cause it to re-evaluate when the component re-renders.
+ * It finds the first forecast in the list that is for a future time.
+ */
+export const selectCurrentForecastPeriod = (state: RootState) => {
+  const forecastList = state.hud.forecast?.list;
+  if (!forecastList || forecastList.length === 0) return null;
+
+  const nowInSeconds = Date.now() / 1000;
+  // Find the first forecast period that is in the future or very recent past.
+  const currentPeriod = forecastList.find(f => f.dt >= nowInSeconds - 3600); // Look for forecast up to 1hr old
+  return currentPeriod || forecastList[0]; // Fallback to the first item
+};
+
 export const selectDynamicHudAlert = createSelector(
-  [selectForecast, selectSevereAlerts],
-  (forecast, severeAlerts) => {
+  [selectCurrentForecastPeriod, selectForecast, selectSevereAlerts],
+  (currentPeriod, forecast, severeAlerts) => {
     // Priority 1: Severe Alert
     if (severeAlerts && severeAlerts.length > 0) {
       return {
@@ -286,9 +311,12 @@ export const selectDynamicHudAlert = createSelector(
       };
     }
 
-    if (forecast) {
+    if (forecast && currentPeriod) {
       // Priority 2: Imminent Precipitation
-      const imminentPrecip = forecast.list.slice(0, 2).find(f => f.pop > 0.3); // 30% chance in next 6 hours
+      // Check the next two 3-hour blocks (6 hours) for precipitation
+      const currentIndex = forecast.list.findIndex(f => f.dt === currentPeriod.dt);
+      const lookaheadIndex = Math.max(0, currentIndex);
+      const imminentPrecip = forecast.list.slice(lookaheadIndex, lookaheadIndex + 2).find(f => f.pop > 0.3);
       if (imminentPrecip) {
         const isSnow = imminentPrecip.weather[0].main === 'Snow';
         return {
@@ -300,20 +328,19 @@ export const selectDynamicHudAlert = createSelector(
       }
 
       // Priority 3: Info (High Wind or Low Temp)
-      const current = forecast.list[0];
-      if (current.wind.speed > 25) {
+      if (currentPeriod.wind.speed > 25) {
         return {
           priority: 'info' as const,
           icon: 'Wind',
-          text: `High Winds: ${Math.round(current.wind.speed)}mph`,
+          text: `High Winds: ${Math.round(currentPeriod.wind.speed)}mph`,
           color: 'text-blue-300',
         };
       }
-      if (current.main.temp < 32) {
+      if (currentPeriod.main.temp < 32) {
         return {
             priority: 'info' as const,
             icon: 'CloudSnow',
-            text: `Freezing: ${Math.round(current.main.temp)}°F`,
+            text: `Freezing: ${Math.round(currentPeriod.main.temp)}°F`,
             color: 'text-blue-300',
         };
       }

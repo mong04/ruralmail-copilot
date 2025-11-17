@@ -9,7 +9,7 @@ const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 interface AddressFormProps {
   initialData?: Stop;
   defaultLocation: SettingsData;
-  onSubmit: (stop: Stop) => void;
+  onSubmit: (stop: Partial<Stop>) => void;
   onCancel: () => void;
 }
 
@@ -47,8 +47,8 @@ const AddressForm: React.FC<AddressFormProps> = ({ initialData, defaultLocation,
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!stop.address_line1) return toast.error('Address Line 1 is required');
-    if (!stop.lat || !stop.lng) return toast.error('Select a valid address from the suggestions.');
-    onSubmit(stop as Stop);
+    // The check for lat/lng is removed. Geocoding will be handled by the parent.
+    onSubmit(stop);
 
     if (!initialData) {
       setStop(getInitialState());

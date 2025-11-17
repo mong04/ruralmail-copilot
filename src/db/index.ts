@@ -71,7 +71,7 @@ export type HudData = {
  * @returns {Promise<IDBPDatabase<RuralMailDB>>} The opened database.
  */
 export async function getDB() {
-  return openDB<RuralMailDB>('ruralmail-db', 4, {
+  return openDB<RuralMailDB>('ruralmail-db', 5, {
     upgrade(db, oldVersion) {
       if (oldVersion < 1) {
         db.createObjectStore('routes');

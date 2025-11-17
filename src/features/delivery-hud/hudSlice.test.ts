@@ -1,5 +1,6 @@
 // src/features/delivery-hud/hudSlice.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import axios from 'axios';
 import hudReducer, {
   dismissBriefing,
   fetchForecast,
@@ -9,12 +10,13 @@ import hudReducer, {
   type HudState,
   type ForecastData,
   type AlertData,
+  fetchDirections, // Keep fetchDirections
 } from './hudSlice';
 import { type Stop, type Package } from '../../db';
 import type { RootState } from '../../store';
-import axios from 'axios';
 // --- FIX: Import the types for the other slices ---
 import type { SettingsState } from '../../features/settings/settingsSlice';
+import { type NotificationState } from '../notification/notificationSlice';
 // Assuming simple types for these, adjust if incorrect
 interface RouteState { route: Stop[]; loading: boolean; error: string | null; }
 interface PackageState { packages: Package[]; loading: boolean; error: string | null; }
@@ -50,7 +52,7 @@ const mockNoAlerts: AlertData[] = [];
 
 
 // --- Mock Initial State ---
-const hudInitialState: HudState = {
+const testHudInitialState: HudState = {
   currentStop: 0,
   status: 'idle',
   position: { lat: 40, lng: -79 },
@@ -60,6 +62,9 @@ const hudInitialState: HudState = {
   forecast: null,
   severeAlerts: null,
   briefingDismissed: false,
+  isNavigating: false,
+  navigationData: null,
+  navigationStepIndex: 0,
 };
 
 // --- FIX: Create valid initial states for other slices ---
@@ -86,13 +91,21 @@ const mockSettingsInitialState: SettingsState = {
   preferredNavApp: 'in-app',
 };
 
+const mockNotificationInitialState: NotificationState = {
+  message: '',
+  type: 'info',
+  visible: false,
+  id: 0, // FIX: Add the missing 'id' property
+};
+
 // --- FIX: Update the helper function ---
 // Helper to create a mock RootState
 const createMockState = (hudState: Partial<HudState>): RootState => ({
-  hud: { ...hudInitialState, ...hudState },
+  hud: { ...testHudInitialState, ...hudState },
   route: mockRouteInitialState,
   packages: mockPackagesInitialState,
   settings: mockSettingsInitialState, // Use the complete, valid mock
+  notification: mockNotificationInitialState,
 });
 
 // --- Reset mocks before each test ---
@@ -101,7 +114,7 @@ beforeEach(() => {
   mockedAxios.get.mockClear();
 });
 
-describe('hudSlice selectors', () => {
+describe('hudSlice', () => {
   // ... (all your selector tests)
     // Test 1: Priority 1 (Severe)
   it('selectDynamicHudAlert should return Priority 1 (Severe) when alerts are present', () => {
@@ -162,47 +175,115 @@ describe('hudSlice selectors', () => {
     const briefingData = selectWeatherBriefingData(newRootState);
     expect(briefingData.isVisible).toBe(false);
   });
-});
 
-describe('hudSlice async thunks', () => {
+  describe('async thunks', () => {
+    const mockDispatch = vi.fn();
+    const mockGetState = vi.fn();
 
-  describe('fetchForecast', () => {
-    it('handles pending state', () => {
-      const state = hudReducer({ ...hudInitialState, status: 'idle' }, fetchForecast.pending('', { lat: 0, lng: 0 }));
-      expect(state.status).toBe('loading');
+    beforeEach(() => {
+      mockDispatch.mockClear();
+      mockGetState.mockClear();
     });
 
-    it('handles fulfilled state', () => {
-      const action = { type: fetchForecast.fulfilled.type, payload: mockClearForecast };
-      const state = hudReducer({ ...hudInitialState, status: 'loading' }, action);
-      expect(state.status).toBe('succeeded');
-      expect(state.forecast).toEqual(mockClearForecast);
+    describe('fetchForecast', () => {
+      it('handles pending state', () => {
+        const state = hudReducer({ ...testHudInitialState, status: 'idle' }, fetchForecast.pending('', { lat: 0, lng: 0 }));
+        expect(state.status).toBe('loading');
+      });
+
+      it('handles fulfilled state', () => {
+        const action = { type: fetchForecast.fulfilled.type, payload: mockClearForecast };
+        const state = hudReducer({ ...testHudInitialState, status: 'loading' }, action);
+        expect(state.status).toBe('succeeded');
+        expect(state.forecast).toEqual(mockClearForecast);
+      });
+
+      it('handles rejected state', () => {
+        const action = { type: fetchForecast.rejected.type, error: { message: 'Fetch failed' } };
+        const state = hudReducer({ ...testHudInitialState, status: 'loading' }, action);
+        expect(state.status).toBe('failed');
+        expect(state.forecast).toBe(null);
+      });
     });
 
-    it('handles rejected state', () => {
-      const action = { type: fetchForecast.rejected.type, error: { message: 'Fetch failed' } };
-      const state = hudReducer({ ...hudInitialState, status: 'loading' }, action);
-      expect(state.status).toBe('failed');
-      expect(state.forecast).toBe(null);
-    });
-  });
+    describe('fetchSevereAlerts', () => {
+      it('handles pending state', () => {
+        const state = hudReducer({ ...testHudInitialState, status: 'succeeded' }, fetchSevereAlerts.pending('', { lat: 0, lng: 0 }));
+        expect(state.status).toBe('succeeded'); // Correct, status should not change for this thunk
+      });
 
-  describe('fetchSevereAlerts', () => {
-    it('handles pending state', () => {
-      const state = hudReducer({ ...hudInitialState, status: 'succeeded' }, fetchSevereAlerts.pending('', { lat: 0, lng: 0 }));
-      expect(state.status).toBe('succeeded'); // Correct, status should not change for this thunk
+      it('handles fulfilled state', () => {
+        const action = { type: fetchSevereAlerts.fulfilled.type, payload: mockSevereAlerts };
+        const state = hudReducer(testHudInitialState, action);
+        expect(state.severeAlerts).toEqual(mockSevereAlerts);
+      });
+
+      it('handles rejected state', () => {
+        const action = { type: fetchSevereAlerts.rejected.type, error: { message: 'Fetch failed' } };
+        const state = hudReducer(testHudInitialState, action);
+        expect(state.severeAlerts).toBe(null); // Or remain unchanged
+      });
     });
 
-    it('handles fulfilled state', () => {
-      const action = { type: fetchSevereAlerts.fulfilled.type, payload: mockSevereAlerts };
-      const state = hudReducer(hudInitialState, action);
-      expect(state.severeAlerts).toEqual(mockSevereAlerts);
-    });
+    describe('fetchDirections', () => {
+      it('should not run if position is null', async () => {
+        mockGetState.mockReturnValue({ hud: { position: null } });
+        const thunk = fetchDirections({ end: { location: [-79, 40] } });
+        await thunk(mockDispatch, mockGetState, undefined);
 
-    it('handles rejected state', () => {
-      const action = { type: fetchSevereAlerts.rejected.type, error: { message: 'Fetch failed' } };
-      const state = hudReducer(hudInitialState, action);
-      expect(state.severeAlerts).toBe(null); // Or remain unchanged
+        // The thunk's condition should fail, so no actions are dispatched.
+        expect(mockDispatch).not.toHaveBeenCalled();
+      });
+
+      it('should handle pending and fulfilled states correctly', async () => {
+        const mockRoute = {
+          geometry: { type: 'LineString', coordinates: [[-79, 40], [-79, 41]] },
+          duration: 120,
+          distance: 1500,
+          legs: [{ steps: [{ instruction: 'Go straight' }] }],
+        };
+        mockedAxios.get.mockResolvedValue({ data: { routes: [mockRoute] } });
+        mockGetState.mockReturnValue(createMockState({ position: { lat: 40.1, lng: -79.1 } }));
+
+        const thunk = fetchDirections({ end: { location: [-79, 40] } });
+        const result = await thunk(mockDispatch, mockGetState, undefined);
+
+        // Check that the pending action was dispatched
+        const pendingAction = mockDispatch.mock.calls[0][0];
+        expect(pendingAction.type).toBe('hud/fetchDirections/pending');
+
+        // Check the reducer for the pending state
+        let state = hudReducer(testHudInitialState, pendingAction);
+        expect(state.isNavigating).toBe(true);
+
+        // Check that the fulfilled action was dispatched
+        expect(result.type).toBe('hud/fetchDirections/fulfilled');
+
+        // Check the reducer for the fulfilled state
+        state = hudReducer(state, result);
+        expect(state.isNavigating).toBe(true);
+        expect(state.navigationData).not.toBeNull();
+        expect(state.navigationData?.geometry).toEqual(mockRoute.geometry);
+        expect(state.cameraMode).toBe('follow');
+      });
+
+      it('should handle rejected state when no route is found', async () => {
+        mockedAxios.get.mockResolvedValue({ data: { routes: [] } }); // API returns 200 but no routes
+        mockGetState.mockReturnValue(createMockState({ position: { lat: 40.1, lng: -79.1 } }));
+
+        const thunk = fetchDirections({ end: { location: [-79, 40] } });
+        const result = await thunk(mockDispatch, mockGetState, undefined);
+
+        // Check that the rejected action was dispatched
+        expect(result.type).toBe('hud/fetchDirections/rejected');
+        expect(result.payload).toBe('No route found');
+
+        // Check the reducer for the rejected state
+        const pendingState: HudState = { ...testHudInitialState, isNavigating: true };
+        const state = hudReducer(pendingState, result);
+        expect(state.isNavigating).toBe(false);
+        expect(state.navigationData).toBeNull();
+      });
     });
   });
 });

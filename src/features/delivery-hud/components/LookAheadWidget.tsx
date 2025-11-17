@@ -1,5 +1,7 @@
 import { Sun, Cloud, CloudDrizzle, CloudSnow, AlertCircle, type LucideProps } from 'lucide-react';
 import React from 'react';
+// import { useAppSelector } from '../../../store';
+// import { cn } from '../../../lib/utils';
 
 // A map for icons
 const iconMap: { [key: string]: React.ForwardRefExoticComponent<Omit<LucideProps, "ref"> & React.RefAttributes<SVGSVGElement>> } = {
@@ -85,7 +87,7 @@ export const LookAheadWidget = ({ lookAheadData, status }: LookAheadWidgetProps)
   };
 
   return (
-    <div className="absolute top-20 right-3 z-40 bg-black/60 backdrop-blur-sm rounded-lg p-3 w-48">
+    <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3 w-48">
       <h3 className="text-white font-bold text-sm mb-2">Look-Ahead</h3>
       {renderContent()}
     </div>

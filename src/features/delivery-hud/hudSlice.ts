@@ -1,8 +1,8 @@
 // src/features/delivery-hud/hudSlice.ts
 import { createSlice, createAsyncThunk, type PayloadAction, createSelector } from '@reduxjs/toolkit';
 import axios from 'axios';
-import { toast } from 'sonner';
-import { loadHud, saveHud, type HudData } from '../../db';
+import { loadHud, saveHud, type HudData } from '../../db'; 
+import { showNotification } from '../notification/notificationSlice';
 import type { RootState } from '../../store';
 
 // OWM API response types (simplified)
@@ -36,9 +36,23 @@ export interface AlertData {
   tags: string[];
 }
 
+export interface NavigationData {
+  geometry: unknown; // GeoJSON geometry
+  duration: number; // in seconds
+  distance: number; // in meters
+  steps: {
+    maneuver: {
+      instruction: string;
+      type?: string;
+      modifier?: string;
+    };
+    location: [number, number]; // [lng, lat]
+    distance: number;
+  }[];
+}
 export interface HudState extends Omit<HudData, 'weatherAlerts'> {
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
-  position: { lat: number; lng: number } | null;
+  position: { lat: number; lng: number; heading?: number } | null;
   voiceEnabled: boolean;
   currentStop: number;
   mapStyle: 'streets' | 'satellite';
@@ -46,6 +60,9 @@ export interface HudState extends Omit<HudData, 'weatherAlerts'> {
   forecast: ForecastData | null;
   severeAlerts: AlertData[] | null;
   briefingDismissed: boolean;
+  isNavigating: boolean;
+  navigationData: NavigationData | null;
+  navigationStepIndex: number;
 }
 
 const initialState: HudState = {
@@ -58,6 +75,9 @@ const initialState: HudState = {
   forecast: null,
   severeAlerts: null,
   briefingDismissed: false,
+  isNavigating: false,
+  navigationData: null,
+  navigationStepIndex: 0,
 };
 
 /**
@@ -82,11 +102,11 @@ export const saveHudToDB = createAsyncThunk('hud/save', async (hud: HudData) => 
  */
 export const fetchForecast = createAsyncThunk(
   'hud/fetchForecast',
-  async (position: { lat: number; lng: number }, { rejectWithValue }) => {
-    const { lat, lng } = position;
+  async (position: { lat: number; lng: number }, { rejectWithValue }) => { 
     const token = import.meta.env.VITE_OPENWEATHER_TOKEN;
 
-    if (!token) {
+    const { lat, lng } = position;
+    if (!token || !lat || !lng) {
       return rejectWithValue('No position or token');
     }
 
@@ -96,9 +116,8 @@ export const fetchForecast = createAsyncThunk(
       );
       return response.data as ForecastData;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Forecast fetch failed:', err); // Add console log for debugging
-      toast.error(`Forecast fetch failed: ${message}`); // Keep user-facing toast
+      // const message = err instanceof Error ? err.message : 'Failed to fetch forecast'; // 'message' is assigned a value but never used.
+      console.error('Forecast fetch failed:', err);
       return rejectWithValue('Fetch error');
     }
   }
@@ -109,25 +128,23 @@ export const fetchForecast = createAsyncThunk(
  */
 export const fetchSevereAlerts = createAsyncThunk(
   'hud/fetchSevereAlerts',
-  async (position: { lat: number; lng: number }, { rejectWithValue }) => {
+  async (position: { lat: number; lng: number }, { rejectWithValue }) => { 
     const { lat, lng } = position;
     const token = import.meta.env.VITE_OPENWEATHER_TOKEN;
 
-    if (!token) {
+    if (!token || !lat || !lng) {
       return rejectWithValue('No position or token');
     }
 
     try {
       // Note: OWM free tier does not include alerts. This is for demonstration.
       // A real app would use a different endpoint or paid tier.
-      // For now, this will likely return an empty array.
+      // The OneCall API v2.5 is deprecated; new keys require v3.0.
       const response = await axios.get(
+        // Switched from deprecated 2.5 to 3.0
         `https://api.openweathermap.org/data/3.0/onecall?lat=${lat}&lon=${lng}&exclude=minutely,hourly,daily,current&appid=${token}`
       );
       const alerts = (response.data.alerts || []) as AlertData[];
-      if (alerts.length > 0) {
-        toast.warning(`New Severe Alert: ${alerts[0].event}`);
-      }
       return alerts;
     } catch (err) {
       // Don't show toast for this as it runs in background
@@ -137,26 +154,86 @@ export const fetchSevereAlerts = createAsyncThunk(
   }
 );
 
+/**
+ * Fetches driving directions from Mapbox.
+ */
+export const fetchDirections = createAsyncThunk(
+  'hud/fetchDirections',
+  async ({ end }: { end: { location: [number, number] } }, { getState, rejectWithValue, dispatch }) => {
+    const state = getState() as RootState;
+    const start = state.hud.position;
+
+    // This should theoretically not be hit due to the `condition` below, but serves as a safeguard.
+    if (!start) {
+      return rejectWithValue('Starting position is null');
+    }
+
+    const token = import.meta.env.VITE_MAPBOX_TOKEN;
+    if (!token) return rejectWithValue('No Mapbox token');
+    
+    const profile = 'driving-traffic'; // 'driving', 'walking', 'cycling'
+    // Round coordinates to 6 decimal places. The Mapbox API can be sensitive to
+    // overly long coordinate precision. 6 decimal places provides ~11cm precision.
+    const startCoords = `${Number(start.lng).toFixed(6)},${Number(start.lat).toFixed(6)}`;
+    const endCoords = `${Number(end.location[0]).toFixed(6)},${Number(end.location[1]).toFixed(6)}`;
+
+    // Use `overview=full` to get the most detailed route geometry for a smooth line.
+    const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${startCoords};${endCoords}?steps=true&geometries=geojson&overview=full&access_token=${token}`;
+
+    try {
+      const response = await axios.get(url);
+      dispatch(showNotification({ message: 'Calculating route...', type: 'info' }));
+      const route = response.data.routes[0];
+      if (!route) return rejectWithValue('No route found');
+
+      const navigationData: NavigationData = {
+        geometry: route.geometry,
+        duration: route.duration,
+        distance: route.distance,
+        steps: route.legs[0].steps,
+      };
+      return navigationData;
+    } catch (err) {
+      let errorMessage = 'Failed to fetch directions';
+      // Check if it's an Axios error with a response from the server
+      if (axios.isAxiosError(err) && err.response) {
+        // Use the specific error message from Mapbox if available
+        errorMessage = err.response.data?.message || errorMessage;
+      }
+      // Dispatch a specific notification to the user
+      dispatch(showNotification({
+        message: 'Navigation Error', description: errorMessage, type: 'error'
+      }));
+      return rejectWithValue(errorMessage);
+    }
+  },
+  {
+    // Prevent the thunk from running if we don't have a position yet.
+    condition: (_, { getState }) => {
+      const { hud } = getState() as RootState;
+      if (!hud.position) {
+        console.warn('[Directions] Aborting fetchDirections: No user position available in state.');
+        return false; // Abort the thunk
+      }
+      return true; // Proceed with the thunk
+    },
+  }
+);
 
 const hudSlice = createSlice({
   name: 'hud',
   initialState,
   reducers: {
-    updatePosition: (state, action: PayloadAction<{ lat: number; lng: number }>) => {
+    updatePosition: (state, action: PayloadAction<{ lat: number; lng: number; heading?: number }>) => {
       state.position = action.payload;
     },
     advanceStop: (state) => {
       state.currentStop += 1;
-      toast.success('Stop advanced!');
     },
-    markDelivered: (state, action: PayloadAction<{ stopId: string }>) => {
-      toast.success(`Packages at stop ${action.payload.stopId} marked delivered`);
-      state.currentStop += 1;
+    setCurrentStop: (state, action: PayloadAction<number>) => {
+      state.currentStop = action.payload;
     },
-    toggleVoice: (state, action: PayloadAction<boolean>) => {
-      state.voiceEnabled = action.payload;
-      toast.info(`Voice guidance ${action.payload ? 'enabled' : 'disabled'}`);
-    },
+    toggleVoice: (state, action: PayloadAction<boolean>) => { state.voiceEnabled = action.payload; },
     setMapStyle: (state, action: PayloadAction<HudState['mapStyle']>) => {
       state.mapStyle = action.payload;
     },
@@ -168,10 +245,18 @@ const hudSlice = createSlice({
       const currentIndex = modes.indexOf(state.cameraMode);
       const nextIndex = (currentIndex + 1) % modes.length;
       state.cameraMode = modes[nextIndex];
-      toast.info(`Camera set to: ${modes[nextIndex]}`);
     },
     dismissBriefing: (state) => {
       state.briefingDismissed = true;
+    },
+    exitNavigation: (state) => {
+      state.isNavigating = false;
+      state.navigationData = null;
+      state.navigationStepIndex = 0;
+      state.cameraMode = 'task'; // Revert camera to task mode on exit
+    },
+    advanceNavigationStep: (state) => {
+      state.navigationStepIndex += 1;
     },
   },
   extraReducers: (builder) => {
@@ -192,7 +277,22 @@ const hudSlice = createSlice({
       .addCase(fetchSevereAlerts.fulfilled, (state, action) => {
         // Note: We don't change primary status for this background task,
         // but you could add a separate status for alerts if needed.
-        state.severeAlerts = action.payload;
+        if (action.payload && action.payload.length > 0) {
+          state.severeAlerts = action.payload;
+        }
+      })
+      .addCase(fetchDirections.pending, (state) => {
+        state.isNavigating = true;
+      })
+      .addCase(fetchDirections.fulfilled, (state, action) => {
+        state.isNavigating = true; // Ensure navigation state is active
+        state.cameraMode = 'follow'; // Automatically switch to follow mode on success
+        state.navigationStepIndex = 0;
+        state.navigationData = action.payload;
+      })
+      .addCase(fetchDirections.rejected, (state) => {
+        state.isNavigating = false;
+        state.navigationData = null;
       });
   },
 });
@@ -200,12 +300,14 @@ const hudSlice = createSlice({
 export const { 
   updatePosition, 
   advanceStop, 
-  markDelivered, 
+  setCurrentStop,
   toggleVoice,
   setMapStyle,
   setCameraMode, 
   cycleCameraMode,
   dismissBriefing,
+  exitNavigation,
+  advanceNavigationStep,
 } = hudSlice.actions;
 
 // SELECTORS

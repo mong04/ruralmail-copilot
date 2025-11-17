@@ -93,7 +93,7 @@ export const MapControls: React.FC = () => {
   const CameraIcon = getCameraIcon();
 
   return (
-    <div className="absolute bottom-4 right-4 z-30 flex flex-col items-end gap-2">
+    <div className="flex flex-col items-end gap-2">
       {/* Layer Controls */}
       <div className="relative flex flex-col items-end" ref={layersControlRef}>
         {isLayersOpen && (

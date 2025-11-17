@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import AddressForm from './components/AddressForm';
 import AddressList from './components/AddressList';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { addStop, updateStop, removeStop, reorderStops, saveRouteToDB } from './routeSlice';
+import { addStop, updateStop, removeStop, reorderStops, saveRouteToDB, geocodeStop } from './routeSlice';
+import { type Stop } from '../../db';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 
@@ -13,12 +14,28 @@ const RouteSetup: React.FC = () => {
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
-  const handleSubmit = (stop: any) => {
-    if (editingIndex === null) {
-      dispatch(addStop(stop));
+  const handleSubmit = async (stop: Partial<Stop>) => {
+    // If stop doesn't have lat/lng, geocode it first.
+    if (!stop.lat || !stop.lng) {
+      const resultAction = await dispatch(geocodeStop(stop));
+      if (geocodeStop.fulfilled.match(resultAction)) {
+        const geocodedStop = resultAction.payload;
+        if (editingIndex === null) {
+          dispatch(addStop(geocodedStop));
+        } else {
+          dispatch(updateStop({ index: editingIndex, stop: geocodedStop }));
+          setEditingIndex(null);
+        }
+      }
+      // If geocoding fails, the thunk will show a toast error, so we don't need to do anything here.
     } else {
-      dispatch(updateStop({ index: editingIndex, stop }));
-      setEditingIndex(null);
+      // It already has lat/lng, so just add/update it.
+      if (editingIndex === null) {
+        dispatch(addStop(stop as Stop));
+      } else {
+        dispatch(updateStop({ index: editingIndex, stop: stop as Stop }));
+        setEditingIndex(null);
+      }
     }
   };
 

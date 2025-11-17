@@ -64,6 +64,7 @@ export const saveRouteToDB = createAsyncThunk('route/save', async (route: RouteD
 export const geocodeStop = createAsyncThunk(
   'route/geocodeStop',
   async (partialStop: Partial<Stop>, { rejectWithValue }) => {
+    console.log('[Geocode] Starting geocode process for stop:', partialStop);
     if (!geocodingService) {
       toast.error('Mapbox token missing - enter lat/lng manually');
       return rejectWithValue('No token');
@@ -82,6 +83,13 @@ export const geocodeStop = createAsyncThunk(
         partialStop.state,
         partialStop.zip,
       ].filter(Boolean).join(', ');
+      console.log('[Geocode] Constructed address for API call:', addressParts);
+
+      // ✅ FIX: Prevent API call if there's no address information to geocode.
+      if (!addressParts.trim()) {
+        toast.error('Cannot geocode stop with no address information.');
+        return rejectWithValue('Empty address');
+      }
 
       const response = await geocodingService
         .forwardGeocode({
@@ -93,18 +101,23 @@ export const geocodeStop = createAsyncThunk(
         .send();
 
       const feature = response.body.features[0];
+      console.log('[Geocode] Received response from Mapbox:', response.body);
       if (!feature) {
         return rejectWithValue('No results found');
       }
 
-      return {
+      const geocodedStop: Stop = {
         ...partialStop,
+        id: partialStop.id || crypto.randomUUID(), // Ensure ID exists
         lat: feature.center[1],
         lng: feature.center[0],
         full_address: feature.place_name,
       } as Stop;
+      console.log('[Geocode] Successfully created geocoded stop object:', geocodedStop);
+      return geocodedStop;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Geocoding failed';
+      console.error('[Geocode] Geocoding API call failed.', err);
       toast.error(message);
       return rejectWithValue(message);
     }

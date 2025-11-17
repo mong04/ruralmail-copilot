@@ -2,7 +2,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { type Package, type Stop } from '../../../db';
-import { MapPin, Check, X } from 'lucide-react';
+import { Check, X, ChevronRight, ChevronLeft, Navigation } from 'lucide-react';
 import { DynamicHudAlert, type DynamicHudAlertProps } from './DynamicHudAlert';
 
 interface HUDProps {
@@ -10,10 +10,13 @@ interface HUDProps {
   route: Stop[]; // filtered activeStops
   fullRoute: Stop[];
   packages: Package[];
+  isNavigating: boolean;
   hudAlertData: DynamicHudAlertProps['hudAlertData']; // Use the prop type from the component
   onAdvanceStop: () => void;
+  onMarkDelivered: () => void;
   onNavigate: () => void;
   onExit: () => void;
+  onStopNavigation: () => void;
 }
 
 const DeliveryHUDPanel = React.forwardRef<HTMLDivElement, HUDProps>(
@@ -23,10 +26,13 @@ const DeliveryHUDPanel = React.forwardRef<HTMLDivElement, HUDProps>(
       route,
       fullRoute,
       packages,
+      isNavigating,
       hudAlertData,
       onAdvanceStop,
+      onMarkDelivered,
       onNavigate,
       onExit,
+      onStopNavigation,
     },
     ref
   ) => {
@@ -45,7 +51,7 @@ const DeliveryHUDPanel = React.forwardRef<HTMLDivElement, HUDProps>(
           <h2 className="text-xl font-bold mb-2">End of Route</h2>
           <p className="mb-2">No more stops to display.</p>
           <div className="flex justify-end mt-4 gap-2">
-            <button
+            <button // Re-using button style from main view for consistency
               onClick={onExit}
               className="h-11 px-4 rounded-xl bg-danger text-danger-foreground hover:bg-danger/90 focus:ring-2 focus:ring-danger flex items-center gap-2"
             >
@@ -88,41 +94,63 @@ const DeliveryHUDPanel = React.forwardRef<HTMLDivElement, HUDProps>(
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
         className="bottom-0 left-0 right-0 z-10 p-4 bg-surface rounded-t-xl shadow-lg border border-border"
       >
-        <div className="grid grid-cols-2 gap-x-4">
-            <div>
-                <h2 className="text-xl font-bold mb-1 truncate">{currentStopObj.full_address}</h2>
-                <p className="text-sm text-muted-foreground">
-                    Packages: {pkgs.length}
-                    {packageDetails.length > 0 ? ` (${packageDetails.join(', ')})` : ''}
-                </p>
-            </div>
-            <div className="flex items-start justify-end pt-1">
-                <DynamicHudAlert hudAlertData={hudAlertData} />
-            </div>
+        {/* Top Row: Stop Info & Alerts */}
+        <div className="flex justify-between items-start">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xl font-bold mb-1 truncate">{currentStopObj.full_address}</h2>
+            <p className="text-sm text-muted-foreground">
+              Packages: {pkgs.length}
+              {packageDetails.length > 0 ? ` (${packageDetails.join(', ')})` : ''}
+            </p>
+          </div>
+          <div className="flex-shrink-0 ml-2 pt-1">
+            <DynamicHudAlert hudAlertData={hudAlertData} />
+          </div>
         </div>
 
-        <div className="flex justify-between mt-4 gap-2">
+        {/* Bottom Row: Action Buttons */}
+        <div className="flex items-center mt-4 gap-2">
           <button
             onClick={onExit}
-            className="h-12 px-4 rounded-xl bg-surface text-danger-foreground border border-border hover:bg-surface-muted shrink-0 flex items-center gap-2"
+            className="h-12 w-12 rounded-xl bg-surface text-foreground border border-border hover:bg-surface-muted shrink-0 flex items-center justify-center"
+            aria-label="Exit Delivery"
           >
-            <X size={18} className="text-danger" />
+            <ChevronLeft size={24} />
           </button>
 
-          <button
-            onClick={onNavigate}
-            className="h-12 px-5 rounded-xl bg-brand text-brand-foreground hover:bg-brand/90 focus:ring-2 focus:ring-brand flex-1 flex items-center justify-center gap-2"
-          >
-            <MapPin size={18} />
-            Navigate
-          </button>
+          <div className="flex-1 grid grid-cols-2 gap-2">
+            {isNavigating ? (
+              <button
+                onClick={onStopNavigation}
+                className="h-12 px-5 rounded-xl bg-danger text-danger-foreground hover:bg-danger/90 focus:ring-2 focus:ring-danger flex items-center justify-center gap-2"
+              >
+                <X size={18} />
+                Stop Nav
+              </button>
+            ) : (
+              <button
+                onClick={onNavigate}
+                className="h-12 px-5 rounded-xl bg-brand text-brand-foreground hover:bg-brand/90 focus:ring-2 focus:ring-brand flex items-center justify-center gap-2"
+              >
+                <Navigation size={18} />
+                Navigate
+              </button>
+            )}
+            <button
+              onClick={onMarkDelivered}
+              className="h-12 px-5 rounded-xl bg-success text-success-foreground hover:bg-success/90 focus:ring-2 focus:ring-success flex items-center justify-center gap-2"
+            >
+              <Check size={18} />
+              Delivered
+            </button>
+          </div>
 
           <button
             onClick={onAdvanceStop}
-            className="h-12 px-5 rounded-xl bg-success text-success-foreground hover:bg-success/90 focus:ring-2 focus:ring-success flex-1 flex items-center justify-center gap-2"
+            className="h-12 w-12 rounded-xl bg-surface text-foreground border border-border hover:bg-surface-muted shrink-0 flex items-center justify-center"
+            aria-label="Next Stop"
           >
-            <Check size={18} />
-            Delivered
+            <ChevronRight size={24} />
           </button>
         </div>
       </motion.div>

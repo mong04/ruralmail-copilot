@@ -33,11 +33,11 @@ initApp();
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Provider store={store}>
-      {/* ✅ THE FIX: 
-        We'll set the position to 'top-center' and add a small 'gap'
-        so it's not flush with the very top edge of the screen.
+      {/* ✅ FIX:
+        Moved the toaster to the top-right corner to avoid overlapping with
+        either the top navigation panel or the bottom HUD panel.
       */}
-      <Toaster position="top-center" richColors gap={16} />
+      <Toaster position="top-right" richColors gap={16} />
       <App />
     </Provider>
   </React.StrictMode>

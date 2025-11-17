@@ -5,6 +5,7 @@ import routeReducer from '../../src/features/route-setup/routeSlice';
 import settingsReducer from '../../src/features/settings/settingsSlice';
 import packageReducer from '../features/package-management/packageSlice';
 import hudReducer from '../features/delivery-hud/hudSlice';
+import notificationReducer from '../features/notification/notificationSlice';
 
 // 1. Create the combined reducer object and export it
 export const rootReducer = {
@@ -12,6 +13,7 @@ export const rootReducer = {
   settings: settingsReducer,
   packages: packageReducer,
   hud: hudReducer,
+  notification: notificationReducer,
 };
 
 /**

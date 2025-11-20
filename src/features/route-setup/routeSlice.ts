@@ -103,6 +103,7 @@ export const geocodeStop = createAsyncThunk(
       const feature = response.body.features[0];
       console.log('[Geocode] Received response from Mapbox:', response.body);
       if (!feature) {
+        toast.error('Address not found. Please check the address or enter lat/lng manually.');
         return rejectWithValue('No results found');
       }
 

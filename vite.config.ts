@@ -12,6 +12,7 @@ export default defineConfig({
     tailwindcss(), // Add the plugin here
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: 'auto',
       devOptions: {
         enabled: true,
       },

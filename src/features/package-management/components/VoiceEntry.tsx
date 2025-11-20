@@ -31,7 +31,6 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
   
   const [timer, setTimer] = useState<number | null>(null);
   
-  // ✅ Separate refs for Timeout (delays) and Intervals (countdown)
   const delayRef = useRef<NodeJS.Timeout | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -43,6 +42,16 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
   // 1. Predict Logic
   useEffect(() => {
     if (isProcessing && transcript) {
+      // ✅ NEW: Handle Explicit Cancel Commands
+      const cleanText = transcript.toLowerCase().trim();
+      if (cleanText === 'cancel' || cleanText === 'stop' || cleanText === 'no') {
+         setPrediction(null); // This kills the Auto-Commit timer
+         setStatus('listening');
+         playTone('start'); // Polite blip
+         reset(); // Clear input
+         return;
+      }
+
       setStatus('processing');
       
       const result = brain.predict(transcript);
@@ -101,9 +110,8 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
     onManualFallback(transcript);
   };
 
-  // 4. Auto-Commit Logic (SEQUENTIAL FIX)
+  // 4. Auto-Commit Logic
   useEffect(() => {
-    // Cleanup previous runs
     if (delayRef.current) clearTimeout(delayRef.current);
     if (intervalRef.current) clearInterval(intervalRef.current);
     setTimer(null);
@@ -111,21 +119,22 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
     if (prediction?.stop && prediction.confidence > 0.85) {
       const validStop = prediction.stop; 
       
-      // A. Kill Mic
+      // A. Kill Mic (Prevents Robot Voice feedback loop)
       stop();
 
-      // B. Wait for audio driver, THEN Speak
-      // Store in delayRef so we can cancel if user taps "Search" quickly
+      // B. Wait for audio driver cleanup, THEN Speak
       delayRef.current = setTimeout(() => {
         
         const conciseAddress = validStop.address_line1 || validStop.full_address || "Stop found";
         
         speak(conciseAddress, () => {
-           // ✅ C. CALLBACK: Only start timer AFTER robot finishes talking
+           // ✅ C. CALLBACK: RE-OPEN MIC & START TIMER
+           // This allows you to say "Cancel" or "123 Main" during the countdown!
+           reset(); 
+           
            let timeLeft = 3; 
            setTimer(timeLeft);
 
-           // Start the countdown
            intervalRef.current = setInterval(() => {
              timeLeft -= 1;
              setTimer(timeLeft);
@@ -136,17 +145,16 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
            }, 1000);
         });
         
-      }, 400); // 400ms for Bluetooth safety
+      }, 400);
 
-      // Cleanup on unmount or dependency change
       return () => {
         if (delayRef.current) clearTimeout(delayRef.current);
         if (intervalRef.current) clearInterval(intervalRef.current);
       };
     }
-  }, [prediction, handleConfirm, speak, stop]);
+  }, [prediction, handleConfirm, speak, stop, reset]); // Added 'reset' dependency
 
-  // ... Render Logic (Helpers) ...
+  // Render Helpers
   const getCircleColor = () => {
     switch (status) {
         case 'error': return 'bg-danger text-danger-foreground';
@@ -187,14 +195,12 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
           <Card className="w-full max-w-md p-6 border-4 border-brand bg-brand/5 transform transition-all duration-300 scale-105">
             <div className="text-center space-y-4">
               
-              {/* Only show timer if it has actually started */}
               {timer !== null && timer > 0 ? (
                  <div className="flex items-center justify-center gap-2 text-brand font-bold animate-pulse">
                     <Loader2 className="animate-spin" />
                     Auto-saving in {timer}s...
                  </div>
               ) : (
-                 // Show placeholder while speaking
                  <div className="h-6 text-muted font-medium">Verifying...</div>
               )}
 
@@ -215,7 +221,6 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
                    <Search size={24} /> Search
                  </button>
                  
-                 {/* Only show 'Save Now' if we are waiting on the timer */}
                  {(timer === null || timer > 0) && (
                     <button 
                       onClick={() => handleConfirm(prediction)}

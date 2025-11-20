@@ -34,13 +34,38 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
     playTone('start');
   }, [playTone]);
 
-  // 1. Predict Logic
+  // 1. Predict Logic (Updated with Error Handling)
   useEffect(() => {
     if (isProcessing && transcript) {
       const result = brain.predict(transcript);
       setPrediction(result);
+
+      // 🛑 FAILURE HANDLING (The "Buzz & Retry" Loop)
+      // If we didn't find a stop, or the confidence is trash (< 40%)
+      if (!result.stop || result.confidence < 0.4) {
+        
+        // 1. Auditory Feedback
+        playTone('error'); // BZZT!
+
+        // 2. Auto-Retry after a delay
+        // Give the user 2 seconds to see "I heard [Garbage]" before wiping it
+        const retryTimer = setTimeout(() => {
+           setPrediction(null);
+           reset(); // Restarts the mic automatically
+        }, 2000);
+
+        return () => clearTimeout(retryTimer);
+      }
+      
+      // ⚠️ AMBIGUOUS HANDLING (Middle Confidence 40% - 85%)
+      // If it's "Maybe" a match, we do NOT buzz, but we also do NOT auto-save.
+      // We just play a polite "blip" to say "I found something, please check."
+      else if (result.confidence <= 0.85) {
+        playTone('start'); // A neutral blip
+      }
+
     }
-  }, [isProcessing, transcript, brain]);
+  }, [isProcessing, transcript, brain, playTone, reset]);
 
   // 2. Confirm Handler
   const handleConfirm = useCallback((finalPred: Prediction | null) => {

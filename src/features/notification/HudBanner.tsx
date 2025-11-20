@@ -43,7 +43,7 @@ export const HudBanner: React.FC = () => {
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           className={cn(
             'absolute left-0 right-0 z-50 transition-all duration-300 ease-in-out',
-            isNavigating ? 'top-[5.75rem]' : 'top-0' // Position below nav panel if navigating
+            isNavigating ? 'top-23' : 'top-0' // Position below nav panel if navigating
           )}
         >
           <div

@@ -24,7 +24,7 @@ export const UserMarker: React.FC = () => {
       />
       {/* The Shadow with a pulsing animation */}
       <motion.div
-        className="absolute bottom-[-4px] w-3 h-1 bg-black/30 rounded-full"
+        className="absolute -bottom-1 w-3 h-1 bg-black/30 rounded-full"
         style={{ filter: 'blur(2px)' }}
         animate={{
           scale: [1, 0.8, 1], // Shrinks and grows as the marker bobs

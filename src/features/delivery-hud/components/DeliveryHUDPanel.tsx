@@ -102,7 +102,7 @@ const DeliveryHUDPanel = React.forwardRef<HTMLDivElement, HUDProps>(
               {packageDetails.length > 0 ? ` (${packageDetails.join(', ')})` : ''}
             </p>
           </div>
-          <div className="flex-shrink-0 ml-2 pt-1">
+          <div className="shrink-0 ml-2 pt-1">
             <DynamicHudAlert hudAlertData={hudAlertData} />
           </div>
         </div>

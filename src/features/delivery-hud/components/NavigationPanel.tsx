@@ -62,10 +62,10 @@ const NavigationPanel: React.FC = () => {
           className="max-w-sm" // Keep a max-width for very long instructions
         >
           <div className="bg-surface/90 backdrop-blur-sm rounded-2xl shadow-lg p-3 flex items-center gap-4 border border-border">
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <ManeuverIcon type={currentStep.maneuver.type} modifier={currentStep.maneuver.modifier} />
             </div>
-            <div className="flex-grow min-w-0">
+            <div className="grow min-w-0">
               <p className="font-bold text-lg truncate">{currentStep.maneuver.instruction}</p>
               <p className="text-muted-foreground">
                 in {formatDistance(currentStep.distance)}

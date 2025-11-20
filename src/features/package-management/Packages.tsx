@@ -53,17 +53,29 @@ const Packages: React.FC = () => {
   }, [packages, searchQuery]);
 
   // NEW: Called when the Voice AI successfully identifies a stop
+// NEW: Hands-Free Confirmation Handler
   const handleVoiceConfirmation = (pkgData: Partial<Package>) => {
-    // 1. Close the voice UI
-    setIsVoiceActive(false);
+    // 1. Create the full package object immediately
+    const newPackage: Package = {
+      id: crypto.randomUUID(),
+      tracking: '', // Voice packages usually don't have tracking #s read aloud
+      size: 'medium', // Default size
+      notes: 'Voice Entry', // Mark it so you know later
+      assignedStopId: pkgData.assignedStopId,
+      assignedStopNumber: pkgData.assignedStopNumber,
+      assignedAddress: pkgData.assignedAddress,
+      delivered: false,
+    };
 
-    // 2. Pre-fill the "Manual Entry" form with the data we just heard
-    setEditingPackage(pkgData);
-    setFormContext('manual'); // Or 'edit' if you prefer
-    setSearchParams({ form: 'true' });
-
-    // Optional: Show a toast so they know it worked
-    toast.success(`Matched: ${pkgData.assignedAddress}`);
+    // 2. Save directly to Redux (and thus DB)
+    dispatch(addPackage(newPackage));
+    
+    // 3. Give Audio/Visual Feedback
+    toast.success(`📦 Added to Stop ${pkgData.assignedStopNumber! + 1}`);
+    
+    // 4. Do NOT close voice active if you want to do multiple in a row.
+    // If you want to close after one, uncomment the next line:
+    // setIsVoiceActive(false);
   };
 
   // Close scanner/form if URL changes (e.g., back button)

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { Mic, X, RefreshCw, Loader2, Search, Keyboard } from 'lucide-react';
 import { RouteBrain, type Prediction } from '../utils/RouteBrain';
 import { useVoiceInput } from '../../../hooks/useVoiceInput';
-import { useSound } from '../../../hooks/useSound'; // ✅ Import Sound Hook
+import { useSound } from '../../../hooks/useSound'; 
 import { type Stop, type Package } from '../../../db';
 import { Card } from '../../../components/ui/Card';
 import { Badge } from '../../../components/ui/Badge';
@@ -21,15 +21,15 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
   onManualFallback 
 }) => {
   const brain = useMemo(() => new RouteBrain(route), [route]);
-  const { transcript, isProcessing, reset } = useVoiceInput(true);
-  const { speak, playTone } = useSound(); // ✅ Init Sound
+  
+  // ✅ Grab start/stop controls
+  const { transcript, isProcessing, reset, stop } = useVoiceInput(true);
+  const { speak, playTone } = useSound(); 
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   
-  // Auto-Commit State
   const [timer, setTimer] = useState<number | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 0. Play Start Blip on Mount
   useEffect(() => {
     playTone('start');
   }, [playTone]);
@@ -46,36 +46,34 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
   const handleConfirm = useCallback((finalPred: Prediction | null) => {
     const target = finalPred || prediction;
     if (target?.stop) {
-      // Reinforce learning if it was a fuzzy match
       if (target.source === 'fuzzy') {
         brain.learn(target.originalTranscript, target.stop.id);
       }
 
-      // 🔊 Play Success Tone
       playTone('success');
 
-      // Send back to parent
       onPackageConfirmed({
         assignedStopId: target.stop.id,
         assignedAddress: target.stop.full_address,
         assignedStopNumber: route.findIndex(r => r.id === target.stop?.id)
       });
       
-      // Reset for the NEXT package
       setPrediction(null);
-      reset(); 
+      reset(); // This automatically restarts the mic
     }
   }, [brain, onPackageConfirmed, route, prediction, reset, playTone]);
 
-  // 3. Manual Fallback Handler
+  // 3. Manual Fallback
   const handleManualFallback = () => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
+    // Cancel speech if we are bailing out
+    window.speechSynthesis.cancel();
     onManualFallback(transcript);
   };
 
-  // 4. Auto-Commit Logic
+  // 4. Auto-Commit Logic (Updated)
   useEffect(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -83,10 +81,19 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
       setTimer(null);
     }
 
-    // Only auto-commit if we have a GOOD match
     if (prediction?.stop && prediction.confidence > 0.85) {
-      // 🔊 Speak the address (with fallback string to fix TS error)
-      speak(prediction.stop.full_address || "Stop found");
+      // ✅ Step A: Cut the mic immediately so it doesn't hear itself
+      stop();
+
+      // ✅ Step B: Construct concise address (Street Number + Name only)
+      // Fallback to full_address if parts are missing
+      const conciseAddress = prediction.stop.address_line1 || prediction.stop.full_address || "Stop found";
+      
+      // ✅ Step C: Speak, and optionally restart mic when done
+      speak(conciseAddress, () => {
+         // Optional: If you wanted to allow verbal cancel during the last second
+         // start(); 
+      });
 
       let timeLeft = 3; 
       setTimer(timeLeft);
@@ -100,16 +107,14 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
         }
       }, 1000);
 
-      // Cleanup
       return () => {
         clearInterval(interval);
       };
     }
-  }, [prediction, handleConfirm, speak]); // ✅ Added 'speak' dependency
+  }, [prediction, handleConfirm, speak, stop]); // Added 'stop' dep
 
   return (
     <div className="fixed inset-0 z-50 bg-surface/95 backdrop-blur-md flex flex-col p-6 animate-in fade-in">
-      {/* Top Bar */}
       <div className="flex justify-between items-center mb-8">
         <h2 className="text-2xl font-bold">Voice Mode</h2>
         <button onClick={onClose} className="p-4 bg-surface-muted rounded-full active:scale-95 transition">
@@ -117,10 +122,7 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
         </button>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col items-center justify-center gap-6">
-        
-        {/* Transcript Display */}
         <div className="text-center space-y-2">
           <p className="text-muted text-lg">I heard...</p>
           <p className="text-3xl font-mono font-bold text-foreground min-h-12">
@@ -128,12 +130,10 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
           </p>
         </div>
 
-        {/* Result Card */}
         {prediction && prediction.stop ? (
           <Card className="w-full max-w-md p-6 border-4 border-brand bg-brand/5 transform transition-all duration-300 scale-105">
             <div className="text-center space-y-4">
               
-              {/* Auto-Commit Timer */}
               {timer !== null && timer > 0 && (
                  <div className="flex items-center justify-center gap-2 text-brand font-bold animate-pulse">
                     <Loader2 className="animate-spin" />
@@ -143,6 +143,7 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
 
               <div>
                 <h3 className="text-3xl font-bold text-foreground leading-tight">
+                   {/* Display full address visually, even if we only speak the short one */}
                    {prediction.stop.full_address}
                 </h3>
                 <Badge variant="success" className="mt-2 text-lg px-3 py-1">
@@ -150,7 +151,6 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
                 </Badge>
               </div>
 
-              {/* Actions */}
               <div className="flex gap-4 pt-6">
                  <button 
                    onClick={handleManualFallback}
@@ -171,7 +171,6 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
             </div>
           </Card>
         ) : (
-          /* Listening State */
           <div className="relative mt-8 flex flex-col items-center gap-8">
             <div className="relative">
                 <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping duration-2000"></div>

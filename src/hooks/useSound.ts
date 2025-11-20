@@ -1,46 +1,77 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 
-// Helper type for older Safari browsers
 interface WindowWithWebkitAudio extends Window {
   webkitAudioContext: typeof AudioContext;
 }
 
 export const useSound = () => {
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  // Load available voices
+  useEffect(() => {
+    const loadVoices = () => {
+      const available = window.speechSynthesis.getVoices();
+      setVoices(available);
+    };
+    
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  }, []);
+
+  const getBestVoice = useCallback(() => {
+    if (voices.length === 0) return null;
+    const googleUS = voices.find(v => v.name === 'Google US English');
+    if (googleUS) return googleUS;
+    const natural = voices.find(v => v.name.includes('Natural') && v.lang.startsWith('en'));
+    if (natural) return natural;
+    return voices.find(v => v.lang.startsWith('en-US')) || voices[0];
+  }, [voices]);
 
   const initAudio = useCallback(() => {
     if (!audioCtxRef.current) {
-      // Check for standard AudioContext, fallback to webkit if necessary
       const AudioContextClass = window.AudioContext || 
         (window as unknown as WindowWithWebkitAudio).webkitAudioContext;
-
       if (AudioContextClass) {
         audioCtxRef.current = new AudioContextClass();
       }
     }
-    
-    // Resume if suspended (browser autoplay policy)
     if (audioCtxRef.current?.state === 'suspended') {
       audioCtxRef.current.resume().catch(() => {
-        // Ignore resume errors (usually happens if no user interaction yet)
+        // Ignore resume errors if interaction hasn't happened yet
       });
     }
   }, []);
 
   // 1. Text-to-Speech
-  const speak = useCallback((text: string) => {
-    // Simple checks to prevent crashing if API is missing
-    if (!('speechSynthesis' in window)) return;
+  const speak = useCallback((text: string, onEnd?: () => void) => {
+    if (!('speechSynthesis' in window)) {
+      if (onEnd) onEnd();
+      return;
+    }
 
-    window.speechSynthesis.cancel(); // Stop previous
+    window.speechSynthesis.cancel(); 
 
     const utterance = new SpeechSynthesisUtterance(text);
+    const bestVoice = getBestVoice();
+    if (bestVoice) utterance.voice = bestVoice;
+
     utterance.rate = 1.1; 
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
     
+    utterance.onend = () => {
+      if (onEnd) onEnd();
+    };
+    
+    utterance.onerror = () => {
+      if (onEnd) onEnd();
+    };
+
     window.speechSynthesis.speak(utterance);
-  }, []);
+  }, [getBestVoice]);
 
   // 2. Procedural Beeps
   const playTone = useCallback((type: 'success' | 'error' | 'start') => {
@@ -58,7 +89,6 @@ export const useSound = () => {
       const now = ctx.currentTime;
 
       if (type === 'success') {
-        // Happy "Ding"
         osc.type = 'sine';
         osc.frequency.setValueAtTime(523.25, now);
         osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.1);
@@ -67,7 +97,6 @@ export const useSound = () => {
         osc.start(now);
         osc.stop(now + 0.4);
       } else if (type === 'error') {
-        // Sad "Buzz"
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(150, now);
         gain.gain.setValueAtTime(0.1, now);
@@ -75,7 +104,6 @@ export const useSound = () => {
         osc.start(now);
         osc.stop(now + 0.3);
       } else if (type === 'start') {
-        // Quick "Blip"
         osc.type = 'sine';
         osc.frequency.setValueAtTime(880, now);
         gain.gain.setValueAtTime(0.05, now);
@@ -84,7 +112,7 @@ export const useSound = () => {
         osc.stop(now + 0.1);
       }
     } catch {
-      // Ignore audio errors
+      // Ignore audio errors during playback
     }
   }, [initAudio]);
 

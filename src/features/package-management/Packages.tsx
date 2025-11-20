@@ -17,6 +17,7 @@ import { Button } from '../../components/ui/Button';
 import { Camera, Keyboard, Mic } from 'lucide-react'; // ✅ Removed Trash2, Save
 import { cn } from '../../lib/utils';
 import { VoiceEntry } from './components/VoiceEntry';
+import { RouteBrain } from './utils/RouteBrain';
 
 const Packages: React.FC = () => {
   const navigate = useNavigate();
@@ -32,6 +33,8 @@ const Packages: React.FC = () => {
 
   const [formContext, setFormContext] = useState<'scan' | 'manual' | 'edit'>('manual');
   const [isVoiceActive, setIsVoiceActive] = useState(false);
+  const [pendingTranscript, setPendingTranscript] = useState<string | null>(null);
+
 
   // ✅ THE FIX: Use useRef to avoid stale closures in the toast callback.
   const pkgToUndoRef = useRef<Package | null>(null);
@@ -53,7 +56,7 @@ const Packages: React.FC = () => {
   }, [packages, searchQuery]);
 
   // NEW: Called when the Voice AI successfully identifies a stop
-// NEW: Hands-Free Confirmation Handler
+  // NEW: Hands-Free Confirmation Handler
   const handleVoiceConfirmation = (pkgData: Partial<Package>) => {
     // 1. Create the full package object immediately
     const newPackage: Package = {
@@ -76,6 +79,18 @@ const Packages: React.FC = () => {
     // 4. Do NOT close voice active if you want to do multiple in a row.
     // If you want to close after one, uncomment the next line:
     // setIsVoiceActive(false);
+  };
+
+  // NEW: Callback for when the user gives up on voice and wants to type
+  const handleManualFallback = (transcript: string) => {
+    setIsVoiceActive(false);
+    setPendingTranscript(transcript); 
+    
+    // Switch to Manual Form
+    setEditingPackage(null);
+    setNewScanData(null);
+    setFormContext('manual');
+    setSearchParams({ form: 'true' });
   };
 
   // Close scanner/form if URL changes (e.g., back button)
@@ -139,6 +154,28 @@ const Packages: React.FC = () => {
   };
 
   const handleSubmitSuccess = () => {
+    // --- NEW: LEARNING LOOP ---
+    // If we have a pending transcript, it means the user is manually 
+    // fixing a failed voice attempt. Let's teach the brain!
+    if (pendingTranscript && formContext === 'manual') {
+      // Heuristic: We assume the package just added (at the end of the list) 
+      // is the correct match for what was said.
+      // Note: Since Redux updates might be slightly async, this grabs the 
+      // package currently at the end of your local list.
+      const lastPkg = packages[packages.length - 1];
+      
+      if (lastPkg && lastPkg.assignedStopId) {
+        const brain = new RouteBrain(route);
+        brain.learn(pendingTranscript, lastPkg.assignedStopId);
+        // Optional: Visual confirmation that it got smarter
+        toast.success(`🧠 Learned: "${pendingTranscript}"`);
+      }
+    }
+    // Clear the transcript so we don't use it again
+    setPendingTranscript(null);
+    // --------------------------
+
+    // Standard Cleanup
     setEditingPackage(null);
     setNewScanData(null);
     setSearchParams({}); // Close form
@@ -270,6 +307,7 @@ const Packages: React.FC = () => {
           route={route} // Pass the full route so the Brain can learn
           onPackageConfirmed={handleVoiceConfirmation}
           onClose={() => setIsVoiceActive(false)}
+          onManualFallback={handleManualFallback}
         />
       )}
     </div>

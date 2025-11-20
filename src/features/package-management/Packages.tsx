@@ -14,8 +14,9 @@ import ScannerView from './components/ScannerView';
 import PackageList from './components/PackageList';
 import PackageForm from './components/PackageForm';
 import { Button } from '../../components/ui/Button';
-import { Camera, Keyboard } from 'lucide-react'; // ✅ Removed Trash2, Save
+import { Camera, Keyboard, Mic } from 'lucide-react'; // ✅ Removed Trash2, Save
 import { cn } from '../../lib/utils';
+import { VoiceEntry } from './components/VoiceEntry';
 
 const Packages: React.FC = () => {
   const navigate = useNavigate();
@@ -30,6 +31,7 @@ const Packages: React.FC = () => {
   const [newScanData, setNewScanData] = useState<{ tracking: string } | null>(null);
 
   const [formContext, setFormContext] = useState<'scan' | 'manual' | 'edit'>('manual');
+  const [isVoiceActive, setIsVoiceActive] = useState(false);
 
   // ✅ THE FIX: Use useRef to avoid stale closures in the toast callback.
   const pkgToUndoRef = useRef<Package | null>(null);
@@ -49,6 +51,20 @@ const Packages: React.FC = () => {
         (pkg.notes && pkg.notes.toLowerCase().includes(q))
     );
   }, [packages, searchQuery]);
+
+  // NEW: Called when the Voice AI successfully identifies a stop
+  const handleVoiceConfirmation = (pkgData: Partial<Package>) => {
+    // 1. Close the voice UI
+    setIsVoiceActive(false);
+
+    // 2. Pre-fill the "Manual Entry" form with the data we just heard
+    setEditingPackage(pkgData);
+    setFormContext('manual'); // Or 'edit' if you prefer
+    setSearchParams({ form: 'true' });
+
+    // Optional: Show a toast so they know it worked
+    toast.success(`Matched: ${pkgData.assignedAddress}`);
+  };
 
   // Close scanner/form if URL changes (e.g., back button)
   useEffect(() => {
@@ -168,7 +184,9 @@ const Packages: React.FC = () => {
       </div>
 
       {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
+
+      {/* Action Buttons */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
         <Button
           onClick={handleScanRequest}
           variant="primary"
@@ -176,6 +194,16 @@ const Packages: React.FC = () => {
         >
           <Camera className="mr-2" size={20} /> Scan
         </Button>
+
+        <Button 
+          onClick={() => setIsVoiceActive(true)} 
+          variant="primary" // Or use a specific color like "brand" if defined
+          size="lg"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600" // Optional manual styling if variant="brand" fails
+        >
+          <Mic className="mr-2" size={20} /> Voice
+        </Button>
+
         <Button
           onClick={() => {
             setEditingPackage(null);
@@ -225,6 +253,13 @@ const Packages: React.FC = () => {
         onCancel={handleCancelForm}
         onScanRequest={handleScanRequest}
       />
+      {isVoiceActive && (
+        <VoiceEntry
+          route={route} // Pass the full route so the Brain can learn
+          onPackageConfirmed={handleVoiceConfirmation}
+          onClose={() => setIsVoiceActive(false)}
+        />
+      )}
     </div>
   );
 };

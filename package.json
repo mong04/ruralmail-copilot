@@ -28,6 +28,7 @@
     "fuse.js": "^7.1.0",
     "html5-qrcode": "^2.3.8",
     "idb": "^8.0.3",
+    "idb-keyval": "^6.2.2",
     "lucide-react": "^0.553.0",
     "mapbox-gl": "^3.16.0",
     "papaparse": "^5.5.3",

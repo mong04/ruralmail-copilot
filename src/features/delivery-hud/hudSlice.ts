@@ -63,6 +63,7 @@ export interface HudState extends Omit<HudData, 'weatherAlerts'> {
   isNavigating: boolean;
   navigationData: NavigationData | null;
   navigationStepIndex: number;
+  isMapOffCenter: boolean;
 }
 
 const initialState: HudState = {
@@ -78,6 +79,7 @@ const initialState: HudState = {
   isNavigating: false,
   navigationData: null,
   navigationStepIndex: 0,
+  isMapOffCenter: false
 };
 
 /**
@@ -258,6 +260,9 @@ const hudSlice = createSlice({
     advanceNavigationStep: (state) => {
       state.navigationStepIndex += 1;
     },
+    setMapOffCenter(state, action: PayloadAction<boolean>) {
+      state.isMapOffCenter = action.payload;
+    }
   },
   extraReducers: (builder) => {
     builder
@@ -294,6 +299,7 @@ const hudSlice = createSlice({
         state.isNavigating = false;
         state.navigationData = null;
       });
+      
   },
 });
 
@@ -308,6 +314,7 @@ export const {
   dismissBriefing,
   exitNavigation,
   advanceNavigationStep,
+  setMapOffCenter
 } = hudSlice.actions;
 
 // SELECTORS

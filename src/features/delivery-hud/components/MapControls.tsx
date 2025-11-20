@@ -16,7 +16,10 @@ import { cn } from '../../../lib/utils';
 import { Button } from '../../../components/ui/Button';
 import { toast } from 'sonner';
 
-// Re-usable toggle button
+interface MapControlsProps {
+  onRecenter: () => void;
+}
+
 const ToggleBtn: React.FC<{
   label: string;
   icon: React.ElementType;
@@ -37,15 +40,15 @@ const ToggleBtn: React.FC<{
   </button>
 );
 
-export const MapControls: React.FC = () => {
+export const MapControls: React.FC<MapControlsProps> = ({ onRecenter }) => {
   const dispatch = useAppDispatch();
-  const { mapStyle, cameraMode, voiceEnabled, position } = useAppSelector(
+  const { mapStyle, cameraMode, voiceEnabled, position, isMapOffCenter } = useAppSelector(
     (state) => state.hud
   );
   const [isLayersOpen, setLayersOpen] = useState(false);
   const layersControlRef = useRef<HTMLDivElement>(null);
 
-  // Effect to handle clicks outside the layers control to close it
+  // Close layers menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -56,21 +59,18 @@ export const MapControls: React.FC = () => {
       }
     };
 
-    // Add listener only when the menu is open
     if (isLayersOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
-    // Cleanup: remove the listener when the component unmounts or the menu closes
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isLayersOpen]); // Re-run the effect if isLayersOpen changes
+  }, [isLayersOpen]);
 
   const handleCameraCycle = () => {
-    // Prevent cycling to 'follow' if position is not available
     if (cameraMode === 'task' && !position) {
-      dispatch(cycleCameraMode()); // Cycle from task to overview, skipping follow
+      dispatch(cycleCameraMode());
       dispatch(cycleCameraMode());
       toast.error('Current location not available for "Follow" mode.');
     } else {
@@ -93,11 +93,11 @@ export const MapControls: React.FC = () => {
   const CameraIcon = getCameraIcon();
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      {/* Layer Controls */}
+    <div className="flex flex-col items-end gap-3">
+      {/* Layers */}
       <div className="relative flex flex-col items-end" ref={layersControlRef}>
         {isLayersOpen && (
-          <div className="flex gap-2 mr-2 mb-1 p-1.5 bg-surface rounded-xl shadow-lg border border-border">
+          <div className="flex gap-2 mb-1 p-1.5 bg-surface rounded-xl shadow-lg border border-border">
             <ToggleBtn
               label="Street"
               icon={MapPin}
@@ -123,7 +123,7 @@ export const MapControls: React.FC = () => {
         </Button>
       </div>
 
-      {/* Camera Mode Button */}
+      {/* Camera Mode */}
       <Button
         variant="surface"
         size="lg"
@@ -134,7 +134,7 @@ export const MapControls: React.FC = () => {
         <CameraIcon size={20} />
       </Button>
 
-      {/* Voice Toggle Button */}
+      {/* Voice Toggle */}
       <Button
         variant="surface"
         size="lg"
@@ -144,6 +144,26 @@ export const MapControls: React.FC = () => {
       >
         {voiceEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
       </Button>
+
+      {/* Recenter Button — appears only when map is off-center */}
+      <div
+        className={cn(
+          'transition-all duration-300 ease-out',
+          isMapOffCenter
+            ? 'opacity-100 scale-100'
+            : 'opacity-0 scale-0 pointer-events-none'
+        )}
+      >
+        <Button
+          variant="surface"
+          size="lg"
+          className="w-14 h-14 p-0 shadow-2xl ring-4 ring-brand/30 animate-pulse"
+          onClick={onRecenter}
+          aria-label="Recenter map"
+        >
+          <Navigation size={26} className="rotate-45" />
+        </Button>
+      </div>
     </div>
   );
 };

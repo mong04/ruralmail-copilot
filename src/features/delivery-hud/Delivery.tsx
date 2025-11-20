@@ -1,5 +1,5 @@
 // src/features/delivery-hud/Delivery.tsx
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAppDispatch, useAppSelector } from '../../store';
 import {
   fetchForecast,
@@ -12,7 +12,8 @@ import {
   dismissBriefing,
   selectWeatherBriefingData,
   selectLookAheadData,
-  selectDynamicHudAlert
+  selectDynamicHudAlert,
+  setCurrentStop
 } from './hudSlice';
 import { type Stop } from '../../db';
 import { showNotification } from '../notification/notificationSlice';
@@ -60,7 +61,7 @@ const Delivery: React.FC = () => {
   const pendingNavigationTarget = useRef<Stop | null>(null);
 
   // Active stops: only those with packages
-  const activeStops = (route ?? []).filter((stop, idx) =>
+  const activeStops = useMemo(() => (route ?? []).filter((stop, idx) =>
     packages.some(
       (pkg) =>
         !pkg.delivered &&
@@ -68,10 +69,20 @@ const Delivery: React.FC = () => {
           (typeof pkg.assignedStopNumber === 'number' &&
             pkg.assignedStopNumber === idx))
     )
-  );
+  ), [route, packages]);
 
   // Ref to prevent re-checking on every render
   const lastCheckedPosition = useRef<{ lat: number; lng: number } | null>(null);
+  
+  const deliveryMapRef = useRef<{ recenterOnCurrent: () => void } | null>(null);
+
+
+  useEffect(() => {
+    if (activeStops.length > 0) {
+      dispatch(setCurrentStop(0));
+    }
+  }, [activeStops.length, dispatch]);
+
 
   // Effect to check for navigation step advancement
   useEffect(() => {
@@ -94,7 +105,7 @@ const Delivery: React.FC = () => {
     if (!currentStep || !nextStep || !nextStep.location) return; // End of the route or invalid next step
 
     const userPoint: [number, number] = [position.lng, position.lat];
-    const nextManeuverPoint = nextStep.location;
+    const nextManeuverPoint: [number, number] = nextStep.location;
 
     // Calculate distance in meters
     const distanceToNextManeuver = distance(userPoint, nextManeuverPoint, { units: 'meters' });
@@ -219,11 +230,11 @@ const Delivery: React.FC = () => {
 
   return (
     <div className="z-30 h-screen w-screen flex flex-col overflow-hidden">
-      {/* Our new, non-obtrusive notification banner */}
       <HudBanner />
 
       <div className="grow relative">
         <DeliveryMap
+          ref={deliveryMapRef}
           route={activeStops}
           fullRoute={route}
           packages={packages}
@@ -233,23 +244,18 @@ const Delivery: React.FC = () => {
           mapStyle={mapStyle}
           cameraMode={cameraMode}
         >
-          {/* Absolutely position the NavigationPanel at the top-center. */}
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-auto">
             <NavigationPanel />
           </div>
           
-          {/* 
-            Absolutely position the LookAheadWidget in the top-right.
-            When navigating, it moves down to avoid the NavigationPanel.
-            The transition-all and duration classes ensure a smooth animation.
-          */}
           <div className={`absolute right-4 z-10 pointer-events-auto transition-all duration-300 ease-in-out ${isNavigating ? 'top-24' : 'top-20'}`}>
             <LookAheadWidget lookAheadData={lookAheadData} status={status} />
           </div>
 
-          {/* Absolutely position MapControls in the bottom-right, above the HUD panel. */}
           <div className="absolute bottom-4 right-4 z-10 pointer-events-auto">
-            <MapControls />
+            <MapControls onRecenter={() => deliveryMapRef.current?.recenterOnCurrent()} 
+              isMapOffCenter={hud.isMapOffCenter}  
+            />
           </div>
         </DeliveryMap>
       </div>
@@ -260,25 +266,38 @@ const Delivery: React.FC = () => {
         fullRoute={route}
         packages={packages}
         isNavigating={isNavigating}
-        hudAlertData={hudAlertData} // Pass new data down
+        hudAlertData={hudAlertData}
         onAdvanceStop={() => dispatch(advanceStop())}
         onMarkDelivered={() => {
-          // This handler is specifically for the "Delivered" button.
-          const stopId = activeStops[currentStop]?.id;
-          if (stopId) {
-            // If navigating while marking delivered, exit navigation.
-            if (isNavigating) {
-              dispatch(exitNavigation());
+          const currentStopObj = activeStops[currentStop];
+          if (!currentStopObj?.id) return;
+
+          dispatch(markPackagesDelivered({ stopId: currentStopObj.id }));
+
+          const nextActiveIndex = activeStops.slice(currentStop + 1).findIndex(stop =>
+            packages.some(
+              p =>
+                !p.delivered &&
+                (p.assignedStopId === stop.id ||
+                  (!p.assignedStopId && typeof p.assignedStopNumber === 'number' && route[p.assignedStopNumber]?.id === stop.id))
+            )
+          );
+
+          if (nextActiveIndex !== -1) {
+            const jumpsNeeded = nextActiveIndex + 1;
+            for (let i = 0; i < jumpsNeeded; i++) {
+              dispatch(advanceStop());
             }
-            // Show success and mark packages as delivered.
-            dispatch(showNotification({
-              type: 'success',
-              message: 'Packages marked as delivered!',
-            }));
-            dispatch(markPackagesDelivered({ stopId }));
+          } else {
+            const remaining = activeStops.length - currentStop - 1;
+            for (let i = 0; i < remaining; i++) {
+              dispatch(advanceStop());
+            }
           }
-          // Finally, advance to the next stop.
-          dispatch(advanceStop());
+
+          if (isNavigating) {
+            dispatch(exitNavigation());
+          }
         }}
         onNavigate={() => handleNavigate()}
         onExit={() => navigate('/')}

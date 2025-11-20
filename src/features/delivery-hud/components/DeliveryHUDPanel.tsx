@@ -36,7 +36,7 @@ const DeliveryHUDPanel = React.forwardRef<HTMLDivElement, HUDProps>(
     },
     ref
   ) => {
-    const currentStopObj = route[currentStop];
+    const currentStopObj: Stop | undefined = route[currentStop] ?? fullRoute.find(s => s.id === route[currentStop]?.id);
 
     // If no stop exists, show "End of Route"
     if (!currentStopObj) {
@@ -67,9 +67,8 @@ const DeliveryHUDPanel = React.forwardRef<HTMLDivElement, HUDProps>(
     const pkgs = packages.filter(
       (p) =>
         !p.delivered &&
-        (p.assignedStopId === currentStopId ||
-          (typeof p.assignedStopNumber === 'number' &&
-            fullRoute[p.assignedStopNumber]?.id === currentStopId))
+        (p.assignedStopId === currentStopId ||  // ← Primary: UUID match (always correct)
+          (!p.assignedStopId && typeof p.assignedStopNumber === 'number' && fullRoute[p.assignedStopNumber]?.id === currentStopId)) // ← Legacy fallback only if no UUID
     );
 
     const counts: Record<Package['size'], number> = {

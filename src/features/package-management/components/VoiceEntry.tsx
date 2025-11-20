@@ -27,47 +27,45 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
   const { transcript, isProcessing, reset, stop } = useVoiceInput(true);
   const { speak, playTone } = useSound(); 
   const [prediction, setPrediction] = useState<Prediction | null>(null);
-  const [status, setStatus] = useState<ViewStatus>('listening'); // ✅ NEW: Explicit Status
+  const [status, setStatus] = useState<ViewStatus>('listening'); 
   
   const [timer, setTimer] = useState<number | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // ✅ Separate refs for Timeout (delays) and Intervals (countdown)
+  const delayRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 0. Start Blip
   useEffect(() => {
     playTone('start');
   }, [playTone]);
 
-  // 1. Predict Logic (Updated with Status)
+  // 1. Predict Logic
   useEffect(() => {
     if (isProcessing && transcript) {
-      setStatus('processing'); // Visual feedback immediately
+      setStatus('processing');
       
       const result = brain.predict(transcript);
       setPrediction(result);
 
-      // 🛑 FAILURE HANDLING
       if (!result.stop || result.confidence < 0.4) {
-        setStatus('error'); // Turn UI Red
+        setStatus('error');
         playTone('error');
 
-        // Auto-Retry after 2s
         const retryTimer = setTimeout(() => {
            setPrediction(null);
-           setStatus('listening'); // Reset UI
+           setStatus('listening');
            reset(); 
         }, 2000);
 
         return () => clearTimeout(retryTimer);
       }
       
-      // ⚠️ AMBIGUOUS (40% - 85%)
       else if (result.confidence <= 0.85) {
-        playTone('start'); // Polite blip
-        // Status remains 'processing' or we could add 'ambiguous'
+        playTone('start');
       }
 
     } else if (!isProcessing && !transcript) {
-        // If we just reset, go back to listening
         if (status !== 'error') setStatus('listening');
     }
   }, [isProcessing, transcript, brain, playTone, reset, status]);
@@ -97,51 +95,58 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
 
   // 3. Manual Fallback
   const handleManualFallback = () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (delayRef.current) clearTimeout(delayRef.current);
+    if (intervalRef.current) clearInterval(intervalRef.current);
     window.speechSynthesis.cancel();
     onManualFallback(transcript);
   };
 
-  // 4. Auto-Commit Logic
+  // 4. Auto-Commit Logic (SEQUENTIAL FIX)
   useEffect(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-      setTimer(null);
-    }
+    // Cleanup previous runs
+    if (delayRef.current) clearTimeout(delayRef.current);
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    setTimer(null);
 
     if (prediction?.stop && prediction.confidence > 0.85) {
       const validStop = prediction.stop; 
+      
+      // A. Kill Mic
       stop();
 
-      // Wait for audio cleanup
-      const audioDelay = setTimeout(() => {
+      // B. Wait for audio driver, THEN Speak
+      // Store in delayRef so we can cancel if user taps "Search" quickly
+      delayRef.current = setTimeout(() => {
+        
         const conciseAddress = validStop.address_line1 || validStop.full_address || "Stop found";
-        speak(conciseAddress);
-      }, 150);
+        
+        speak(conciseAddress, () => {
+           // ✅ C. CALLBACK: Only start timer AFTER robot finishes talking
+           let timeLeft = 3; 
+           setTimer(timeLeft);
 
-      let timeLeft = 3; 
-      setTimer(timeLeft);
+           // Start the countdown
+           intervalRef.current = setInterval(() => {
+             timeLeft -= 1;
+             setTimer(timeLeft);
+             if (timeLeft <= 0) {
+               if (intervalRef.current) clearInterval(intervalRef.current);
+               handleConfirm(prediction); 
+             }
+           }, 1000);
+        });
+        
+      }, 400); // 400ms for Bluetooth safety
 
-      const interval = setInterval(() => {
-        timeLeft -= 1;
-        setTimer(timeLeft);
-        if (timeLeft <= 0) {
-          clearInterval(interval);
-          handleConfirm(prediction); 
-        }
-      }, 1000);
-
+      // Cleanup on unmount or dependency change
       return () => {
-        clearInterval(interval);
-        clearTimeout(audioDelay);
+        if (delayRef.current) clearTimeout(delayRef.current);
+        if (intervalRef.current) clearInterval(intervalRef.current);
       };
     }
   }, [prediction, handleConfirm, speak, stop]);
 
-  // --- RENDER HELPERS ---
-  
-  // Helper to determine the "Mic Circle" color
+  // ... Render Logic (Helpers) ...
   const getCircleColor = () => {
     switch (status) {
         case 'error': return 'bg-danger text-danger-foreground';
@@ -178,16 +183,19 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
           </p>
         </div>
 
-        {/* SHOW RESULT CARD only if we have a valid stop AND we are not in error state */}
         {prediction && prediction.stop && status !== 'error' ? (
           <Card className="w-full max-w-md p-6 border-4 border-brand bg-brand/5 transform transition-all duration-300 scale-105">
             <div className="text-center space-y-4">
               
-              {timer !== null && timer > 0 && (
+              {/* Only show timer if it has actually started */}
+              {timer !== null && timer > 0 ? (
                  <div className="flex items-center justify-center gap-2 text-brand font-bold animate-pulse">
                     <Loader2 className="animate-spin" />
                     Auto-saving in {timer}s...
                  </div>
+              ) : (
+                 // Show placeholder while speaking
+                 <div className="h-6 text-muted font-medium">Verifying...</div>
               )}
 
               <div>
@@ -207,7 +215,8 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
                    <Search size={24} /> Search
                  </button>
                  
-                 {(timer === null || timer <= 0) && (
+                 {/* Only show 'Save Now' if we are waiting on the timer */}
+                 {(timer === null || timer > 0) && (
                     <button 
                       onClick={() => handleConfirm(prediction)}
                       className="flex-1 py-6 bg-brand text-brand-foreground rounded-2xl font-bold text-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
@@ -219,25 +228,19 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
             </div>
           </Card>
         ) : (
-          /* LISTENING / ERROR STATE */
           <div className="relative mt-8 flex flex-col items-center gap-8">
             <div className="relative">
-                {/* Pulse animation only when listening normally */}
                 {status === 'listening' && (
                     <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping duration-2000"></div>
                 )}
-                
-                {/* The Main Circle - Changes Color based on Status */}
                 <div className={`relative p-10 rounded-full shadow-2xl transition-colors duration-300 ${getCircleColor()}`}>
                    {status === 'error' ? <AlertCircle size={64} /> : <Mic size={64} />}
                 </div>
             </div>
-            
             <div className="space-y-4 text-center">
                 <p className={`font-medium text-lg ${status === 'error' ? 'text-danger' : 'text-muted'}`}>
                    {getStatusText()}
                 </p>
-                
                 <button 
                     onClick={handleManualFallback}
                     className="text-muted hover:text-foreground font-semibold flex items-center gap-2 px-4 py-2 rounded-lg border border-transparent hover:border-border transition-all"

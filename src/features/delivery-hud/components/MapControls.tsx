@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 
 interface MapControlsProps {
   onRecenter: () => void;
+  isMapOffCenter: boolean;
 }
 
 const ToggleBtn: React.FC<{

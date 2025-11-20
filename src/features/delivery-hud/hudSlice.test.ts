@@ -65,6 +65,7 @@ const testHudInitialState: HudState = {
   isNavigating: false,
   navigationData: null,
   navigationStepIndex: 0,
+  isMapOffCenter: false,
 };
 
 // --- FIX: Create valid initial states for other slices ---

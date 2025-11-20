@@ -110,7 +110,7 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
     onManualFallback(transcript);
   };
 
-  // 4. Auto-Commit Logic
+// 4. Auto-Commit Logic (The "Magic" Sequence)
   useEffect(() => {
     if (delayRef.current) clearTimeout(delayRef.current);
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -119,19 +119,24 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
     if (prediction?.stop && prediction.confidence > 0.85) {
       const validStop = prediction.stop; 
       
-      // A. Kill Mic (Prevents Robot Voice feedback loop)
+      // 1. Kill Mic
       stop();
+      
+      // 🔊 2. INSTANT FEEDBACK: "Lock-on" Chirp
+      playTone('lock'); 
 
-      // B. Wait for audio driver cleanup, THEN Speak
+      // 3. Wait for Bluetooth/Audio driver...
       delayRef.current = setTimeout(() => {
         
         const conciseAddress = validStop.address_line1 || validStop.full_address || "Stop found";
         
+        // 4. Robot Voice Verification
         speak(conciseAddress, () => {
-           // ✅ C. CALLBACK: RE-OPEN MIC & START TIMER
-           // This allows you to say "Cancel" or "123 Main" during the countdown!
+           
+           // 5. Re-open Mic for Commands ("Cancel")
            reset(); 
            
+           // 6. Start Visual Timer
            let timeLeft = 3; 
            setTimer(timeLeft);
 
@@ -145,14 +150,14 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
            }, 1000);
         });
         
-      }, 400);
+      }, 400); // The "Bluetooth Breath" delay
 
       return () => {
         if (delayRef.current) clearTimeout(delayRef.current);
         if (intervalRef.current) clearInterval(intervalRef.current);
       };
     }
-  }, [prediction, handleConfirm, speak, stop, reset]); // Added 'reset' dependency
+  }, [prediction, handleConfirm, speak, stop, reset, playTone]); // Added playTone
 
   // Render Helpers
   const getCircleColor = () => {

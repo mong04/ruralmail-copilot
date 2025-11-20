@@ -1,61 +1,55 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-export const useVoiceInput = (isListening: boolean) => {
+export const useVoiceInput = (isListeningProp: boolean) => {
   const [transcript, setTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // Fix 1: Explicitly allow 'any' for this specific line
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
+  
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  
+  // Ref to track if we temporarily want the mic off (e.g., while speaking)
+  const isPausedRef = useRef(false);
 
   // 1. Wake Lock Management
   useEffect(() => {
     const requestWakeLock = async () => {
-      if ('wakeLock' in navigator && isListening) {
+      if ('wakeLock' in navigator && isListeningProp) {
         try {
           wakeLockRef.current = await navigator.wakeLock.request('screen');
-        } catch (err) {
-          console.warn('Wake Lock failed:', err); 
+        // Fix 2: Removed 'err' variable
+        } catch {
+           // Ignore wake lock errors
         }
       }
     };
-
-    if (isListening) requestWakeLock();
-
+    if (isListeningProp) requestWakeLock();
     return () => {
-      if (wakeLockRef.current) {
-        wakeLockRef.current.release().catch(() => {
-           // Ignore release errors
-        });
-      }
+      wakeLockRef.current?.release().catch(() => {
+        // Fix 3: Comment inside empty block
+        // Ignore release errors
+      });
     };
-  }, [isListening]);
+  }, [isListeningProp]);
 
   // 2. Speech Recognition Setup
   useEffect(() => {
-    if (!('webkitSpeechRecognition' in window)) {
-      return;
-    }
+    if (!('webkitSpeechRecognition' in window)) return;
 
     const recognition = new window.webkitSpeechRecognition();
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
-    // Track if we *intentionally* stopped it
-    let isIntentionalStop = false;
-
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalTrans = '';
       let interimTrans = '';
-
       for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTrans += event.results[i][0].transcript;
-        } else {
-          interimTrans += event.results[i][0].transcript;
-        }
+        if (event.results[i].isFinal) finalTrans += event.results[i][0].transcript;
+        else interimTrans += event.results[i][0].transcript;
       }
-
       if (finalTrans) {
         setTranscript(finalTrans);
         setIsProcessing(true);
@@ -65,11 +59,11 @@ export const useVoiceInput = (isListening: boolean) => {
     };
 
     recognition.onend = () => {
-      // Only restart if we are supposed to be listening AND we didn't force stop it
-      if (isListening && !isProcessing && !isIntentionalStop) {
+      // Only restart if we are NOT paused and NOT processing
+      if (isListeningProp && !isProcessing && !isPausedRef.current) {
         try {
           recognition.start();
-        } catch {
+        } catch { 
           // Ignore restart errors
         }
       }
@@ -77,35 +71,37 @@ export const useVoiceInput = (isListening: boolean) => {
 
     recognitionRef.current = recognition;
     
-    // START
-    if (isListening) {
-        isIntentionalStop = false;
-        try {
-            recognition.start();
-        } catch {
-            // Ignore start errors
-        }
+    // Initial Start
+    if (isListeningProp) {
+      isPausedRef.current = false;
+      try {
+        recognition.start();
+      } catch { 
+        // Ignore start errors
+      }
     }
 
-    // CLEANUP
     return () => {
-        isIntentionalStop = true; // Tell onend NOT to restart
-        if (recognitionRef.current) {
-            try {
-                recognitionRef.current.abort(); // Hard kill to fix Green Dot issue
-                recognitionRef.current = null;
-            } catch {
-                // Ignore abort errors
-            }
+      // Cleanup: Hard Kill
+      isPausedRef.current = true;
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort(); 
+          recognitionRef.current = null;
+        } catch { 
+          // Ignore abort errors
         }
+      }
     };
-  }, [isListening, isProcessing]);
+  }, [isListeningProp, isProcessing]);
 
   // 3. Control Methods
+
   const stop = useCallback(() => {
+    isPausedRef.current = true;
     try {
-      recognitionRef.current?.stop();
-    } catch {
+      recognitionRef.current?.abort(); 
+    } catch { 
       // Ignore stop errors
     }
   }, []);
@@ -113,11 +109,12 @@ export const useVoiceInput = (isListening: boolean) => {
   const reset = useCallback(() => {
     setTranscript('');
     setIsProcessing(false);
+    isPausedRef.current = false;
     setTimeout(() => {
         try {
-            recognitionRef.current?.start();
-        } catch {
-            // Ignore restart errors
+          recognitionRef.current?.start();
+        } catch { 
+          // Ignore restart errors
         }
     }, 100);
   }, []);

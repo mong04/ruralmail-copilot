@@ -73,7 +73,7 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
     onManualFallback(transcript);
   };
 
-  // 4. Auto-Commit Logic (Updated)
+  // 4. Auto-Commit Logic (Fixed TS Error)
   useEffect(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -81,19 +81,26 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
       setTimer(null);
     }
 
+    // Only auto-commit if we have a GOOD match
     if (prediction?.stop && prediction.confidence > 0.85) {
-      // ✅ Step A: Cut the mic immediately so it doesn't hear itself
+      
+      // ✅ CAPTURE THE STOP HERE (Safety Fix)
+      // We save it to a const so TypeScript knows it won't disappear inside the timeout
+      const validStop = prediction.stop; 
+
+      // 1. Kill the Mic
       stop();
 
-      // ✅ Step B: Construct concise address (Street Number + Name only)
-      // Fallback to full_address if parts are missing
-      const conciseAddress = prediction.stop.address_line1 || prediction.stop.full_address || "Stop found";
-      
-      // ✅ Step C: Speak, and optionally restart mic when done
-      speak(conciseAddress, () => {
-         // Optional: If you wanted to allow verbal cancel during the last second
-         // start(); 
-      });
+      // 2. Wait 150ms for audio driver cleanup
+      const audioDelay = setTimeout(() => {
+        
+        // ✅ Use 'validStop' instead of 'prediction.stop'
+        const conciseAddress = validStop.address_line1 || validStop.full_address || "Stop found";
+        
+        speak(conciseAddress, () => {
+           // Optional: start(); 
+        });
+      }, 150);
 
       let timeLeft = 3; 
       setTimer(timeLeft);
@@ -109,9 +116,10 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
 
       return () => {
         clearInterval(interval);
+        clearTimeout(audioDelay);
       };
     }
-  }, [prediction, handleConfirm, speak, stop]); // Added 'stop' dep
+  }, [prediction, handleConfirm, speak, stop]);
 
   return (
     <div className="fixed inset-0 z-50 bg-surface/95 backdrop-blur-md flex flex-col p-6 animate-in fade-in">

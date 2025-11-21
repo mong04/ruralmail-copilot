@@ -5,8 +5,8 @@ import RouteSetup from './features/route-setup/RouteSetup';
 import Settings from './features/settings/Settings';
 import Packages from './features/package-management/views/Packages';
 import Delivery from './features/delivery-hud/Delivery';
-// Import the new layout
 import BottomNavLayout from './components/layout/BottomNavLayout';
+import { LoadTruck } from './features/package-management/views/LoadTruck';
 
 export const router = createHashRouter([
   {
@@ -29,6 +29,10 @@ export const router = createHashRouter([
         path: '/packages',
         element: <Packages />,
       },
+      {
+        path: 'load-truck',
+        element: <LoadTruck />,
+      }
     ],
   },
   {

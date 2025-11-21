@@ -7,17 +7,15 @@ import { toast } from 'sonner';
 import { type Package } from '../../../db';
 
 // Components
-import ScannerView from '../components/scanner/ScannerView';
 import PackageList from '../components/list/PackageList';
 import PackageForm from '../components/form/PackageForm';
-import { PackagesActionBar } from './../components/actions/PackagesActionBar';
-import { VoiceEntry } from '../components/form/VoiceEntry';
+import { PackagesActionBar } from '../components/actions/PackagesActionBar';
 import { Button } from '../../../components/ui/Button';
+import Portal from '../../../components/ui/Portal'; // ✅ NEW IMPORT
 
 // Icons & Utils
-import { Camera, Keyboard, Mic } from 'lucide-react';
+import { Keyboard, Truck } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import { RouteBrain } from '../utils/RouteBrain';
 
 const Packages: React.FC = () => {
   const navigate = useNavigate();
@@ -27,20 +25,17 @@ const Packages: React.FC = () => {
   const { packages, loading, error } = useSelector((state: RootState) => state.packages);
   const route = useSelector((state: RootState) => state.route.route);
 
+  // Local State
   const [searchQuery, setSearchQuery] = useState('');
   const [editingPackage, setEditingPackage] = useState<Partial<Package> | null>(null);
-  const [newScanData, setNewScanData] = useState<{ tracking: string } | null>(null);
-  const [formContext, setFormContext] = useState<'scan' | 'manual' | 'edit'>('manual');
-  
-  const [isVoiceActive, setIsVoiceActive] = useState(false);
-  const [pendingTranscript, setPendingTranscript] = useState<string | null>(null);
+  const [formContext, setFormContext] = useState<'manual' | 'edit'>('manual');
 
   const pkgToUndoRef = useRef<Package | null>(null);
   const toastIdRef = useRef<string | number | null>(null);
 
-  const isScannerActive = searchParams.get('scanner') === 'true';
   const isFormActive = searchParams.get('form') === 'true';
 
+  // Filter Logic
   const filteredPackages = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return packages;
@@ -51,12 +46,10 @@ const Packages: React.FC = () => {
     );
   }, [packages, searchQuery]);
 
-  // Effects
+  // --- EFFECTS ---
   useEffect(() => {
     const handlePopState = () => {
-      if (isScannerActive) {
-        setSearchParams({}, { replace: true });
-      } else if (isFormActive) {
+      if (isFormActive) {
         setSearchParams({}, { replace: true });
       } else {
         navigate('/');
@@ -64,20 +57,18 @@ const Packages: React.FC = () => {
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [isScannerActive, isFormActive, navigate, setSearchParams]);
+  }, [isFormActive, navigate, setSearchParams]);
 
-  // Handlers
-  const handleLocalScanSuccess = (tracking: string) => {
-    setEditingPackage(null);
-    setNewScanData({ tracking });
-    setFormContext('scan');
-    setSearchParams({ form: 'true' }, { replace: true });
-  };
-
+  // --- HANDLERS (Unchanged) ---
   const handleStartEdit = (pkg: Package) => {
-    setNewScanData(null);
     setEditingPackage(pkg);
     setFormContext('edit');
+    setSearchParams({ form: 'true' });
+  };
+
+  const handleAddAtStop = (stopData: Partial<Package>) => {
+    setEditingPackage(stopData);
+    setFormContext('manual');
     setSearchParams({ form: 'true' });
   };
 
@@ -86,10 +77,7 @@ const Packages: React.FC = () => {
       dispatch(addPackage(pkgToUndoRef.current));
       toast.success('Action undone!');
       pkgToUndoRef.current = null;
-      if (toastIdRef.current) {
-        toast.dismiss(toastIdRef.current);
-        toastIdRef.current = null;
-      }
+      if (toastIdRef.current) toast.dismiss(toastIdRef.current);
     }
   };
 
@@ -97,28 +85,13 @@ const Packages: React.FC = () => {
     dispatch(deletePackage(pkg.id));
     pkgToUndoRef.current = pkg;
     toastIdRef.current = toast.error('Package deleted.', {
-      action: {
-        label: 'Undo',
-        onClick: handleUndoDelete,
-      },
+      action: { label: 'Undo', onClick: handleUndoDelete },
       duration: 5000,
-      onDismiss: () => (pkgToUndoRef.current = null),
-      onAutoClose: () => (pkgToUndoRef.current = null),
     });
   };
 
   const handleSubmitSuccess = () => {
-    if (pendingTranscript && formContext === 'manual') {
-      const lastPkg = packages[packages.length - 1];
-      if (lastPkg && lastPkg.assignedStopId) {
-         const brain = new RouteBrain(route);
-         brain.learn(pendingTranscript, lastPkg.assignedStopId);
-         toast.success(`🧠 Learned alias: "${pendingTranscript}"`);
-      }
-    }
-    setPendingTranscript(null);
     setEditingPackage(null);
-    setNewScanData(null);
     setSearchParams({});
     toast.success(formContext === 'edit' ? 'Package updated!' : 'Package added!');
     setFormContext('manual');
@@ -126,60 +99,18 @@ const Packages: React.FC = () => {
 
   const handleCancelForm = () => {
     setEditingPackage(null);
-    setNewScanData(null);
     setSearchParams({});
-    if (formContext === 'scan') {
-      setSearchParams({ scanner: 'true' }, { replace: true });
-    }
     setFormContext('manual');
   };
 
-  const handleScanRequest = () => {
-    setSearchParams({ scanner: 'true' }, { replace: true });
-  };
-
-  const handleVoiceConfirmation = (pkgData: Partial<Package>) => {
-    const newPackage: Package = {
-      id: crypto.randomUUID(),
-      tracking: '',
-      size: 'medium',
-      notes: 'Voice Entry',
-      assignedStopId: pkgData.assignedStopId,
-      assignedStopNumber: pkgData.assignedStopNumber,
-      assignedAddress: pkgData.assignedAddress,
-      delivered: false,
-    };
-
-    dispatch(addPackage(newPackage));
-    toast.success(`📦 Added to Stop ${pkgData.assignedStopNumber! + 1}`);
-  };
-
-  const handleManualFallback = (transcript: string) => {
-    setIsVoiceActive(false);
-    setPendingTranscript(transcript);
-    setEditingPackage(null);
-    setNewScanData(null);
-    setFormContext('manual');
-    setSearchParams({ form: 'true' });
-  };
-
-  const handleAddAtStop = (stopData: Partial<Package>) => {
-    // 1. Pre-fill the location data
-    setEditingPackage(stopData); 
-    // 2. Clear any previous scan data to avoid confusion
-    setNewScanData(null);
-    // 3. Set context to MANUAL (Important: this tells the form "Create New", not "Update")
-    setFormContext('manual');
-    // 4. Open Form
-    setSearchParams({ form: 'true' });
-  };
+  // --- RENDER ---
 
   if (loading) return <div className="p-6 text-center animate-pulse text-foreground">Loading manifest...</div>;
   if (error) return <div className="p-6 text-center text-danger">Error: {error}</div>;
 
   if (route.length === 0) {
     return (
-      <div className="text-center space-y-4 p-6">
+      <div className="text-center space-y-4 p-6 flex flex-col items-center justify-center h-full">
         <h2 className="text-xl font-semibold text-danger">Route Not Found</h2>
         <p className="text-muted">You must set up your route before you can add packages.</p>
         <Button onClick={() => navigate('/route-setup')}>Go to Route Setup</Button>
@@ -188,80 +119,83 @@ const Packages: React.FC = () => {
   }
 
   return (
-    // Removed pb-32 from here to fix "Dead Space"
-    <div className="flex flex-col min-h-screen bg-background relative">
+    // 1. Use h-full to fit within the parent layout (BottomNavLayout)
+    <div className="flex flex-col h-full bg-background relative overflow-hidden">
       
-      {/* 1. Sticky Top Header */}
-      <div className="z-30">
+      {/* 2. Sticky Header */}
+      <div className="flex-none z-20">
         <PackagesActionBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
       </div>
-      {/* 2. Main List - Removed flex-1 so it doesn't force height */}
-      <div className={cn("w-full", isFormActive ? 'hidden' : 'block')}>
-        <PackageList
-          packages={filteredPackages}
-          searchQuery={searchQuery}
-          onEdit={handleStartEdit}
-          onDelete={handleDeletePackage}
-          onAddAtStop={handleAddAtStop}
-        />
-      </div>
 
-      {/* 3. Floating Gradient - Fixed so it doesn't affect layout flow */}
-      <div className="fixed bottom-0 left-0 right-0 h-40 bg-linear-to-t from-background via-background/90 to-transparent pointer-events-none z-10" />
-
-      {/* 4. FAB Cluster */}
-      <div className="fixed bottom-24 left-0 right-0 px-4 z-30 pointer-events-none">
-        <div className="max-w-md mx-auto flex justify-between items-end pointer-events-auto">
-            
-            <Button
-               onClick={() => {
-                  setEditingPackage(null);
-                  setNewScanData(null);
-                  setFormContext('manual');
-                  setSearchParams({ form: 'true' });
-               }}
-               variant="surface"
-               className="w-14 h-14 rounded-full shadow-xl p-0 border border-white/10 bg-surface/80 backdrop-blur-md"
-            >
-               <Keyboard size={24} />
-            </Button>
-
-            <button
-               onClick={() => setIsVoiceActive(true)}
-               className="relative -top-2 bg-brand text-brand-foreground w-20 h-20 rounded-full shadow-2xl shadow-brand/40 flex items-center justify-center transform transition active:scale-95 hover:scale-105 border-4 border-background"
-            >
-               <Mic size={40} />
-               <div className="absolute inset-0 rounded-full border border-white/20 animate-ping opacity-20 pointer-events-none" />
-            </button>
-
-            <Button
-               onClick={() => setSearchParams({ scanner: 'true' }, { replace: true })}
-               variant="surface"
-               className="w-14 h-14 rounded-full shadow-xl p-0 border border-white/10 bg-surface/80 backdrop-blur-md"
-            >
-               <Camera size={24} />
-            </Button>
+      {/* 3. Scrollable Content */}
+      {/* Added pb-32 to ensure last item clears the FABs */}
+      <div className="flex-1 overflow-y-auto relative scroll-smooth pb-32">
+        <div className={cn("w-full max-w-3xl mx-auto", isFormActive ? 'hidden' : 'block')}>
+          <PackageList
+            packages={filteredPackages}
+            searchQuery={searchQuery}
+            onEdit={handleStartEdit}
+            onDelete={handleDeletePackage}
+            onAddAtStop={handleAddAtStop}
+          />
         </div>
       </div>
 
-      {/* Overlays */}
-      {isScannerActive && <ScannerView onScanSuccess={handleLocalScanSuccess} onClose={() => setSearchParams({})} />}
+      {/* 4. PORTALLED INTERFACE ELEMENTS (Break out of layout) */}
+      <Portal>
+        <div className="pointer-events-none fixed inset-0 z-50 flex flex-col justify-end">
+            
+            {/* Bottom Gradient Fade */}
+            <div className="absolute bottom-0 left-0 right-0 h-40 bg-linear-to-t from-background via-background/80 to-transparent z-0" />
+
+            {/* FAB Cluster - Positioned absolutely above bottom nav */}
+            {/* bottom-[88px] accounts for Nav Bar (approx 60-70px) + padding */}
+            <div className="relative z-10 pb-[88px] px-6 w-full max-w-md mx-auto">
+                <div className="flex items-end justify-center gap-8 pointer-events-auto">
+                    
+                    {/* Manual Entry */}
+                    <Button
+                        onClick={() => {
+                            setEditingPackage(null);
+                            setFormContext('manual');
+                            setSearchParams({ form: 'true' });
+                        }}
+                        variant="surface"
+                        className="w-12 h-12 rounded-full shadow-lg p-0 border border-white/10 bg-surface/80 backdrop-blur-md active:scale-90 transition-all hover:border-white/30"
+                    >
+                        <Keyboard size={20} className="text-muted-foreground" />
+                    </Button>
+
+                    {/* LOAD TRUCK (Hero) */}
+                    <button
+                        onClick={() => navigate('/load-truck')}
+                        className="relative group -top-1"
+                    >
+                        <div className="absolute inset-0 bg-brand/50 rounded-full blur-md opacity-40 group-hover:opacity-60 transition-opacity" />
+                        <div className="relative bg-brand text-brand-foreground w-16 h-16 rounded-full shadow-2xl shadow-brand/30 flex items-center justify-center transform transition-all active:scale-95 hover:scale-105 border-2 border-white/20">
+                            <Truck size={32} className="-ml-0.5" />
+                        </div>
+                    </button>
+
+                    {/* Ghost Spacer for symmetry (Optional) */}
+                    <div className="w-12" />
+                </div>
+            </div>
+        </div>
+
+        {/* Manual Form (Also Portalled automatically by its own implementation? Check PackageForm) */}
+        {/* If PackageForm uses Portal internally, we are good. If not, we should wrap it or leave it. */}
+        {/* PackageForm usually creates its own Fixed overlay, so it's fine in the main tree. */}
+      </Portal>
+
+      {/* Form is rendered here but uses fixed positioning */}
       <PackageForm
         show={isFormActive}
         formContext={formContext}
-        initialPackage={editingPackage || newScanData}
+        initialPackage={editingPackage}
         onSubmitSuccess={handleSubmitSuccess}
         onCancel={handleCancelForm}
-        onScanRequest={handleScanRequest}
       />
-      {isVoiceActive && (
-         <VoiceEntry 
-            route={route} 
-            onPackageConfirmed={handleVoiceConfirmation}
-            onClose={() => setIsVoiceActive(false)}
-            onManualFallback={handleManualFallback}
-         />
-      )}
     </div>
   );
 };

@@ -15,12 +15,24 @@ export interface PackageState {
   packages: Package[];
   loading: boolean;
   error: string | null;
+  loadingSession: {
+    isActive: boolean;
+    startTime: string | null;
+    endTime: string | null;
+    count: number;
+  }
 }
 
 const initialState: PackageState = {
   packages: [],
   loading: false,
   error: null,
+  loadingSession: {
+    isActive: false,
+    startTime: null,
+    endTime: null,
+    count: 0,
+  }
 };
 
 function isStop(item: unknown): item is Stop {
@@ -115,6 +127,24 @@ const packageSlice = createSlice({
         state.packages[index] = action.payload;
       }
     },
+    startLoadingSession: (state) => {
+      state.loadingSession = {
+        isActive: true,
+        startTime: new Date().toISOString(),
+        endTime: null,
+        count: 0,
+      };
+    },
+    endLoadingSession: (state) => {
+      state.loadingSession.isActive = false;
+      state.loadingSession.endTime = new Date().toISOString();
+    },
+    // Update count when a package is added during load
+    incrementLoadCount: (state) => {
+      if (state.loadingSession.isActive) {
+        state.loadingSession.count += 1;
+      }
+    },
     /**
      * Reducer to mark all packages at a stop as delivered.
      */
@@ -178,6 +208,9 @@ export const {
   updatePackage,
   deletePackage,
   markPackagesDelivered,
+  startLoadingSession,
+  endLoadingSession,
+  incrementLoadCount,
 } = packageSlice.actions;
 
 export default packageSlice.reducer;

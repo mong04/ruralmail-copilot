@@ -1,86 +1,77 @@
 @import "tailwindcss";
 
-/* Define dark variant driven by a class */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Theme tokens */
 @theme {
-  /* Base Colors - Increased Contrast for Light Mode */
-  --color-background: hsl(210 20% 96%); /* Slightly darker gray-blue to make white cards pop */
-  --color-foreground: hsl(222 20% 14%);
+  /* Semantic Color Mapping */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
   
-  /* Surface - Pure White */
-  --color-surface: hsl(0 0% 100%);
-  --color-surface-foreground: hsl(222 20% 14%);
+  --color-surface: var(--surface);
+  --color-surface-foreground: var(--surface-foreground);
+  --color-surface-muted: var(--surface-muted);
   
-  /* Muted Surface - For headers/inputs */
-  --color-surface-muted: hsl(210 20% 94%);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
   
-  /* Brand - Stronger Blue */
-  --color-brand: hsl(221 83% 53%);
-  --color-brand-foreground: hsl(210 40% 98%);
+  --color-border: var(--border);
   
-  /* Accents */
-  --color-accent: hsl(210 20% 94%);
-  --color-accent-foreground: hsl(222 20% 14%);
-  
-  /* Borders - Critical Fix: Darker gray to be visible on light mode */
-  --color-border: hsl(220 14% 85%);
-  
-  /* Status Colors */
-  --color-success: hsl(142 70% 45%);
-  --color-success-foreground: hsl(0 0% 100%);
-  --color-warning: hsl(35 91% 54%);
-  --color-warning-foreground: hsl(23 22% 13%);
-  --color-danger: hsl(0 84% 60%);
-  --color-danger-foreground: hsl(0 0% 100%);
-  
-  --color-muted: hsl(220 10% 46%);
-  --color-subtle: hsl(220 10% 40%);
-  
-  /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.05);
+  /* Status Tokens */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-muted: var(--muted);
   
   --radius-xl: 0.75rem;
 }
 
-/* Dark overrides */
-.dark {
-  --color-background: hsl(222 47% 11%); /* Deep Navy Black */
-  --color-foreground: hsl(210 40% 98%);
-  
-  --color-surface: hsl(217 33% 17%); /* Lighter than BG */
-  --color-surface-foreground: hsl(210 40% 98%);
-  --color-surface-muted: hsl(217 33% 20%);
-  
-  --color-brand: hsl(217 91% 60%);
-  --color-brand-foreground: hsl(0 0% 100%);
-  
-  --color-accent: hsl(220 20% 22%);
-  --color-accent-foreground: hsl(210 40% 98%);
-  
-  --color-success: hsl(142 60% 55%);
-  --color-success-foreground: hsl(0 0% 10%);
-  
-  --color-warning: hsl(35 85% 62%);
-  --color-warning-foreground: hsl(0 0% 10%);
-  
-  --color-danger: hsl(0 72% 51%);
-  --color-danger-foreground: hsl(0 0% 10%);
-  
-  --color-muted: hsl(220 10% 70%);
-  --color-subtle: hsl(220 10% 64%);
-  
-  --color-border: hsl(217 33% 25%); /* Visible border in dark mode */
+/* --- THEME DEFINITIONS --- */
+
+/* 1. DEFAULT THEME (Professional Slate/Blue) */
+:root {
+  --background: hsl(210 20% 98%);
+  --foreground: hsl(222 20% 14%);
+  --surface: hsl(0 0% 100%);
+  --surface-foreground: hsl(222 20% 14%);
+  --surface-muted: hsl(210 20% 96%);
+  --brand: hsl(221 83% 53%);
+  --brand-foreground: hsl(210 40% 98%);
+  --border: hsl(220 13% 91%);
+  --success: hsl(142 76% 36%);
+  --warning: hsl(38 92% 50%);
+  --danger: hsl(0 84% 60%);
+  --muted: hsl(215 16% 47%);
 }
 
-/* Base resets */
-html, body, #root { height: 100%; }
-body {
-  background-color: var(--color-background);
-  color: var(--color-foreground);
-  font-family: ui-sans-serif, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+.dark {
+  --background: hsl(222 47% 11%);
+  --foreground: hsl(210 40% 98%);
+  --surface: hsl(217 33% 17%);
+  --surface-foreground: hsl(210 40% 98%);
+  --surface-muted: hsl(217 33% 20%);
+  --brand: hsl(217 91% 60%);
+  --brand-foreground: hsl(0 0% 100%);
+  --border: hsl(217 33% 25%);
+  --success: hsl(142 60% 55%);
+  --warning: hsl(35 85% 62%);
+  --danger: hsl(0 72% 51%);
+  --muted: hsl(220 10% 70%);
 }
+
+/* 2. CYBERPUNK THEME (Neon/Zinc) - Activated via data-theme="cyberpunk" */
+[data-theme="cyberpunk"] {
+  --background: #09090b;
+  --foreground: #e4e4e7;
+  --surface: #18181b;
+  --surface-foreground: #e4e4e7;
+  --surface-muted: #27272a;
+  --brand: #06b6d4; /* Cyan */
+  --brand-foreground: #000000;
+  --border: #3f3f46;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #f43f5e;
+}
+
+/* Utility to lock body scroll */
+html, body, #root { height: 100%; overflow: hidden; }

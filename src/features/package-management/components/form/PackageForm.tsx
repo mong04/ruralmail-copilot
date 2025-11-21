@@ -9,7 +9,7 @@ import AddressInput, { type AddressMatch } from './AddressInput';
 import TrackingInput from './TrackingInput';
 import SizeSelect from './SizeSelect';
 import NotesInput from './NotesInput';
-import ActionButtons from '../Actionbuttons';
+import ActionButtons from '../actions/Actionbuttons';
 
 function generateUUID(): string {
   return window.crypto?.randomUUID?.() || Date.now().toString();
@@ -21,7 +21,6 @@ interface PackageFormProps {
   initialPackage: Partial<Package> | null;
   onSubmitSuccess: () => void;
   onCancel: () => void;
-  onScanRequest: () => void;
 }
 
 const PackageForm: React.FC<PackageFormProps> = ({
@@ -30,19 +29,15 @@ const PackageForm: React.FC<PackageFormProps> = ({
   initialPackage,
   onSubmitSuccess,
   onCancel,
-  onScanRequest,
 }) => {
   const dispatch = useDispatch<AppDispatch>();
   const route = useSelector((state: RootState) => state.route.route);
-  
-  // ✅ NEW: Drag Controls
   const controls = useDragControls();
 
   const [pkg, setPkg] = useState<Partial<Package>>({ tracking: '', size: 'medium', notes: '' });
   const [address, setAddress] = useState<string>('');
   const [match, setMatch] = useState<AddressMatch | null>(null);
 
-  // ✅ NEW: Lock Body Scroll when open
   useEffect(() => {
     if (show) {
       document.body.style.overflow = 'hidden';
@@ -137,22 +132,23 @@ const PackageForm: React.FC<PackageFormProps> = ({
             drag="y"
             dragConstraints={{ top: 0 }}
             dragElastic={0.2}
-            // ✅ NEW: Disable default listeners, use specific controls
             dragListener={false}
             dragControls={controls}
             onDragEnd={handleDragEnd}
             className="fixed bottom-0 left-0 right-0 z-50 bg-surface rounded-t-3xl shadow-2xl flex flex-col max-h-[92vh]"
             style={{ touchAction: 'none' }} 
           >
-            {/* ✅ NEW: Drag Handle Trigger */}
             <div 
                 className="w-full flex justify-center pt-4 pb-2 cursor-grab active:cursor-grabbing touch-none"
-                onPointerDown={(e) => controls.start(e)} // Only this area starts drag
+                onPointerDown={(e) => controls.start(e)} 
             >
                <div className="w-16 h-1.5 bg-border/60 rounded-full pointer-events-none" />
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 pt-2 pb-6 space-y-6">
+            <div 
+                className="flex-1 overflow-y-auto px-6 pt-2 pb-6 space-y-6"
+                onPointerDownCapture={(e) => e.stopPropagation()} 
+            >
                <div className="text-center mb-2">
                   <h2 className="text-lg font-bold text-foreground">
                     {formContext === 'edit' ? 'Edit Package' : 'New Package'}
@@ -171,7 +167,6 @@ const PackageForm: React.FC<PackageFormProps> = ({
                  pkg={pkg}
                  formContext={formContext}
                  handleInputChange={handleInputChange}
-                 onScanClick={onScanRequest}
                />
 
                <SizeSelect pkg={pkg} setPkg={setPkg} />

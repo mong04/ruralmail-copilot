@@ -2,8 +2,8 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { useDispatch, useSelector, type TypedUseSelectorHook } from 'react-redux';
 import routeReducer from '../../src/features/route-setup/routeSlice';
-import settingsReducer from '../../src/features/settings/settingsSlice';
-import packageReducer from '../features/package-management/packageSlice';
+import settingsReducer from '../features/settings/settingsSlice';
+import packageReducer from '../features/package-management/store/packageSlice';
 import hudReducer from '../features/delivery-hud/hudSlice';
 import notificationReducer from '../features/notification/notificationSlice';
 

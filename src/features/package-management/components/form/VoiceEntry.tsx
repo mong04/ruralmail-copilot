@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { Mic, X, RefreshCw, Loader2, Search, Keyboard, AlertCircle } from 'lucide-react';
-import { RouteBrain, type Prediction } from '../utils/RouteBrain';
-import { useVoiceInput } from '../../../hooks/useVoiceInput';
-import { useSound } from '../../../hooks/useSound';
-import { type Stop, type Package } from '../../../db';
-import { Card } from '../../../components/ui/Card';
-import { Badge } from '../../../components/ui/Badge';
+import { RouteBrain, type Prediction } from '../../utils/RouteBrain';
+import { useVoiceInput } from '../../../../hooks/useVoiceInput';
+import { useSound } from '../../../../hooks/useSound';
+import { type Stop, type Package } from '../../../../db';
+import { Card } from '../../../../components/ui/Card';
+import { Badge } from '../../../../components/ui/Badge';
 
 interface VoiceEntryProps {
   route: Stop[];

@@ -11,7 +11,7 @@ import { rootReducer, type RootState } from '../../store';
 // 2. Import the REAL state types from your slices
 //    (Ensure these are exported from their respective files)
 import type { RouteState } from '../../features/route-setup/routeSlice';
-import type { PackageState } from '../../features/package-management/packageSlice';
+import type { PackageState } from '../../features/package-management/store/packageSlice';
 import type { Stop, Package } from '../../db';
 
 import Delivery from './Delivery';

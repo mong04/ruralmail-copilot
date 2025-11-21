@@ -1,7 +1,7 @@
 // src/features/package-management/components/NotesInput.tsx
 import React from 'react';
-import { type Package } from '../../../db';
-import { Button } from '../../../components/ui/Button';
+import { type Package } from '../../../../db';
+import { Button } from '../../../../components/ui/Button';
 
 interface NotesInputProps {
   pkg: Partial<Package>;

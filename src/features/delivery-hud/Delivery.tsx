@@ -17,7 +17,7 @@ import {
 } from './hudSlice';
 import { type Stop } from '../../db';
 import { showNotification } from '../notification/notificationSlice';
-import { markPackagesDelivered } from '../package-management/packageSlice';
+import { markPackagesDelivered } from '../package-management/store/packageSlice';
 import DeliveryMap from './components/DeliveryMap';
 import DeliveryHUDPanel from './components/DeliveryHUDPanel';
 import { useNavigate } from 'react-router-dom';

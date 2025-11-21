@@ -1,17 +1,16 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAppDispatch, useAppSelector } from '../../store';
-// ✅ FIX: Removed the stray 'tr' from this import
 import { saveSettingsToDB } from './settingsSlice';
 import { clearRoute, loadRoute, saveRoute, type RouteData } from '../../db';
-import { clearPackagesFromDB } from '../package-management/packageSlice';
+import { clearPackagesFromDB } from '../package-management/store/packageSlice';
 import { toast } from 'sonner';
 import { type SettingsData } from '../../db';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
-// ❌ Remove the old theme hook
-// import { useTheme } from '../../hooks/useTheme';
+import { Card } from '../../components/ui/Card'; // Uses your new Luminous Card
+import { Button } from '../../components/ui/Button'; // Uses your new Tactile Button
+import { Input } from '../../components/ui/Input'; // ✅ NEW
+import { Select } from '../../components/ui/Select'; // ✅ NEW
 import {
-  Database,
+  // Database,
   UploadCloud,
   DownloadCloud,
   Trash2,
@@ -21,48 +20,39 @@ import {
   Palette,
   FileText,
   AlertTriangle,
+  ChevronRight
 } from 'lucide-react';
 
-// Re-usable UI components for this page
-const SettingRow: React.FC<React.PropsWithChildren<{ title: string; icon: React.ElementType }>> = ({
+// --- UI Helper for iOS-style Rows ---
+const SettingRow: React.FC<React.PropsWithChildren<{ 
+  title: string; 
+  icon: React.ElementType;
+  color?: string; // 'blue', 'orange', etc.
+}>> = ({
   title,
   icon: Icon,
+  color = 'text-brand',
   children,
 }) => (
-  <div className="flex items-center justify-between p-4 border-b border-border last:border-b-0">
+  <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3 border-b border-border/40 last:border-0 hover:bg-surface-muted/30 transition-colors">
     <div className="flex items-center gap-3">
-      <Icon className="w-5 h-5 text-brand" />
-      <span className="font-semibold">{title}</span>
+      <div className={`p-2 rounded-lg bg-surface-muted/50 ${color}`}>
+         <Icon className="w-5 h-5" />
+      </div>
+      <span className="font-semibold text-sm">{title}</span>
     </div>
-    <div className="max-w-[50%]">{children}</div>
+    <div className="w-full sm:w-1/2 flex justify-end">
+        {children}
+    </div>
   </div>
 );
 
-const SettingInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props) => (
-  <input
-    {...props}
-    className="w-full text-right p-2 border border-border rounded-lg bg-surface-muted focus:ring-2 focus:ring-brand"
-  />
-);
-
-const SettingSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = (props) => (
-  <select
-    {...props}
-    className="w-full text-right p-2 border border-border rounded-lg bg-surface-muted focus:ring-2 focus:ring-brand"
-  />
-);
-
-/**
- * Settings component for managing default location, data, and app preferences.
- */
 const Settings: React.FC = () => {
   const dispatch = useAppDispatch();
   const settings = useAppSelector((state) => state.settings);
-  // ✅ FIX: Get theme directly from the Redux store
   const { theme } = settings;
   const [form, setForm] = useState<SettingsData>(settings);
 
-  // Keep local form state in sync with Redux
   useEffect(() => {
     setForm(settings);
   }, [settings]);
@@ -75,21 +65,16 @@ const Settings: React.FC = () => {
   );
 
   const handleSave = useCallback(() => {
-    // ✅ FIX: We now save the *entire* form, including any theme changes
-    // that might have been staged (though toggleTheme is instant)
     dispatch(saveSettingsToDB(form));
     toast.success('Settings saved!');
   }, [dispatch, form]);
 
-  // ✅ FIX: New toggle function that dispatches to Redux
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
-    // Save *all* settings, but with the new theme applied
     dispatch(saveSettingsToDB({ ...form, theme: newTheme }));
   };
 
-  // --- Data Management Handlers ---
-
+  // --- Data Handlers (Unchanged Logic, just checking types) ---
   const handleExport = async () => {
     try {
       const route = await loadRoute();
@@ -107,10 +92,10 @@ const Settings: React.FC = () => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.success('Route data exported successfully!');
+      toast.success('Route data exported!');
     } catch (err) {
-      console.error('Export failed:', err);
-      toast.error('Failed to export route data.');
+      console.error(err);
+      toast.error('Export failed.');
     }
   };
 
@@ -121,156 +106,162 @@ const Settings: React.FC = () => {
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
-
-      if (!window.confirm('Importing will overwrite your current route. Are you sure?')) {
-        return;
-      }
+      if (!confirm('Overwrite current route?')) return;
 
       try {
         const text = await file.text();
         const routeData = JSON.parse(text) as RouteData;
-        // Basic validation
         if (Array.isArray(routeData) && routeData.every((stop) => 'address_line1' in stop)) {
           await saveRoute(routeData);
-          toast.success('Route imported successfully! Please restart the app.');
-          // We can't easily hot-reload the route everywhere, so a restart is safest.
+          toast.success('Import successful! Please restart.');
         } else {
-          toast.error('Invalid route file format.');
+          toast.error('Invalid file format.');
         }
       } catch (err) {
-        console.error('Import failed:', err);
-        toast.error('Failed to import route file.');
+        console.error(err);
+        toast.error('Import failed.');
       }
     };
     input.click();
   };
 
   const handleClearRoute = () => {
-    if (window.confirm('ARE YOU SURE? This will permanently delete your entire route.')) {
+    if (confirm('PERMANENTLY DELETE ROUTE?')) {
       clearRoute();
-      toast.success('Route data cleared. Please restart the app.');
+      toast.success('Route cleared.');
     }
   };
 
   const handleClearPackages = () => {
-    if (window.confirm("ARE YOU SURE? This will delete today's package list.")) {
+    if (confirm("Delete today's packages?")) {
       dispatch(clearPackagesFromDB());
     }
   };
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-foreground">Settings</h2>
+    <div className="space-y-8 pb-24 max-w-2xl mx-auto">
+      
+      {/* Header */}
+      <div className="flex items-center justify-between">
+          <h2 className="text-3xl font-bold tracking-tight text-foreground">Settings</h2>
+          <div className="text-xs font-mono text-muted-foreground bg-surface-muted px-2 py-1 rounded-md">v1.0.0</div>
+      </div>
 
-      {/* General Settings */}
-      <Card className="overflow-hidden shadow-sm">
-        <SettingRow title="Default Route Name" icon={FileText}>
-          <SettingInput
-            name="defaultRouteName"
-            value={form.defaultRouteName || ''}
-            onChange={handleChange}
-            placeholder="e.g., Route 7"
-          />
-        </SettingRow>
-        <SettingRow title="Default City" icon={FileText}>
-          <SettingInput
-            name="defaultCity"
-            value={form.defaultCity || ''}
-            onChange={handleChange}
-            placeholder="e.g., Anytown"
-          />
-        </SettingRow>
-        <SettingRow title="Default State" icon={FileText}>
-          <SettingInput
-            name="defaultState"
-            value={form.defaultState || ''}
-            placeholder="e.g., PA"
-            maxLength={2}
-          />
-        </SettingRow>
-        <SettingRow title="Default Zip" icon={FileText}>
-          <SettingInput
-            name="defaultZip"
-            value={form.defaultZip || ''}
-            placeholder="e.g., 12345"
-            maxLength={5}
-          />
-        </SettingRow>
-      </Card>
+      {/* Group 1: General */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">Defaults</h3>
+        <Card>
+            <SettingRow title="Route Name" icon={FileText} color="text-blue-500">
+            <Input
+                name="defaultRouteName"
+                value={form.defaultRouteName || ''}
+                onChange={handleChange}
+                placeholder="e.g. Route 7"
+                className="text-right"
+            />
+            </SettingRow>
+            <SettingRow title="Default City" icon={Map} color="text-green-500">
+            <Input
+                name="defaultCity"
+                value={form.defaultCity || ''}
+                onChange={handleChange}
+                placeholder="City"
+                className="text-right"
+            />
+            </SettingRow>
+            <div className="flex border-b border-border/40 last:border-0">
+                {/* Split Row for State/Zip to save space */}
+                <div className="w-1/2 p-4 border-r border-border/40">
+                    <Input
+                        name="defaultState"
+                        value={form.defaultState || ''}
+                        onChange={handleChange}
+                        placeholder="State"
+                        maxLength={2}
+                        className="text-center uppercase"
+                    />
+                </div>
+                <div className="w-1/2 p-4">
+                    <Input
+                        name="defaultZip"
+                        value={form.defaultZip || ''}
+                        onChange={handleChange}
+                        placeholder="Zip"
+                        maxLength={5}
+                        className="text-center"
+                    />
+                </div>
+            </div>
+        </Card>
+      </div>
 
-      {/* Navigation & App Settings */}
-      <Card className="overflow-hidden shadow-sm">
-        <SettingRow title="Preferred Navigation" icon={Map}>
-          <SettingSelect
-            name="preferredNavApp"
-            value={form.preferredNavApp || 'in-app'}
-            onChange={handleChange}
-          >
-            <option value="in-app">In-App Map</option>
-            <option value="google">Google Maps</option>
-            <option value="apple">Apple Maps</option>
-            <option value="waze">Waze</option>
-          </SettingSelect>
-        </SettingRow>
-        <SettingRow title="Appearance" icon={Palette}>
-          <Button variant="surface" onClick={toggleTheme}>
-            {theme === 'dark' ? (
-              <Sun className="w-5 h-5 mr-2" />
-            ) : (
-              <Moon className="w-5 h-5 mr-2" />
-            )}
-            {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-          </Button>
-        </SettingRow>
-      </Card>
+      {/* Group 2: Preferences */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">Preferences</h3>
+        <Card>
+            <SettingRow title="Navigation App" icon={Map} color="text-orange-500">
+            <Select
+                name="preferredNavApp"
+                value={form.preferredNavApp || 'in-app'}
+                onChange={handleChange}
+            >
+                <option value="in-app">In-App Map</option>
+                <option value="google">Google Maps</option>
+                <option value="apple">Apple Maps</option>
+                <option value="waze">Waze</option>
+            </Select>
+            </SettingRow>
+            
+            <SettingRow title="Theme" icon={Palette} color="text-purple-500">
+            <Button 
+                variant="surface" 
+                onClick={toggleTheme} 
+                className="w-full justify-between group"
+            >
+                <span className="flex items-center gap-2">
+                    {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
+                    {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
+                </span>
+                <ChevronRight className="text-muted-foreground group-hover:translate-x-1 transition-transform" size={16} />
+            </Button>
+            </SettingRow>
+        </Card>
+      </div>
 
-      {/* Save Button */}
-      <Button onClick={handleSave} size="lg" className="w-full">
-        Save All Settings
+      {/* Save Action */}
+      <Button onClick={handleSave} size="lg" className="w-full shadow-xl shadow-brand/20">
+        Save Changes
       </Button>
 
-      {/* Data Management */}
-      <Card className="overflow-hidden shadow-sm">
-        <SettingRow title="Export Route Data" icon={DownloadCloud}>
-          <Button variant="surface" onClick={handleExport}>
-            Export
-          </Button>
-        </SettingRow>
-        <SettingRow title="Import Route Data" icon={UploadCloud}>
-          <Button variant="surface" onClick={handleImport}>
-            Import
-          </Button>
-        </SettingRow>
-        <SettingRow title="Last Saved" icon={Database}>
-          <span className="text-muted text-sm">
-            {settings.lastSaved ? new Date(settings.lastSaved).toLocaleString() : 'Not saved yet'}
-          </span>
-        </SettingRow>
-      </Card>
+      {/* Group 3: Data */}
+      <div className="space-y-3 pt-4">
+        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">Data Management</h3>
+        <Card>
+            <SettingRow title="Export Data" icon={DownloadCloud} color="text-teal-500">
+                <Button variant="ghost" onClick={handleExport} size="sm">Export JSON</Button>
+            </SettingRow>
+            <SettingRow title="Import Data" icon={UploadCloud} color="text-teal-500">
+                <Button variant="ghost" onClick={handleImport} size="sm">Import JSON</Button>
+            </SettingRow>
+            <div className="p-4 bg-surface-muted/20 text-xs text-center text-muted-foreground">
+                Last saved: {settings.lastSaved ? new Date(settings.lastSaved).toLocaleString() : 'Never'}
+            </div>
+        </Card>
+      </div>
 
       {/* Danger Zone */}
-      <Card className="border-danger/50 overflow-hidden shadow-sm">
-        <div className="p-4 bg-danger/10">
-          <h3 className="font-bold text-danger flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5" />
-            Danger Zone
-          </h3>
-        </div>
-        <SettingRow title="Clear Today's Packages" icon={Trash2}>
-          <Button variant="danger" onClick={handleClearPackages}>
-            Clear
-          </Button>
-        </SettingRow>
-        <SettingRow title="Clear All Route Data" icon={Trash2}>
-          <Button variant="danger" onClick={handleClearRoute}>
-            Clear
-          </Button>
-        </SettingRow>
-      </Card>
-
-      <div className="text-center text-muted text-xs pt-4">
-        App Version: 1.0.0
+      <div className="space-y-3">
+        <h3 className="text-sm font-bold text-red-500 uppercase tracking-wider ml-1">Danger Zone</h3>
+        <Card className="border-red-500/20 dark:border-red-500/10">
+            <SettingRow title="Clear Packages" icon={Trash2} color="text-red-500">
+                <Button variant="danger" size="sm" onClick={handleClearPackages}>Clear Today</Button>
+            </SettingRow>
+            <SettingRow title="Nuke Route" icon={AlertTriangle} color="text-red-500">
+                <Button variant="danger" size="sm" onClick={handleClearRoute}>Delete Everything</Button>
+            </SettingRow>
+        </Card>
       </div>
+
     </div>
   );
 };

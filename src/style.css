@@ -5,51 +5,74 @@
 
 /* Theme tokens */
 @theme {
-  --color-background: hsl(220 20% 98%);
+  /* Base Colors - Increased Contrast for Light Mode */
+  --color-background: hsl(210 20% 96%); /* Slightly darker gray-blue to make white cards pop */
   --color-foreground: hsl(222 20% 14%);
+  
+  /* Surface - Pure White */
   --color-surface: hsl(0 0% 100%);
   --color-surface-foreground: hsl(222 20% 14%);
-  --color-surface-muted: hsl(220 14% 96%);
-  --color-brand: hsl(222 84% 56%);
+  
+  /* Muted Surface - For headers/inputs */
+  --color-surface-muted: hsl(210 20% 94%);
+  
+  /* Brand - Stronger Blue */
+  --color-brand: hsl(221 83% 53%);
   --color-brand-foreground: hsl(210 40% 98%);
+  
+  /* Accents */
   --color-accent: hsl(210 20% 94%);
   --color-accent-foreground: hsl(222 20% 14%);
+  
+  /* Borders - Critical Fix: Darker gray to be visible on light mode */
+  --color-border: hsl(220 14% 85%);
+  
+  /* Status Colors */
   --color-success: hsl(142 70% 45%);
   --color-success-foreground: hsl(0 0% 100%);
   --color-warning: hsl(35 91% 54%);
   --color-warning-foreground: hsl(23 22% 13%);
   --color-danger: hsl(0 84% 60%);
   --color-danger-foreground: hsl(0 0% 100%);
+  
   --color-muted: hsl(220 10% 46%);
   --color-subtle: hsl(220 10% 40%);
-  --color-border: hsl(220 14% 90%);
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.05);
+  
   --radius-xl: 0.75rem;
-  --radius-lg: calc(0.75rem - 2px);
-  --radius-md: calc(0.75rem - 4px);
-  --shadow-sm: 0 1px 3px rgba(16,24,40,.12), 0 1px 2px rgba(16,24,40,.08);
-  --shadow-lg: 0 8px 28px rgba(16,24,40,.12);
 }
 
 /* Dark overrides */
 .dark {
-  --color-background: hsl(222 20% 12%);
+  --color-background: hsl(222 47% 11%); /* Deep Navy Black */
   --color-foreground: hsl(210 40% 98%);
-  --color-surface: hsl(222 20% 16%);
+  
+  --color-surface: hsl(217 33% 17%); /* Lighter than BG */
   --color-surface-foreground: hsl(210 40% 98%);
-  --color-surface-muted: hsl(222 20% 18%);
-  --color-brand: hsl(222 84% 60%);
-  --color-brand-foreground: hsl(210 40% 98%);
+  --color-surface-muted: hsl(217 33% 20%);
+  
+  --color-brand: hsl(217 91% 60%);
+  --color-brand-foreground: hsl(0 0% 100%);
+  
   --color-accent: hsl(220 20% 22%);
   --color-accent-foreground: hsl(210 40% 98%);
+  
   --color-success: hsl(142 60% 55%);
   --color-success-foreground: hsl(0 0% 10%);
+  
   --color-warning: hsl(35 85% 62%);
   --color-warning-foreground: hsl(0 0% 10%);
+  
   --color-danger: hsl(0 72% 51%);
   --color-danger-foreground: hsl(0 0% 10%);
+  
   --color-muted: hsl(220 10% 70%);
   --color-subtle: hsl(220 10% 64%);
-  --color-border: hsl(222 20% 26%);
+  
+  --color-border: hsl(217 33% 25%); /* Visible border in dark mode */
 }
 
 /* Base resets */
@@ -60,16 +83,4 @@ body {
   font-family: ui-sans-serif, system-ui, Avenir, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-@media (prefers-reduced-motion: reduce) {
-  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
-}
-
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6); }
-  70% { box-shadow: 0 0 0 12px rgba(59, 130, 246, 0); }
-}
-
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }

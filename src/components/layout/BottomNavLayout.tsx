@@ -4,7 +4,7 @@ import { Map, List, Mails, Settings } from 'lucide-react';
 // import { useTheme } from '../../hooks/useTheme'; // ✅ No longer needed
 import { cn } from '../../lib/utils';
 // ✅ Import the new action bar
-import { PackagesActionBar } from '../../features/package-management/components/PackagesActionBar';
+// import { PackagesActionBar } from '../../features/package-management/components/PackagesActionBar';
 
 const BottomNavLayout: React.FC = () => {
   // const { theme, toggleTheme } = useTheme(); // ✅ Removed
@@ -38,7 +38,7 @@ const BottomNavLayout: React.FC = () => {
 
       {/* ✅ NEW: Conditional Action Bar */}
       {/* This renders *above* the main nav */}
-      <PackagesActionBar />
+      {/* <PackagesActionBar /> */}
 
       {/* Persistent Bottom Navigation: Full-width bar */}
       <nav className="sticky bottom-0 z-40 w-full bg-surface/95 backdrop-blur border-t border-border">

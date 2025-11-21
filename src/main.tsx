@@ -8,7 +8,7 @@ import './style.css';
 import { Toaster } from 'sonner';
 
 import { loadRouteFromDB } from './features/route-setup/routeSlice';
-import { loadPackagesFromDB } from './features/package-management/packageSlice';
+import { loadPackagesFromDB } from './features/package-management/store/packageSlice';
 import { loadSettingsFromDB } from './features/settings/settingsSlice';
 import { loadHudFromDB } from './features/delivery-hud/hudSlice';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -19,14 +19,6 @@ function initApp() {
   store.dispatch(loadSettingsFromDB());
   store.dispatch(loadHudFromDB());
 }
-
-// ✅ REMOVED: This logic is now handled by the Redux store's initialState
-// const theme = localStorage.getItem("theme");
-// if (theme === "dark") {
-//   document.documentElement.classList.add("dark");
-// } else {
-//   document.documentElement.classList.remove("dark")
-// }
 
 initApp();
 

@@ -1,8 +1,8 @@
 import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit';
 import Fuse from 'fuse.js';
-import { loadPackages, savePackages, clearPackages, type Package, type Stop } from '../../db';
+import { loadPackages, savePackages, clearPackages, type Package, type Stop } from '../../../db';
 import { toast } from 'sonner';
-import type { RootState } from '../../store';
+import type { RootState } from '../../../store';
 
 // Define AddressMatch type
 type AddressMatch = {

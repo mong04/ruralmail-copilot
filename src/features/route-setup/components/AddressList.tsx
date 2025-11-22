@@ -1,6 +1,8 @@
 import React from 'react';
 import { type Stop } from '../../../db';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
+import { SwipeableRow } from '../../../components/ui/SwipeableRow';
+import { GripVertical } from 'lucide-react';
 
 interface AddressListProps {
   addresses: Stop[];
@@ -20,37 +22,32 @@ const AddressList: React.FC<AddressListProps> = ({ addresses, onReorder, onEdit,
     <DragDropContext onDragEnd={handleDragEnd}>
       <Droppable droppableId="route-list">
         {(provided) => (
-          <ul {...provided.droppableProps} ref={provided.innerRef} className="list-none p-0 max-h-96 overflow-y-auto">
+          <ul {...provided.droppableProps} ref={provided.innerRef} className="list-none p-0">
             {addresses.map((stop, index) => (
               <Draggable key={stop.full_address || `${index}`} draggableId={stop.full_address || index.toString()} index={index}>
-                {(provided, snapshot) => (
-                  <li
-                    ref={provided.innerRef}
-                    {...provided.draggableProps}
-                    className={`p-3 mb-2 border rounded-lg shadow-sm flex justify-between items-center ${
-                      snapshot.isDragging ? 'bg-accent' : 'bg-surface'
-                    }`}
-                  >
-                    <div {...provided.dragHandleProps} className="pr-3 text-muted">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M4 11h16v2H4zM4 6h16v2H4zM4 16h16v2H4z" />
-                      </svg>
-                    </div>
-
-                    <div className="grow">
-                      <span className="font-medium">{`Stop ${index + 1}: `}</span>
-                      {stop.full_address}
-                      {stop.notes && <p className="text-sm text-muted italic">Notes: {stop.notes}</p>}
-                    </div>
-
-                    <div className="shrink-0 ml-4 flex gap-2">
-                      <button onClick={() => onEdit(index)} className="px-3 py-1 rounded-lg bg-accent hover:bg-accent/80" aria-label={`Edit stop ${index + 1}`}>
-                        Edit
-                      </button>
-                      <button onClick={() => onRemove(index)} className="px-3 py-1 rounded-lg bg-danger text-danger-foreground hover:bg-danger/90" aria-label={`Remove stop ${index + 1}`}>
-                        Delete
-                      </button>
-                    </div>
+                {(provided) => (
+                  <li ref={provided.innerRef} {...provided.draggableProps} className="relative">
+                    <SwipeableRow
+                      onEdit={() => onEdit(index)}
+                      onDelete={() => onRemove(index)}
+                      className={index < addresses.length - 1 ? "border-b border-border/40" : ""}
+                    >
+                      <div className="w-full flex items-center gap-3 py-3 px-4 bg-surface active:bg-surface-muted/50 transition-colors cursor-pointer relative group">
+                        {/* Drag Handle */}
+                        <div {...provided.dragHandleProps} className="shrink-0 text-muted-foreground/50 touch-none">
+                          <GripVertical size={20} />
+                        </div>
+                        
+                        {/* Stop Info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-foreground truncate">
+                            <span className="font-bold text-brand">{`#${index + 1} `}</span>
+                            {stop.full_address}
+                          </p>
+                          {stop.notes && <p className="text-xs text-muted-foreground italic truncate">Notes: {stop.notes}</p>}
+                        </div>
+                      </div>
+                    </SwipeableRow>
                   </li>
                 )}
               </Draggable>

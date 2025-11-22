@@ -26,7 +26,12 @@ export const LoadTruck: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   
   const route = useSelector((state: RootState) => state.route.route);
-  const { loadingSession } = useSelector((state: RootState) => state.packages);
+    const loadingSession = useSelector((state: RootState) => state.packages.loadingSession) ?? {
+        isActive: false,
+        startTime: null,
+        endTime: null,
+        count: 0,
+    };
 
   // --- Engines ---
   const brain = useMemo(() => new RouteBrain(route), [route]);
@@ -162,19 +167,20 @@ export const LoadTruck: React.FC = () => {
     : '?';
 
   // Theme Colors (Cyberpunk Palette)
-  const neonColor = 
-    status === 'matched' || status === 'saved' ? 'text-cyan-400' :
-    status === 'unknown' ? 'text-amber-500' :
-    'text-zinc-500';
-  
-  const borderColor = 
-    status === 'matched' || status === 'saved' ? 'border-cyan-500/50' :
-    status === 'unknown' ? 'border-amber-500/50' :
-    'border-zinc-800';
+    const neonColor =
+        status === 'matched' || status === 'saved' ? 'text-accent' :
+        status === 'unknown' ? 'text-warning' :
+        'text-muted';
 
-  return (
-    // 1. LOCK VIEWPORT: fixed inset-0 prevents ALL scrolling. h-[100dvh] handles mobile bars.
-    <div className="fixed inset-0 h-dvh bg-zinc-950 text-white flex flex-col font-mono overflow-hidden selection:bg-cyan-500/30">
+    const borderColor =
+        status === 'matched' || status === 'saved' ? 'border-accent-30' :
+        status === 'unknown' ? 'border-warning-30' :
+        'border-border';
+
+    return (
+           // 1. LOCK VIEWPORT: limit bottom to the persistent nav height so footer and content are visible above it
+           <div className="fixed left-0 right-0 top-0 bg-surface text-surface-foreground flex flex-col font-mono overflow-hidden selection:bg-cyan-500/30"
+               style={{ bottom: 'var(--bottom-nav-height)' }}>
         
         {/* Background Grid (Subtle Industrial Texture) */}
         <div className="absolute inset-0 z-0 opacity-10 pointer-events-none" 
@@ -182,18 +188,18 @@ export const LoadTruck: React.FC = () => {
         />
 
         {/* TOP BAR: Technical Header */}
-        <header className="flex-none flex justify-between items-center p-4 z-20 border-b border-white/10 bg-zinc-950/80 backdrop-blur-sm">
-            <Button variant="ghost" onClick={() => navigate(-1)} className="text-zinc-400 hover:text-cyan-400 hover:bg-cyan-950/30">
+        <header className="flex-none flex justify-between items-center p-4 z-20 border-b border-border/10 bg-surface/80 backdrop-blur-sm">
+            <Button variant="ghost" onClick={() => navigate(-1)} className="btn-ghost-accent">
                 <ArrowLeft className="mr-2 w-4 h-4" /> EXIT_MODE
             </Button>
             <div className="flex items-center gap-4">
                 <div className="flex flex-col items-end">
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Session_Load</span>
-                    <span className="text-xl font-bold text-cyan-400 tabular-nums leading-none">
+                    <span className="text-[10px] uppercase tracking-[0.2em] text-muted">Session_Load</span>
+                    <span className="text-xl font-bold text-accent tabular-nums leading-none">
                         {loadingSession.count.toString().padStart(3, '0')}
                     </span>
                 </div>
-                <Activity className="w-5 h-5 text-zinc-600 animate-pulse" />
+                <Activity className="w-5 h-5 text-muted-foreground animate-pulse" />
             </div>
         </header>
 
@@ -211,14 +217,14 @@ export const LoadTruck: React.FC = () => {
                     >
                         {/* Breathing Mic Ring */}
                         <div className="relative">
-                            <div className="absolute inset-0 bg-cyan-500/20 rounded-full animate-ping duration-3000" />
-                            <div className="relative bg-zinc-900 border-2 border-cyan-500/30 text-cyan-400 p-12 rounded-full shadow-[0_0_40px_rgba(34,211,238,0.15)]">
+                            <div className="absolute inset-0 bg-accent-10 rounded-full animate-ping duration-3000" />
+                            <div className="relative bg-surface-muted border-2 border-accent-30 icon-accent p-12 rounded-full shadow-[0_0_40px_rgba(34,211,238,0.15)]">
                                 <Mic size={64} strokeWidth={1.5} />
                             </div>
                         </div>
                         <div className="text-center space-y-2">
-                            <h2 className="text-2xl md:text-4xl font-bold text-zinc-100 tracking-tight">SYSTEM READY</h2>
-                            <p className="text-zinc-500 text-sm md:text-base uppercase tracking-widest">Awaiting Input...</p>
+                            <h2 className="text-2xl md:text-4xl font-bold text-surface-foreground tracking-tight">SYSTEM READY</h2>
+                            <p className="text-muted-foreground text-sm md:text-base uppercase tracking-widest">Awaiting Input...</p>
                         </div>
                     </motion.div>
                 )}
@@ -232,7 +238,7 @@ export const LoadTruck: React.FC = () => {
                         exit={{ opacity: 0, scale: 1.05 }}
                         className="flex flex-col items-center justify-center w-full h-full"
                     >
-                        <div className="relative w-full max-w-2xl aspect-square md:aspect-video flex flex-col items-center justify-center border-x border-white/5 bg-white/2">
+                                <div className="relative w-full max-w-2xl aspect-square md:aspect-video flex flex-col items-center justify-center border-x border-border/5 bg-surface/2">
                             
                             {/* Corner Brackets (The Cyberpunk Feel) */}
                             <div className={`absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 ${borderColor}`} />
@@ -253,9 +259,9 @@ export const LoadTruck: React.FC = () => {
                             </h1>
                             
                             {/* Address Subtext */}
-                            <div className="mt-8 px-6 py-3 bg-black/40 border border-white/10 rounded flex items-center gap-3">
-                                <div className={`w-2 h-2 rounded-full ${status === 'saved' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-                                <span className="text-lg md:text-2xl text-zinc-200 truncate max-w-[80vw]">
+                            <div className="mt-8 px-6 py-3 bg-surface-muted/40 border border-border/10 rounded flex items-center gap-3">
+                                <div className={`w-2 h-2 rounded-full ${status === 'saved' ? 'bg-success' : 'bg-warning animate-pulse'}`} />
+                                <span className="text-lg md:text-2xl text-surface-foreground truncate max-w-[80vw]">
                                     {prediction?.stop?.address_line1}
                                 </span>
                             </div>

@@ -10,40 +10,30 @@ const BottomNavLayout: React.FC = () => {
   // const { theme, toggleTheme } = useTheme(); // ✅ Removed
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Header Bar: Full-width bar */}
-      <header className="sticky top-0 z-40 w-full bg-background/95 backdrop-blur border-b border-border">
-        {/* Centered content */}
-        {/* ✅ Updated justify-center to center the title now */}
-        <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-center">
-          <NavLink to="/" className="font-bold text-lg tracking-tight">
+      <header
+        className="sticky top-0 z-40 w-full bg-background/95 backdrop-blur border-b border-border"
+        style={{ height: 'var(--header-height)' }}
+      >
+        <div className="max-w-md mx-auto px-4 flex items-center justify-center h-full">
+          <NavLink to="/" className="font-bold text-lg tracking-tight text-foreground">
             RuralMail Co‑Pilot
           </NavLink>
-          {/* ✅ Removed the theme toggle button */}
         </div>
       </header>
 
-      {/* Main Content Area: Will scroll */}
-      <main className="flex-1 overflow-y-auto">
-        {/* ✅ Adjusted padding:
-          pb-24 (96px) was for the main nav (72px).
-          The new action bar is ~80px.
-          Total space needed: 72px + 80px = 152px.
-          pb-40 (160px) gives us the clearance.
-        */}
-        <div className="max-w-md mx-auto px-4 py-6 pb-40">
-          <Outlet />
-        </div>
-      </main>
+      {/* Main Content Area: A flexible container that allows child routes to control their own layout and scrolling. */}
+      <main className="flex-1 min-h-0">
+        <Outlet />
+      </main> 
 
-      {/* ✅ NEW: Conditional Action Bar */}
-      {/* This renders *above* the main nav */}
-      {/* <PackagesActionBar /> */}
-
-      {/* Persistent Bottom Navigation: Full-width bar */}
-      <nav className="sticky bottom-0 z-40 w-full bg-surface/95 backdrop-blur border-t border-border">
-        {/* Centered content */}
-        <div className="max-w-md mx-auto p-3 flex justify-around">
+      {/* Persistent Bottom Navigation: fixed to viewport bottom so it doesn't depend on parent scroll context */}
+      <nav
+        className="fixed left-0 right-0 bottom-0 z-40 w-full bg-surface/95 backdrop-blur border-t border-border"
+        style={{ height: 'var(--bottom-nav-height)' }}
+      >
+        <div className="max-w-md mx-auto p-3 flex justify-around h-full items-center">
           <NavItem to="/" icon={Map} label="Map" />
           <NavItem to="/route-setup" icon={List} label="Route" />
           <NavItem to="/packages" icon={Mails} label="Mailbag" />

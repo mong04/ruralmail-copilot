@@ -1,21 +1,29 @@
-// src/hooks/useTheme.ts (New: Theme management hook)
-import { useState, useEffect } from 'react';
+// src/hooks/useTheme.ts (Refactored)
+import { useEffect } from 'react';
+import { useAppSelector } from '../store';
+
+type Theme = 'light' | 'dark' | 'cyberpunk' | undefined;
 
 export const useTheme = () => {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const theme: Theme = useAppSelector((state) => state.settings.theme);
 
   useEffect(() => {
-    const stored = localStorage.getItem('theme') as 'light' | 'dark' | null;
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setTheme(stored || (prefersDark ? 'dark' : 'light'));
-  }, []);
+    const root = document.documentElement;
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-    localStorage.setItem('theme', theme);
+    // Remove all theme-related classes and attributes
+    root.classList.remove('dark', 'light');
+    root.removeAttribute('data-theme');
+
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else if (theme === 'cyberpunk') {
+      root.setAttribute('data-theme', 'cyberpunk');
+      // Cyberpunk is a dark theme, so we also add the dark class
+      // for any components that might just be checking for .dark
+      root.classList.add('dark');
+    } else {
+      // Default to light theme
+      root.classList.add('light');
+    }
   }, [theme]);
-
-  const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
-
-  return { theme, toggleTheme };
 };

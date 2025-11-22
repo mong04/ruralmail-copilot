@@ -31,11 +31,11 @@ const LookAheadItemDisplay = ({ label, data }: { label: string; data: LookAheadI
     const Icon = iconMap[data.icon] || Sun;
     return (
         <div className="flex justify-between items-center text-sm">
-            <span className="text-gray-200">{label}:</span>
+            <span className="text-muted-foreground">{label}:</span>
             <div className="flex items-center gap-1">
-                <span className="text-white font-medium">{Math.round(data.temp)}°F</span>
-                {data.precip > 0 && <span className="text-gray-300">({data.precip}%)</span>}
-                <Icon className="w-4 h-4 text-white" />
+              <span className="text-surface-foreground font-medium">{Math.round(data.temp)}°F</span>
+              {data.precip > 0 && <span className="text-muted-foreground">({data.precip}%)</span>}
+              <Icon className="w-4 h-4 text-surface-foreground" />
             </div>
         </div>
     );
@@ -87,8 +87,8 @@ export const LookAheadWidget = ({ lookAheadData, status }: LookAheadWidgetProps)
   };
 
   return (
-    <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3 w-48">
-      <h3 className="text-white font-bold text-sm mb-2">Look-Ahead</h3>
+    <div className="bg-surface-muted/60 backdrop-blur-sm rounded-lg p-3 w-48">
+      <h3 className="text-surface-foreground font-bold text-sm mb-2">Look-Ahead</h3>
       {renderContent()}
     </div>
   );

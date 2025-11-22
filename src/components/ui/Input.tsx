@@ -6,13 +6,12 @@ export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = ({ c
     <input
       className={twMerge(
         // Base
-        'w-full px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
-        // Light Mode: Clean, subtle depth
-        'bg-white border border-gray-200 shadow-sm text-gray-900 placeholder:text-gray-400',
-        'focus:border-brand focus:ring-4 focus:ring-brand/10 outline-none',
-        // Dark Mode: Glassy, inner depth
-        'dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder:text-white/30',
-        'dark:focus:bg-black/40 dark:focus:border-brand/50 dark:focus:ring-brand/20',
+        'w-full px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200',
+        // Semantic Colors
+        'bg-surface-muted text-foreground border border-border',
+        'placeholder:text-muted-foreground',
+        // Focus State
+        'focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none',
         className
       )}
       {...props}

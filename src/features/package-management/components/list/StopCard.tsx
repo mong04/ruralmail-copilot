@@ -77,21 +77,21 @@ export const StopCard: React.FC<StopCardProps> = ({
 
              {/* CARGO CLUSTER */}
              <div className="flex items-center gap-2 flex-wrap">
-                {summary.small > 0 && (
-                   <Badge className="gap-1.5 bg-blue-500/10 text-blue-600 dark:text-blue-300 border-transparent px-2 py-0.5">
-                      <Mail size={12} /> {summary.small}
+                 {summary.small > 0 && (
+                   <Badge className="gap-1.5 badge-info border-transparent px-2 py-0.5">
+                     <Mail size={12} /> {summary.small}
                    </Badge>
-                )}
-                {summary.medium > 0 && (
-                   <Badge className="gap-1.5 bg-orange-500/10 text-orange-600 dark:text-orange-300 border-transparent px-2 py-0.5">
-                      <Box size={12} /> {summary.medium}
+                 )}
+                 {summary.medium > 0 && (
+                   <Badge className="gap-1.5 badge-warning border-transparent px-2 py-0.5">
+                     <Box size={12} /> {summary.medium}
                    </Badge>
-                )}
-                {summary.large > 0 && (
-                   <Badge className="gap-1.5 bg-red-500/10 text-red-600 dark:text-red-300 border-transparent px-2 py-0.5">
-                      <Home size={12} /> {summary.large}
+                 )}
+                 {summary.large > 0 && (
+                   <Badge className="gap-1.5 badge-danger border-transparent px-2 py-0.5">
+                     <Home size={12} /> {summary.large}
                    </Badge>
-                )}
+                 )}
                 {packages.length === 0 && <span className="text-xs text-muted">Empty stop</span>}
              </div>
           </div>
@@ -146,18 +146,18 @@ export const StopCard: React.FC<StopCardProps> = ({
                  ))}
                </AnimatePresence>
 
-               <div className="p-3 flex justify-center border-t border-border/30 bg-surface-muted/50">
+                 <div className="p-3 flex justify-center border-t border-border/30 bg-surface-muted/50">
                   <button 
-                      onClick={() => onAddAtStop({ 
-                          assignedStopId: stop?.id, 
-                          assignedStopNumber: stopIndex,
-                          assignedAddress: stop?.full_address 
-                      })}
-                      className="flex items-center gap-2 text-xs font-bold text-brand py-2 px-6 bg-brand/5 hover:bg-brand/15 rounded-full transition-all active:scale-95 border border-brand/10"
+                    onClick={() => onAddAtStop({ 
+                      assignedStopId: stop?.id, 
+                      assignedStopNumber: stopIndex,
+                      assignedAddress: stop?.full_address 
+                    })}
+                    className="flex items-center gap-2 text-xs font-bold btn-primary py-2 px-6 rounded-full transition-all active:scale-95 border border-brand/10"
                   >
-                      <span>+</span> Add Package
+                    <span>+</span> Add Package
                   </button>
-               </div>
+                 </div>
             </motion.div>
           )}
         </AnimatePresence>

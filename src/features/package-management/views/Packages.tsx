@@ -128,8 +128,7 @@ const Packages: React.FC = () => {
       </div>
 
       {/* 3. Scrollable Content */}
-      {/* Added pb-32 to ensure last item clears the FABs */}
-      <div className="flex-1 overflow-y-auto relative scroll-smooth pb-32">
+      <div className="flex-1 overflow-y-auto relative scroll-smooth">
         <div className={cn("w-full max-w-3xl mx-auto", isFormActive ? 'hidden' : 'block')}>
           <PackageList
             packages={filteredPackages}
@@ -145,12 +144,15 @@ const Packages: React.FC = () => {
       <Portal>
         <div className="pointer-events-none fixed inset-0 z-50 flex flex-col justify-end">
             
-            {/* Bottom Gradient Fade */}
-            <div className="absolute bottom-0 left-0 right-0 h-40 bg-linear-to-t from-background via-background/80 to-transparent z-0" />
+            {/* Bottom Gradient Fade - stop above the bottom nav so it doesn't darken the nav */}
+            <div
+              className="absolute left-0 right-0 h-40 bg-linear-to-t from-background via-background/80 to-transparent z-0"
+              style={{ bottom: 'calc(var(--bottom-nav-height) + 8px)' }}
+            />
 
             {/* FAB Cluster - Positioned absolutely above bottom nav */}
             {/* bottom-[88px] accounts for Nav Bar (approx 60-70px) + padding */}
-            <div className="relative z-10 pb-[88px] px-6 w-full max-w-md mx-auto">
+            <div className="relative z-10 fab-offset px-6 w-full max-w-md mx-auto">
                 <div className="flex items-end justify-center gap-8 pointer-events-auto">
                     
                     {/* Manual Entry */}
@@ -171,8 +173,8 @@ const Packages: React.FC = () => {
                         onClick={() => navigate('/load-truck')}
                         className="relative group -top-1"
                     >
-                        <div className="absolute inset-0 bg-brand/50 rounded-full blur-md opacity-40 group-hover:opacity-60 transition-opacity" />
-                        <div className="relative bg-brand text-brand-foreground w-16 h-16 rounded-full shadow-2xl shadow-brand/30 flex items-center justify-center transform transition-all active:scale-95 hover:scale-105 border-2 border-white/20">
+                        <div className="absolute inset-0 bg-accent-10 rounded-full blur-md opacity-40 group-hover:opacity-60 transition-opacity" />
+                        <div className="relative btn-primary shadow-2xl shadow-brand/30 text-brand-foreground w-16 h-16 rounded-full flex items-center justify-center transform transition-all active:scale-95 hover:scale-105 border-2 border-border/20">
                             <Truck size={32} className="-ml-0.5" />
                         </div>
                     </button>

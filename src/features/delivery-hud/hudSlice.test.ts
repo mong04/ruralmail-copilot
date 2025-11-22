@@ -19,7 +19,7 @@ import type { SettingsState } from '../../features/settings/settingsSlice';
 import { type NotificationState } from '../notification/notificationSlice';
 // Assuming simple types for these, adjust if incorrect
 interface RouteState { route: Stop[]; loading: boolean; error: string | null; }
-interface PackageState { packages: Package[]; loading: boolean; error: string | null; }
+interface PackageState { packages: Package[]; loading: boolean; error: string | null; loadingSession?: { isActive: boolean; startTime: string|null; endTime: string|null; count: number } }
 
 
 // --- Mock axios ---
@@ -78,7 +78,8 @@ const mockRouteInitialState: RouteState = {
 const mockPackagesInitialState: PackageState = { 
   packages: [], 
   loading: false, 
-  error: null 
+  error: null,
+  loadingSession: { isActive: false, startTime: null, endTime: null, count: 0 },
 };
 
 // This must match the initialState from settingsSlice.ts

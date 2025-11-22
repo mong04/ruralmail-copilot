@@ -73,6 +73,7 @@ test('renders default weather alert from hudSlice', async () => {
     packages: [{ id: 'pkg-1', assignedStopId: 'stop-1', delivered: false, size: 'medium' } as Package], 
     loading: false,
     error: null,
+    loadingSession: { isActive: false, startTime: null, endTime: null, count: 0 },
   };
 
   // Create the preloaded state using Partial<RootState>

@@ -15,7 +15,7 @@ export interface PackageState {
   packages: Package[];
   loading: boolean;
   error: string | null;
-  loadingSession: {
+  loadingSession?: {
     isActive: boolean;
     startTime: string | null;
     endTime: string | null;
@@ -136,11 +136,21 @@ const packageSlice = createSlice({
       };
     },
     endLoadingSession: (state) => {
-      state.loadingSession.isActive = false;
-      state.loadingSession.endTime = new Date().toISOString();
+        if (!state.loadingSession) {
+          state.loadingSession = {
+            isActive: false,
+            startTime: null,
+            endTime: new Date().toISOString(),
+            count: 0,
+          };
+        } else {
+          state.loadingSession.isActive = false;
+          state.loadingSession.endTime = new Date().toISOString();
+        }
     },
     // Update count when a package is added during load
     incrementLoadCount: (state) => {
+      if (!state.loadingSession) return;
       if (state.loadingSession.isActive) {
         state.loadingSession.count += 1;
       }

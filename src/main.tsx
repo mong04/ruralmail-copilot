@@ -10,6 +10,7 @@ import { Toaster } from 'sonner';
 import { loadRouteFromDB } from './features/route-setup/routeSlice';
 import { loadPackagesFromDB } from './features/package-management/store/packageSlice';
 import { loadSettingsFromDB } from './features/settings/settingsSlice';
+import applyTheme from './theme';
 import { loadHudFromDB } from './features/delivery-hud/hudSlice';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
@@ -21,6 +22,19 @@ function initApp() {
 }
 
 initApp();
+
+// Apply persisted theme once settings are loaded.
+const unsubscribeTheme = store.subscribe(() => {
+  const theme = store.getState().settings.theme as
+    | 'light'
+    | 'dark'
+    | 'cyberpunk'
+    | undefined;
+  if (theme !== undefined) {
+    applyTheme(theme);
+    unsubscribeTheme();
+  }
+});
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

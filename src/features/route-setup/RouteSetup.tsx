@@ -6,6 +6,7 @@ import { addStop, updateStop, removeStop, reorderStops, saveRouteToDB, geocodeSt
 import { type Stop } from '../../db';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import Portal from '../../components/ui/Portal';
 
 const RouteSetup: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -45,25 +46,49 @@ const RouteSetup: React.FC = () => {
   const onSave = () => dispatch(saveRouteToDB(route));
 
   return (
-    <Card className="p-6 space-y-6">
-      <h2 className="text-xl font-semibold">Setup Route</h2>
+    <div className="flex flex-col h-full">
+      {/* Sticky Header: Full-width with centered content */}
+      <div className="flex-none z-10 bg-background/95 backdrop-blur border-b border-border px-6 pt-6 pb-4">
+        <div className="flex items-center justify-between max-w-2xl mx-auto">
+          <h2 className="text-3xl font-bold tracking-tight text-foreground">Route Setup</h2>
+        </div>
+      </div>
 
-      <AddressForm
-        initialData={editingIndex !== null ? route[editingIndex] : undefined}
-        defaultLocation={settings}
-        onSubmit={handleSubmit}
-        onCancel={() => setEditingIndex(null)}
-      />
-
-      <AddressList addresses={route} onReorder={onReorder} onEdit={onEdit} onRemove={onRemove} />
+      {/* Scrollable Content Area */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="px-6 py-6 space-y-8 max-w-2xl mx-auto w-full pb-40">
+        <Card className="p-6">
+          <AddressForm
+            initialData={editingIndex !== null ? route[editingIndex] : undefined}
+            defaultLocation={settings}
+            onSubmit={handleSubmit}
+            onCancel={() => setEditingIndex(null)}
+            />
+        </Card>
+        <Card>
+          <AddressList addresses={route} onReorder={onReorder} onEdit={onEdit} onRemove={onRemove} />
+        </Card>
+        </div>
+      </div>
 
       {route.length > 0 && (
-        <div className="flex justify-end gap-3">
-          <Button variant="surface" onClick={onSave} aria-label="Save Route">Save Route</Button>
-          <Button variant="primary" aria-label="Confirm Route">Confirm Route</Button>
-        </div>
+        <Portal>
+          <div className="pointer-events-none fixed inset-0 z-50 flex flex-col justify-end">
+            <div
+              className="absolute left-0 right-0 h-40 bg-linear-to-t from-background via-background/80 to-transparent z-0"
+              style={{ bottom: 'calc(var(--bottom-nav-height) + 8px)' }}
+            />
+            <div className="relative z-10 fab-offset px-6 w-full max-w-md mx-auto">
+              <div className="flex items-end justify-end gap-4 pointer-events-auto">
+                <Button onClick={onSave} size="lg" className="w-full btn-glow">
+                  Save Route
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Portal>
       )}
-    </Card>
+    </div>
   );
 };
 

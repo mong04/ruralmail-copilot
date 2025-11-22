@@ -6,8 +6,8 @@ import { List, Mails, Settings } from 'lucide-react';
 const Dashboard: React.FC = () => {
   return (
     <div className="grid gap-6">
-      <h2 className="text-2xl font-bold text-center tracking-tight">Dashboard</h2>
-      <p className="text-center text-muted -mt-4">
+      <h2 className="text-2xl font-bold text-center tracking-tight text-foreground">Dashboard</h2>
+      <p className="text-center text-muted-foreground -mt-4">
         Welcome! Start your delivery or manage your route.
       </p>
 

@@ -42,7 +42,7 @@ export type SettingsData = {
   defaultZip?: string;
   defaultRouteName?: string; // e.g., "Route 7"
   preferredNavApp?: 'in-app' | 'google' | 'apple' | 'waze';
-  theme?: 'light' | 'dark'; // ✅ ADDED
+  theme?: 'light' | 'dark' | 'cyberpunk'; // ✅ ADDED
 };
 
 export type Package = {

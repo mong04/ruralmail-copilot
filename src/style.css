@@ -21,8 +21,15 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-muted: var(--muted);
-  
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-danger-foreground: var(--danger-foreground);
+
+  /* Radii */
   --radius-xl: 0.75rem;
+  --radius-lg: 0.5rem;
+  --radius-md: 0.375rem;
 }
 
 /* --- THEME DEFINITIONS --- */
@@ -40,8 +47,58 @@
   --success: hsl(142 76% 36%);
   --warning: hsl(38 92% 50%);
   --danger: hsl(0 84% 60%);
+  --danger-foreground: hsl(210 40% 98%);
   --muted: hsl(215 16% 47%);
+  --muted-foreground: hsl(215 16% 57%);
+  --accent: hsl(210 20% 96%);
+  --accent-foreground: hsl(222 20% 14%);
+
+  --radius-xl: 0.75rem;
+  --radius-lg: 0.5rem;
+  --radius-md: 0.25rem;
 }
+
+/* Bottom nav sizing token so layouts can adapt. Includes device safe-area inset when available. */
+:root {
+  --bottom-nav-height: calc(72px + env(safe-area-inset-bottom, 0px)); /* default nav height + safe-area */
+  --bottom-nav-height-base: 72px;
+}
+
+/* Header sizing token for consistent layout calculations (accounts for device notch/safe-area) */
+:root {
+  --header-height: calc(64px + env(safe-area-inset-top, 0px));
+}
+
+/* Utility to expose header height as a class (useful for JS inline fallback) */
+.h-header { height: var(--header-height); }
+
+/* Utility to allow a section intentionally to overlap the nav (use sparingly) */
+.overlap-bottom-nav { margin-bottom: calc(var(--bottom-nav-height) * -1); }
+
+/* Utility: apply bottom padding equal to bottom nav height */
+.pb-bottom-nav { padding-bottom: calc(var(--bottom-nav-height) + 8px); }
+
+/* FAB offset to position floating action buttons above the bottom nav */
+.fab-offset { padding-bottom: calc(var(--bottom-nav-height) + 16px); }
+
+/* Custom glow effect for floating action buttons */
+.btn-glow {
+  box-shadow: 0 0 10px color-mix(in srgb, var(--brand) 15%, transparent),
+              0 0 20px color-mix(in srgb, var(--brand) 10%, transparent),
+              0 0 40px color-mix(in srgb, var(--brand) 5%, transparent);
+}
+
+/* Utility: full-viewport containers that stop above the persistent bottom nav
+   Use this for route-level screens or overlays that should not be covered by the nav. */
+.viewport-above-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: var(--bottom-nav-height);
+  display: block;
+}
+
 
 .dark {
   --background: hsl(222 47% 11%);
@@ -55,23 +112,108 @@
   --success: hsl(142 60% 55%);
   --warning: hsl(35 85% 62%);
   --danger: hsl(0 72% 51%);
+  --danger-foreground: hsl(0 0% 100%);
   --muted: hsl(220 10% 70%);
+  --muted-foreground: hsl(220 10% 80%);
+  --accent: hsl(217 33% 20%);
+  --accent-foreground: hsl(210 40% 98%);
 }
 
-/* 2. CYBERPUNK THEME (Neon/Zinc) - Activated via data-theme="cyberpunk" */
+/* 2. CYBERPUNK THEME (Neon/Zinc) */
 [data-theme="cyberpunk"] {
-  --background: #09090b;
-  --foreground: #e4e4e7;
-  --surface: #18181b;
-  --surface-foreground: #e4e4e7;
-  --surface-muted: #27272a;
-  --brand: #06b6d4; /* Cyan */
-  --brand-foreground: #000000;
-  --border: #3f3f46;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #f43f5e;
+  /* Core Palette Overrides */
+  --background: hsl(240 10% 3.9%); /* #09090b (Zinc 950) */
+  --foreground: hsl(0 0% 98%);
+  
+  --surface: hsl(240 5.9% 10%); /* #18181b */
+  --surface-foreground: hsl(0 0% 98%);
+  --surface-muted: hsl(240 3.7% 15.9%);
+  
+  --brand: hsl(190 100% 50%); /* Cyan Neon */
+  --brand-foreground: hsl(240 10% 3.9%); /* Black text on Cyan */
+  
+  --border: hsl(240 3.7% 15.9%);
+  
+  --success: hsl(142 70% 50%); /* Neon Green */
+  --warning: hsl(45 93% 47%); /* Neon Amber */
+  --danger: hsl(0 84% 60%);   /* Neon Red */
+  --danger-foreground: hsl(240 10% 3.9%);
+
+  --muted: hsl(240 5% 65%);
+  --muted-foreground: hsl(240 5% 75%);
+  --accent: hsl(190 100% 20%); /* Darker cyan */
+  --accent-foreground: hsl(190 100% 50%); /* Neon Cyan */
+  
+  /* Cyberpunk Geometry: Sharper corners */
+  --radius-xl: 0.25rem; 
+  --radius-lg: 0.125rem;
+  --radius-md: 0rem;
 }
 
-/* Utility to lock body scroll */
-html, body, #root { height: 100%; overflow: hidden; }
+/* Ensure root elements fill the viewport */
+html, body, #root { height: 100%; }
+
+/* --- DERIVED COLOR VARIANTS (10% tints) --- */
+:root {
+  /* Use color-mix to create subtle background tints for badges and chips */
+  --brand-10: color-mix(in srgb, var(--brand) 8%, transparent);
+  --danger-10: color-mix(in srgb, var(--danger) 8%, transparent);
+  --warning-10: color-mix(in srgb, var(--warning) 8%, transparent);
+  --success-10: color-mix(in srgb, var(--success) 8%, transparent);
+}
+
+/* --- Semantic utility classes (theme-aware) --- */
+.btn-primary { background-color: var(--brand); color: var(--brand-foreground); }
+.btn-primary:hover { filter:brightness(0.95); }
+
+.btn-success { background-color: var(--success); color: var(--color-foreground); }
+.btn-success:hover { filter:brightness(0.95); }
+
+.btn-danger { background-color: var(--danger); color: var(--danger-foreground); }
+.btn-danger:hover { filter:brightness(0.95); }
+
+.badge-info { background-color: var(--brand-10); color: var(--brand); }
+.badge-warning { background-color: var(--warning-10); color: var(--warning); }
+.badge-danger { background-color: var(--danger-10); color: var(--danger); }
+
+.pkg-small { color: var(--brand); background-color: var(--brand-10); }
+.pkg-medium { color: var(--warning); background-color: var(--warning-10); }
+.pkg-large { color: var(--danger); background-color: var(--danger-10); }
+.pkg-default { color: var(--muted); background-color: color-mix(in srgb, var(--muted) 8%, transparent); }
+
+/* Overlay and surface helpers (use theme tokens) */
+.bg-overlay { background-color: var(--surface); }
+.text-surface-foreground { color: var(--surface-foreground); }
+
+/* Accent / status utilities */
+.text-accent { color: var(--accent); }
+.text-accent-foreground { color: var(--accent-foreground); }
+.bg-accent-10 { background-color: color-mix(in srgb, var(--accent) 8%, transparent); }
+.border-accent-30 { border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.text-warning { color: var(--warning); }
+.bg-warning-10 { background-color: color-mix(in srgb, var(--warning) 8%, transparent); }
+.border-warning-30 { border-color: color-mix(in srgb, var(--warning) 30%, transparent); }
+
+.text-success { color: var(--success); }
+.bg-success-10 { background-color: color-mix(in srgb, var(--success) 8%, transparent); }
+.border-success-30 { border-color: color-mix(in srgb, var(--success) 30%, transparent); }
+
+.text-danger { color: var(--danger); }
+.bg-danger-10 { background-color: color-mix(in srgb, var(--danger) 8%, transparent); }
+.border-danger { border-color: var(--danger); }
+
+/* Icon accent and glow helpers */
+.icon-accent { color: var(--accent); }
+.icon-accent-weak { color: color-mix(in srgb, var(--accent) 60%, transparent); }
+/* .glow-accent { box-shadow: 0 8px 30px color-mix(in srgb, var(--accent) 25%, transparent); } */
+
+/* Small button ghost variant used in LoadTruck header */
+.btn-ghost-accent {
+  color: var(--muted);
+  background: transparent;
+}
+.btn-ghost-accent:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}

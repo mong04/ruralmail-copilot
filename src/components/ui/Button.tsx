@@ -10,8 +10,8 @@ const button = cva(
     variants: {
       variant: {
         primary: [
-          'bg-brand text-brand-foreground shadow-lg shadow-brand/20',
-          'hover:bg-brand/90 hover:shadow-brand/40 hover:shadow-xl',
+          'bg-brand text-brand-foreground',
+          'hover:bg-brand/90',
           'border border-transparent', 
         ],
         surface: [

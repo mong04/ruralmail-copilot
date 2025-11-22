@@ -17,10 +17,10 @@ interface PackageListItemProps {
 export const PackageListItem: React.FC<PackageListItemProps> = ({ pkg, onEdit, onDelete, isLast }) => {
   
   const SizeConfig = {
-    small: { icon: Mail, label: "Small / Envelope", color: "text-blue-500 bg-blue-500/10" },
-    medium: { icon: Box, label: "Medium Box", color: "text-orange-500 bg-orange-500/10" },
-    large: { icon: Home, label: "Large Parcel", color: "text-red-500 bg-red-500/10" }
-  }[pkg.size] || { icon: Box, label: "Package", color: "text-gray-500 bg-gray-500/10" };
+    small: { icon: Mail, label: "Small / Envelope", color: "pkg-small" },
+    medium: { icon: Box, label: "Medium Box", color: "pkg-medium" },
+    large: { icon: Home, label: "Large Parcel", color: "pkg-large" }
+  }[pkg.size] || { icon: Box, label: "Package", color: "pkg-default" };
 
   const Icon = SizeConfig.icon;
   const primaryText = pkg.notes || SizeConfig.label;

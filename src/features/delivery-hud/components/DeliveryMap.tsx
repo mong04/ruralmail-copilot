@@ -368,7 +368,7 @@ const DeliveryMap = forwardRef<{ recenterOnCurrent: () => void }, Props>((props,
         type: 'line',
         source: id,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': '#3887be', 'line-width': 8, 'line-opacity': 0.9 },
+        paint: { 'line-color': 'var(--color-brand)', 'line-width': 8, 'line-opacity': 0.9 },
       });
     }
   }, [navigationData]);

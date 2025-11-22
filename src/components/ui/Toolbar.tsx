@@ -1,3 +1,4 @@
+// src/components/ui/Toolbar.tsx
 import React from 'react';
 import { twMerge } from 'tailwind-merge';
 
@@ -8,10 +9,10 @@ export const Toolbar: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ classN
         // Floating Glass Effect
         'flex items-center gap-1 p-1.5',
         // The Shape & Look
-        'rounded-full border border-white/10 shadow-2xl shadow-black/20',
-        'bg-zinc-900/80 backdrop-blur-xl backdrop-saturate-150',
-        // Light mode override 
-        'light:bg-white/80 light:border-gray-200',
+        // FIX: Use semantic border/50 instead of white/10
+        'rounded-full border border-border/50 shadow-2xl shadow-black/20',
+        // FIX: Use bg-surface/80 instead of hardcoded zinc/white overrides
+        'bg-surface/80 backdrop-blur-xl backdrop-saturate-150',
         className
       )}
       {...props}

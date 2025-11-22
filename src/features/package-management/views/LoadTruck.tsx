@@ -1,3 +1,4 @@
+// src/features/package-management/views/LoadTruck.tsx
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
@@ -19,7 +20,7 @@ import { useSound } from '../../../hooks/useSound';
 import { RouteBrain, type Prediction } from '../utils/RouteBrain';
 import { type Package } from '../../../db';
 import { Button } from '../../../components/ui/Button';
-// import { cn } from '../../../lib/utils';
+// import { cn } from '../../../lib/utils'; // Not needed here
 
 export const LoadTruck: React.FC = () => {
   const navigate = useNavigate();
@@ -166,35 +167,36 @@ export const LoadTruck: React.FC = () => {
     ? route.findIndex(r => r.id === prediction?.stop?.id) + 1 
     : '?';
 
-  // Theme Colors (Cyberpunk Palette)
-    const neonColor =
-        status === 'matched' || status === 'saved' ? 'text-accent' :
-        status === 'unknown' ? 'text-warning' :
-        'text-muted';
-
-    const borderColor =
-        status === 'matched' || status === 'saved' ? 'border-accent-30' :
-        status === 'unknown' ? 'border-warning-30' :
-        'border-border';
+  // FIX: Use theme-aware utility classes instead of inline color logic
+  const cornerBorderClass = 
+    status === 'matched' || status === 'saved' ? 'border-success' : 
+    status === 'unknown' ? 'border-warning' : 
+    'border-border';
 
     return (
            // 1. LOCK VIEWPORT: limit bottom to the persistent nav height so footer and content are visible above it
-           <div className="fixed left-0 right-0 top-0 bg-surface text-surface-foreground flex flex-col font-mono overflow-hidden selection:bg-cyan-500/30"
+           <div className="fixed left-0 right-0 top-0 bg-background text-surface-foreground flex flex-col font-mono overflow-hidden selection:bg-brand/30"
                style={{ bottom: 'var(--bottom-nav-height)' }}>
         
         {/* Background Grid (Subtle Industrial Texture) */}
-        <div className="absolute inset-0 z-0 opacity-10 pointer-events-none" 
-             style={{ backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)', backgroundSize: '40px 40px' }} 
+        {/* FIX: Use white/black for grid lines, which works for all themes */}
+        <div className="absolute inset-0 z-0 opacity-10 pointer-events-none dark:opacity-[0.03] light:opacity-[0.05]" 
+             style={{ 
+                backgroundImage: 'linear-gradient(var(--color-border) 1px, transparent 1px), linear-gradient(90deg, var(--color-border) 1px, transparent 1px)', 
+                backgroundSize: '40px 40px' 
+             }} 
         />
 
         {/* TOP BAR: Technical Header */}
         <header className="flex-none flex justify-between items-center p-4 z-20 border-b border-border/10 bg-surface/80 backdrop-blur-sm">
+            {/* FIX: Use the semantic 'btn-ghost-accent' class */}
             <Button variant="ghost" onClick={() => navigate(-1)} className="btn-ghost-accent">
                 <ArrowLeft className="mr-2 w-4 h-4" /> EXIT_MODE
             </Button>
             <div className="flex items-center gap-4">
                 <div className="flex flex-col items-end">
                     <span className="text-[10px] uppercase tracking-[0.2em] text-muted">Session_Load</span>
+                    {/* FIX: Use text-accent for the neon look */}
                     <span className="text-xl font-bold text-accent tabular-nums leading-none">
                         {loadingSession.count.toString().padStart(3, '0')}
                     </span>
@@ -217,8 +219,9 @@ export const LoadTruck: React.FC = () => {
                     >
                         {/* Breathing Mic Ring */}
                         <div className="relative">
+                            {/* FIX: Use theme-aware utility classes */}
                             <div className="absolute inset-0 bg-accent-10 rounded-full animate-ping duration-3000" />
-                            <div className="relative bg-surface-muted border-2 border-accent-30 icon-accent p-12 rounded-full shadow-[0_0_40px_rgba(34,211,238,0.15)]">
+                            <div className="relative bg-surface-muted border-2 border-border icon-accent p-12 rounded-full shadow-[0_0_40px_rgba(var(--brand-rgb),0.15)]">
                                 <Mic size={64} strokeWidth={1.5} />
                             </div>
                         </div>
@@ -241,18 +244,19 @@ export const LoadTruck: React.FC = () => {
                                 <div className="relative w-full max-w-2xl aspect-square md:aspect-video flex flex-col items-center justify-center border-x border-border/5 bg-surface/2">
                             
                             {/* Corner Brackets (The Cyberpunk Feel) */}
-                            <div className={`absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 ${borderColor}`} />
-                            <div className={`absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 ${borderColor}`} />
-                            <div className={`absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 ${borderColor}`} />
-                            <div className={`absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 ${borderColor}`} />
+                            <div className={`absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 ${cornerBorderClass}`} />
+                            <div className={`absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 ${cornerBorderClass}`} />
+                            <div className={`absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 ${cornerBorderClass}`} />
+                            <div className={`absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 ${cornerBorderClass}`} />
 
-                            <span className={`mb-4 text-sm font-bold uppercase tracking-[0.3em] ${neonColor}`}>
+                            {/* FIX: Use semantic success/accent classes */}
+                            <span className={`mb-4 text-sm font-bold uppercase tracking-[0.3em] ${status === 'matched' ? 'text-accent' : 'text-success'}`}>
                                 Stop_Sequence
                             </span>
                             
                             {/* THE BIG NUMBER: Responsive Clamping */}
                             <h1 
-                                className={`font-black leading-none tracking-tighter ${neonColor} drop-shadow-[0_0_20px_rgba(34,211,238,0.25)]`}
+                                className={`font-black leading-none tracking-tighter ${status === 'matched' ? 'text-accent' : 'text-success'} drop-shadow-[0_0_20px_rgba(34,211,238,0.25)]`}
                                 style={{ fontSize: 'clamp(8rem, 30vw, 16rem)' }} 
                             >
                                 {stopNumber}
@@ -270,7 +274,7 @@ export const LoadTruck: React.FC = () => {
                             {status === 'saved' && (
                                 <motion.div 
                                     initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                                    className="absolute bottom-8 flex items-center gap-2 text-emerald-400 font-bold text-lg uppercase tracking-widest"
+                                    className="absolute bottom-8 flex items-center gap-2 text-success font-bold text-lg uppercase tracking-widest"
                                 >
                                     <CheckCircle2 size={24} /> Confirmed
                                 </motion.div>
@@ -286,11 +290,12 @@ export const LoadTruck: React.FC = () => {
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                         className="flex flex-col items-center justify-center w-full"
                     >
-                        <div className="relative p-10 border-2 border-amber-500/50 rounded-full bg-amber-500/5 animate-pulse">
-                            <AlertTriangle size={80} className="text-amber-500" />
+                        {/* FIX: Use semantic warning classes */}
+                        <div className="relative p-10 border-2 border-warning/50 rounded-full bg-warning-10 animate-pulse">
+                            <AlertTriangle size={80} className="text-warning" />
                         </div>
-                        <h2 className="mt-8 text-4xl font-bold text-amber-500 uppercase tracking-widest">No Match</h2>
-                        <p className="mt-2 text-zinc-400 font-mono">"{transcript}"</p>
+                        <h2 className="mt-8 text-4xl font-bold text-warning uppercase tracking-widest">No Match</h2>
+                        <p className="mt-2 text-muted-foreground font-mono">"{transcript}"</p>
                     </motion.div>
                 )}
 
@@ -298,15 +303,15 @@ export const LoadTruck: React.FC = () => {
         </main>
 
         {/* BOTTOM BAR: History Stream */}
-        <footer className="flex-none h-20 w-full border-t border-white/10 bg-zinc-950/80 backdrop-blur flex items-center px-4 z-20">
-            <div className="shrink-0 text-[10px] text-zinc-600 font-bold uppercase tracking-widest rotate-180 py-2 px-1 border-r border-white/5 mr-4" style={{ writingMode: 'vertical-rl' }}>
+        <footer className="flex-none h-20 w-full border-t border-border/10 bg-surface/80 backdrop-blur flex items-center px-4 z-20">
+            <div className="shrink-0 text-[10px] text-muted-foreground font-bold uppercase tracking-widest rotate-180 py-2 px-1 border-r border-border/5 mr-4" style={{ writingMode: 'vertical-rl' }}>
                 Log_Stream
             </div>
             <div className="flex-1 flex gap-3 overflow-x-auto no-scrollbar mask-linear-fade">
                 {history.map((item, i) => (
-                    <div key={i} className="shrink-0 px-3 py-2 bg-white/5 rounded border border-white/5 flex items-center gap-3 min-w-[140px]">
-                        <span className="text-xs font-bold text-cyan-600">0{i+1}</span>
-                        <span className="text-sm font-medium text-zinc-300 truncate">{item}</span>
+                    <div key={i} className="shrink-0 px-3 py-2 bg-surface-muted/10 rounded border border-border/5 flex items-center gap-3 min-w-[140px]">
+                        <span className="text-xs font-bold text-accent">0{i+1}</span>
+                        <span className="text-sm font-medium text-surface-foreground truncate">{item}</span>
                     </div>
                 ))}
             </div>

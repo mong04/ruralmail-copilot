@@ -27,7 +27,8 @@ import applyTheme from '../../theme';
 const SettingRow: React.FC<React.PropsWithChildren<{ 
   title: string; 
   icon: React.ElementType;
-  color?: string; // 'blue', 'orange', etc.
+  // FIX: Allow full Tailwind color classes for the icon container.
+  color?: string; 
 }>> = ({
   title,
   icon: Icon,
@@ -36,6 +37,7 @@ const SettingRow: React.FC<React.PropsWithChildren<{
 }) => (
   <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3 border-b border-border/40 last:border-0 hover:bg-surface-muted/30 transition-colors">
     <div className="flex items-center gap-3">
+      {/* FIX: Use the 'color' prop directly in className for the icon */}
       <div className={`p-2 rounded-lg bg-surface-muted/50 ${color}`}>
          <Icon className="w-5 h-5" />
       </div>
@@ -279,7 +281,7 @@ const Settings: React.FC = () => {
             </div>
           </div>
         </div>
-      </Portal>
+        </Portal>
     </div>
   );
 };

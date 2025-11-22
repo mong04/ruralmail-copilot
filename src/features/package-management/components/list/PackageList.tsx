@@ -65,9 +65,9 @@ const PackageList: React.FC<PackageListProps> = ({
       </AnimatePresence>
 
       {packages.length === 0 && (
-        <div className="flex flex-col items-center justify-center pt-32 opacity-50">
-            <div className="w-20 h-20 bg-surface-muted rounded-full flex items-center justify-center mb-4">
-                <Box size={32} className="text-muted-foreground" />
+        <div className="flex flex-col items-center justify-center pt-32 text-muted-foreground">
+            <div className="w-20 h-20 bg-surface-muted rounded-full flex items-center justify-center mb-4 border border-border/50">
+                <Box size={32} className="text-muted" />
             </div>
             <p className="text-lg font-medium">Ready to load</p>
         </div>

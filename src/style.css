@@ -172,23 +172,35 @@
 }
 
 /* 2. Scanline Animation */
+CSS/* Scanlines */
 .cyberpunk-scanlines {
-  background: linear-gradient(
-    to bottom,
-    rgba(255,255,255,0),
-    rgba(255,255,255,0) 50%,
-    rgba(0,0,0,0.2) 50%,
-    rgba(0,0,0,0.2)
-  );
+  background: linear-gradient(transparent 50%, rgba(0,240,255,0.03) 50%);
   background-size: 100% 4px;
-  animation: scanline 0.3s linear infinite;
-  pointer-events: none;
+  animation: scanlines 8s linear infinite;
 }
 
-@keyframes scanline {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(4px); }
+
+/* VHS jitter */
+.cyberpunk-vhs-jitter {
+  background: linear-gradient(90deg, transparent 98%, rgba(0,240,255,0.05) 100%);
+  animation: vhs 0.1s infinite;
 }
+
+/* Glitch transition overlay */
+.cyberpunk-horizontal-glitch {
+  background: linear-gradient(90deg, transparent 48%, rgba(0,240,255,0.15) 50%, transparent 52%);
+  animation: glitch 0.3s infinite;
+}
+
+/* Sparks */
+.cyberpunk-spark {
+  @apply absolute w-2 h-2 bg-cyan-400 rounded-full blur-sm;
+  box-shadow: 0 0 10px #00f0ff;
+}
+
+@keyframes scanlines { 0% { transform: translateY(0); } 100% { transform: translateY(4px); } }
+@keyframes vhs { 0%,100% { transform: translateX(0); } 50% { transform: translateX(2px); } }
+@keyframes glitch { 0%,100% { clip-path: polygon(0 0,100% 0,100% 100%,0 100%); } 50% { clip-path: polygon(0 45%,100% 45%,100% 55%,0 55%); } }
 
 /* 3. Grid Overlay for Map */
 .cyberpunk-grid-overlay {
@@ -267,4 +279,43 @@ html, body, #root { height: 100%; }
 .btn-ghost-accent:hover {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+/* ────────────────────────────── */
+/* CYBERPUNK THEME — 100% SEMANTIC */
+/* ────────────────────────────── */
+
+.theme-cyberpunk {
+  /* Deep void background */
+  --background: #0a0014;
+  
+  /* Glass panels become ultra-dark with cyan tint */
+  --surface: rgba(15, 0, 35, 0.4);
+  --surface-muted: rgba(20, 0, 40, 0.3);
+  
+  /* Neon cyan brand */
+  --brand: #00ffff;
+  --brand-foreground: #000;
+  
+  /* Borders glow cyan */
+  --border: rgba(0, 255, 255, 0.3);
+  
+  /* Text becomes bright for contrast */
+  --foreground: #e0faff;
+  --muted-foreground: #88c0d0;
+}
+
+/* Active nav item neon glow — uses semantic --brand */
+.theme-cyberpunk .drop-shadow-glow {
+  filter: drop-shadow(0 0 16px var(--brand)) 
+          drop-shadow(0 0 32px var(--brand));
+}
+
+/* Ensure backdrop-blur works over void */
+.theme-cyberpunk header,
+.theme-cyberpunk nav {
+  background: color-mix(in srgb, var(--surface) 90%, transparent) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-color: var(--border) !important;
 }

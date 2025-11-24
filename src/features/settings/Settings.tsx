@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { saveSettingsToDB } from './settingsSlice';
+import { saveSettingsToDB, toggleRichTheming } from './settingsSlice';
 import { clearRoute, loadRoute, saveRoute, type RouteData } from '../../db';
 import { clearPackagesFromDB } from '../package-management/store/packageSlice';
 import { toast } from 'sonner';
@@ -18,7 +18,8 @@ import {
   Map,
   Palette,
   FileText,
-  AlertTriangle
+  AlertTriangle,
+  Zap
 } from 'lucide-react';
 import Portal from '../../components/ui/Portal';
 import applyTheme from '../../theme';
@@ -54,7 +55,9 @@ const Settings: React.FC = () => {
   const settings = useAppSelector((state) => state.settings);
   // const { theme } = settings;
   const [form, setForm] = useState<SettingsData>(settings);
-
+  const richThemingEnabled = useAppSelector(
+    (state) => state.settings.richThemingEnabled ?? true
+  );
   useEffect(() => {
     setForm(settings);
   }, [settings]);
@@ -67,9 +70,14 @@ const Settings: React.FC = () => {
   );
 
   const handleSave = useCallback(() => {
-    dispatch(saveSettingsToDB(form));
+    dispatch(
+      saveSettingsToDB({
+        ...form,
+        richThemingEnabled,           // ← ensures it gets saved
+      })
+    );
     toast.success('Settings saved!');
-  }, [dispatch, form]);
+  }, [dispatch, form, richThemingEnabled]);
 
   // --- Data Handlers (Unchanged Logic, just checking types) ---
   const handleExport = async () => {
@@ -230,7 +238,20 @@ const Settings: React.FC = () => {
                   <option value="dark">🌙 Dark</option>
                   <option value="cyberpunk">🤖 Cyberpunk</option>
               </Select>
-          </SettingRow>
+            </SettingRow>
+            <SettingRow title="Rich Theming" icon={Zap} color="text-brand">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={richThemingEnabled}
+                  onChange={(e) => dispatch(toggleRichTheming(e.target.checked))}
+                  className="w-5 h-5 rounded border-border text-brand focus:ring-brand"
+                />
+                <span className="text-sm">
+                  {richThemingEnabled ? 'Rich effects on' : 'Rich effects off'}
+                </span>
+              </label>
+            </SettingRow>
           </Card>
         </div>
 

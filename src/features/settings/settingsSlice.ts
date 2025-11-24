@@ -1,10 +1,11 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+// src/features/settings/settingsSlice.ts
+
+import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit';
 import { loadSettings, saveSettings, type SettingsData } from '../../db';
 
-// ✅ The state now fully mirrors the DB type
 export interface SettingsState extends SettingsData {
   loading: boolean;
-  lastSaved: string | null; // ✅ Add lastSaved for peace of mind
+  lastSaved: string | null;
 }
 
 const initialState: SettingsState = {
@@ -15,21 +16,14 @@ const initialState: SettingsState = {
   defaultZip: '',
   defaultRouteName: '',
   preferredNavApp: 'in-app',
+  theme: 'light',
+  richThemingEnabled: true, // ← default on
 };
 
-/**
- * Async thunk to load settings from DB.
- * @returns {Promise<SettingsData>} Loaded settings.
- */
 export const loadSettingsFromDB = createAsyncThunk('settings/load', async () => {
   return await loadSettings();
 });
 
-/**
- * Async thunk to save settings to DB.
- * @param {SettingsData} settings - Settings to save.
- * @returns {Promise<SettingsData>} Saved settings.
- */
 export const saveSettingsToDB = createAsyncThunk(
   'settings/save',
   async (settings: SettingsData) => {
@@ -41,11 +35,15 @@ export const saveSettingsToDB = createAsyncThunk(
 const settingsSlice = createSlice({
   name: 'settings',
   initialState,
-  reducers: {},
+  reducers: {
+    // ← ADD THIS ACTION
+    toggleRichTheming(state, action: PayloadAction<boolean>) {
+      state.richThemingEnabled = action.payload;
+    },
+  },
   extraReducers: (builder) => {
     builder
       .addCase(loadSettingsFromDB.fulfilled, (state, action) => {
-        // ✅ Merge saved settings into the initial state
         Object.assign(state, action.payload);
         state.loading = false;
       })
@@ -56,11 +54,13 @@ const settingsSlice = createSlice({
         state.loading = false;
       })
       .addCase(saveSettingsToDB.fulfilled, (state, action) => {
-        // ✅ Merge saved settings into the current state
         Object.assign(state, action.payload);
-        state.lastSaved = new Date().toISOString(); // ✅ Update lastSaved
+        state.lastSaved = new Date().toISOString();
       });
   },
 });
+
+// ← EXPORT THE ACTION
+export const { toggleRichTheming } = settingsSlice.actions;
 
 export default settingsSlice.reducer;

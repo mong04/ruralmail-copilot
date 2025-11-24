@@ -1,4 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
+import type { ThemeId } from '../config/themeRegistry';
 
 // Define schema for TypeScript safety (per idb docs: https://github.com/jakearchibald/idb)
 interface RuralMailDB extends DBSchema {
@@ -42,7 +43,8 @@ export type SettingsData = {
   defaultZip?: string;
   defaultRouteName?: string; // e.g., "Route 7"
   preferredNavApp?: 'in-app' | 'google' | 'apple' | 'waze';
-  theme?: 'light' | 'dark' | 'cyberpunk'; // ✅ ADDED
+  theme?: ThemeId; // ✅ ADDED
+  richThemingEnabled?: boolean;
 };
 
 export type Package = {

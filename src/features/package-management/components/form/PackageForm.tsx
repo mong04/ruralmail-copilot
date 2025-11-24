@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { type AppDispatch, type RootState } from '../../../../store';
-import { addPackage, updatePackage } from '../../store/packageSlice';
+import { type AppDispatch, type RootState } from '../../../../store'; // Relative Path
+import { addPackage, updatePackage } from '../../store/packageSlice'; // Relative Path
 import { toast } from 'sonner';
-import { type Package } from '../../../../db';
+import { type Package } from '../../../../db'; // Relative Path
 import { motion, AnimatePresence, type PanInfo, useDragControls } from 'framer-motion';
 import AddressInput, { type AddressMatch } from './AddressInput';
 import TrackingInput from './TrackingInput';
@@ -116,14 +116,17 @@ const PackageForm: React.FC<PackageFormProps> = ({
     <AnimatePresence>
       {show && (
         <>
+          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onCancel}
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            // UPDATED: z-[60] to sit above the FABs (which are z-50)
+            className="fixed inset-0 z-60"
           />
 
+          {/* Drawer Container */}
           <motion.div
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
@@ -135,14 +138,16 @@ const PackageForm: React.FC<PackageFormProps> = ({
             dragListener={false}
             dragControls={controls}
             onDragEnd={handleDragEnd}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-surface rounded-t-3xl shadow-2xl flex flex-col max-h-[92vh]"
+            // UPDATED: z-[70] to sit above the backdrop and everything else
+            className="fixed bottom-0 left-0 right-0 z-70 bg-surface text-foreground rounded-t-3xl shadow-2xl flex flex-col max-h-[92vh] border-t border-border"
             style={{ touchAction: 'none' }} 
           >
+            {/* Drag Handle */}
             <div 
                 className="w-full flex justify-center pt-4 pb-2 cursor-grab active:cursor-grabbing touch-none"
                 onPointerDown={(e) => controls.start(e)} 
             >
-               <div className="w-16 h-1.5 bg-border/60 rounded-full pointer-events-none" />
+               <div className="w-16 h-1.5 bg-muted/40 rounded-full pointer-events-none" />
             </div>
 
             <div 
@@ -174,6 +179,7 @@ const PackageForm: React.FC<PackageFormProps> = ({
                <NotesInput pkg={pkg} handleInputChange={handleInputChange} setPkg={setPkg} />
             </div>
 
+            {/* Footer Actions */}
             <div className="p-4 border-t border-border bg-surface/95 backdrop-blur pb-8">
                <ActionButtons
                  formContext={formContext}

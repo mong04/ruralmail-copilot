@@ -28,6 +28,7 @@ import NavigationPanel from './components/NavigationPanel';
 import distance from '@turf/distance';
 import { HudBanner } from '../notification/HudBanner';
 import { geocodeStop, updateStop } from '../route-setup/routeSlice';
+import { triggerThemeFx } from '../../lib/theme-fx'; // ✅ NEW IMPORT
 
 const Delivery: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -211,6 +212,7 @@ const Delivery: React.FC = () => {
         default:
           // Only pass the 'end' parameter. The thunk gets the start position from state.
           dispatch(fetchDirections({ end: { location: [lng, lat] } }));
+          triggerThemeFx('navigation-start'); // ✅ Generic Event
           break;
       }
     }
@@ -271,6 +273,11 @@ const Delivery: React.FC = () => {
         onMarkDelivered={() => {
           const currentStopObj = activeStops[currentStop];
           if (!currentStopObj?.id) return;
+          
+          // ✅ Generic Event Trigger: "I just delivered something, here is where it happened."
+          // The DeliveryHUDPanel handles the click, but we can grab the active element or passed event
+          const btn = document.activeElement as HTMLElement;
+          triggerThemeFx('package-delivered', btn);
 
           dispatch(markPackagesDelivered({ stopId: currentStopObj.id }));
 
@@ -297,11 +304,15 @@ const Delivery: React.FC = () => {
 
           if (isNavigating) {
             dispatch(exitNavigation());
+            triggerThemeFx('navigation-end'); // ✅ Generic Event
           }
         }}
         onNavigate={() => handleNavigate()}
         onExit={() => navigate('/')}
-        onStopNavigation={() => dispatch(exitNavigation())}
+        onStopNavigation={() => {
+            dispatch(exitNavigation());
+            triggerThemeFx('navigation-end'); // ✅ Generic Event
+        }}
       />
 
       <RouteWeatherBriefing 

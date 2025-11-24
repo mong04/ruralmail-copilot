@@ -1,169 +1,119 @@
-// src/features/delivery-hud/components/MapControls.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '../../../store';
 import { setMapStyle, cycleCameraMode, toggleVoice } from '../hudSlice';
 import {
-  Layers,
-  Compass,
-  LocateFixed,
-  Globe2,
-  MapPin,
-  Navigation,
-  Volume2,
-  VolumeX,
+  Layers, Compass, LocateFixed, Globe2, MapPin, Navigation, Volume2, VolumeX,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import { Button } from '../../../components/ui/Button';
-import { toast } from 'sonner';
 
 interface MapControlsProps {
   onRecenter: () => void;
   isMapOffCenter: boolean;
 }
 
-const ToggleBtn: React.FC<{
-  label: string;
-  icon: React.ElementType;
-  isActive: boolean;
-  onClick: () => void;
-}> = ({ label, icon: Icon, isActive, onClick }) => (
+// Helper for the square control buttons
+const ControlButton = ({ 
+  onClick, 
+  active, 
+  icon: Icon, 
+  label 
+}: { 
+  onClick: () => void; 
+  active?: boolean; 
+  icon: React.ElementType; 
+  label?: string 
+}) => (
   <button
     onClick={onClick}
     className={cn(
-      'flex flex-col items-center justify-center w-20 h-20 rounded-lg border-2 transition-colors',
-      isActive
-        ? 'bg-brand/10 border-brand text-brand'
-        : 'bg-surface border-border text-muted hover:bg-surface-muted'
+      "w-12 h-12 rounded-xl flex items-center justify-center shadow-lg border transition-all active:scale-95",
+      active 
+        ? "bg-brand text-brand-foreground border-brand shadow-brand/20" 
+        : "bg-surface text-foreground border-border hover:bg-surface-muted"
     )}
+    aria-label={label}
   >
-    <Icon size={24} className="mb-1" />
-    <span className="text-xs font-semibold">{label}</span>
+    <Icon size={20} strokeWidth={2.5} />
   </button>
 );
 
-export const MapControls: React.FC<MapControlsProps> = ({ onRecenter }) => {
+export const MapControls: React.FC<MapControlsProps> = ({ onRecenter, isMapOffCenter }) => {
   const dispatch = useAppDispatch();
-  const { mapStyle, cameraMode, voiceEnabled, position, isMapOffCenter } = useAppSelector(
-    (state) => state.hud
-  );
+  const { mapStyle, cameraMode, voiceEnabled } = useAppSelector((state) => state.hud);
   const [isLayersOpen, setLayersOpen] = useState(false);
   const layersControlRef = useRef<HTMLDivElement>(null);
 
-  // Close layers menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        layersControlRef.current &&
-        !layersControlRef.current.contains(event.target as Node)
-      ) {
+      if (layersControlRef.current && !layersControlRef.current.contains(event.target as Node)) {
         setLayersOpen(false);
       }
     };
-
-    if (isLayersOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    if (isLayersOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isLayersOpen]);
-
-  const handleCameraCycle = () => {
-    if (cameraMode === 'task' && !position) {
-      dispatch(cycleCameraMode());
-      dispatch(cycleCameraMode());
-      toast.error('Current location not available for "Follow" mode.');
-    } else {
-      dispatch(cycleCameraMode());
-    }
-  };
 
   const getCameraIcon = () => {
     switch (cameraMode) {
-      case 'task':
-        return LocateFixed;
-      case 'follow':
-        return Navigation;
-      case 'overview':
-        return Compass;
-      default:
-        return LocateFixed;
+      case 'task': return LocateFixed;
+      case 'follow': return Navigation;
+      case 'overview': return Compass;
+      default: return LocateFixed;
     }
   };
-  const CameraIcon = getCameraIcon();
 
   return (
-    <div className="flex flex-col items-end gap-3">
-      {/* Layers */}
+    <div className="flex flex-col items-end gap-3 pointer-events-auto">
+      {/* Layers Menu */}
       <div className="relative flex flex-col items-end" ref={layersControlRef}>
         {isLayersOpen && (
-          <div className="flex gap-2 mb-1 p-1.5 bg-surface rounded-xl shadow-lg border border-border">
-            <ToggleBtn
-              label="Street"
-              icon={MapPin}
-              isActive={mapStyle === 'streets'}
-              onClick={() => dispatch(setMapStyle('streets'))}
-            />
-            <ToggleBtn
-              label="Satellite"
-              icon={Globe2}
-              isActive={mapStyle === 'satellite'}
-              onClick={() => dispatch(setMapStyle('satellite'))}
-            />
+          <div className="absolute bottom-14 right-0 flex flex-col gap-2 p-2 bg-surface/95 backdrop-blur rounded-xl shadow-xl border border-border w-32 animate-in fade-in slide-in-from-right-4 mb-2">
+            <button 
+               onClick={() => dispatch(setMapStyle('streets'))}
+               className={cn("flex items-center gap-2 p-2 rounded-lg text-sm font-bold transition-colors", mapStyle === 'streets' ? "bg-brand/10 text-brand" : "hover:bg-surface-muted text-foreground")}
+            >
+               <MapPin size={16} /> Street
+            </button>
+            <button 
+               onClick={() => dispatch(setMapStyle('satellite'))}
+               className={cn("flex items-center gap-2 p-2 rounded-lg text-sm font-bold transition-colors", mapStyle === 'satellite' ? "bg-brand/10 text-brand" : "hover:bg-surface-muted text-foreground")}
+            >
+               <Globe2 size={16} /> Satellite
+            </button>
           </div>
         )}
-        <Button
-          variant="surface"
-          size="lg"
-          className="w-12 h-12 p-0 shadow-lg"
-          onClick={() => setLayersOpen(!isLayersOpen)}
-          aria-label="Map Layers"
-        >
-          <Layers size={20} />
-        </Button>
+        <ControlButton 
+            icon={Layers} 
+            active={isLayersOpen} 
+            onClick={() => setLayersOpen(!isLayersOpen)} 
+            label="Map Layers"
+        />
       </div>
 
       {/* Camera Mode */}
-      <Button
-        variant="surface"
-        size="lg"
-        className="w-12 h-12 p-0 shadow-lg"
-        onClick={handleCameraCycle}
-        aria-label="Cycle Camera Mode"
-      >
-        <CameraIcon size={20} />
-      </Button>
+      <ControlButton 
+        icon={getCameraIcon()} 
+        active={cameraMode === 'follow'}
+        onClick={() => dispatch(cycleCameraMode())}
+        label="Camera Mode"
+      />
 
       {/* Voice Toggle */}
-      <Button
-        variant="surface"
-        size="lg"
-        className="w-12 h-12 p-0 shadow-lg"
+      <ControlButton 
+        icon={voiceEnabled ? Volume2 : VolumeX} 
+        active={voiceEnabled}
         onClick={() => dispatch(toggleVoice(!voiceEnabled))}
-        aria-label="Toggle Voice Guidance"
-      >
-        {voiceEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-      </Button>
+        label="Toggle Voice"
+      />
 
-      {/* Recenter Button — appears only when map is off-center */}
-      <div
-        className={cn(
-          'transition-all duration-300 ease-out',
-          isMapOffCenter
-            ? 'opacity-100 scale-100'
-            : 'opacity-0 scale-0 pointer-events-none'
-        )}
-      >
-        <Button
-          variant="surface"
-          size="lg"
-          className="w-14 h-14 p-0 shadow-2xl ring-4 ring-brand/30 animate-pulse"
+      {/* Recenter (Conditional) */}
+      <div className={cn("transition-all duration-300", isMapOffCenter ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none")}>
+        <button
           onClick={onRecenter}
-          aria-label="Recenter map"
+          className="w-14 h-14 rounded-full bg-brand text-brand-foreground shadow-2xl flex items-center justify-center animate-bounce hover:bg-brand/90 transition-colors"
         >
-          <Navigation size={26} className="rotate-45" />
-        </Button>
+          <Navigation size={24} className="fill-current" />
+        </button>
       </div>
     </div>
   );

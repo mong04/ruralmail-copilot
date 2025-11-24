@@ -1,4 +1,3 @@
-// src/features/package-management/components/NotesInput.tsx
 import React from 'react';
 import { type Package } from '../../../../db';
 import { Button } from '../../../../components/ui/Button';
@@ -14,7 +13,6 @@ const quickTags = ['Bin 1', 'Bin 2', 'Front Seat', 'Back Door'];
 const NotesInput: React.FC<NotesInputProps> = ({ pkg, handleInputChange, setPkg }) => {
   const handleTagClick = (tag: string) => {
     const currentNotes = pkg.notes || '';
-    // Append tag if not already present
     if (!currentNotes.toLowerCase().includes(tag.toLowerCase())) {
       setPkg((prev) => ({
         ...prev,
@@ -33,7 +31,8 @@ const NotesInput: React.FC<NotesInputProps> = ({ pkg, handleInputChange, setPkg 
         value={pkg.notes || ''}
         onChange={handleInputChange}
         placeholder="e.g. Bin 3, Front Shelf or Fragile"
-        className="w-full p-4 text-base border-2 border-border rounded-xl focus:ring-4 focus:ring-brand/30 focus:border-brand shadow-sm transition-all duration-300 min-h-20"
+        // FIX: Semantic styling
+        className="w-full p-4 text-base bg-surface-muted text-foreground border-2 border-border rounded-xl focus:ring-4 focus:ring-brand/30 focus:border-brand shadow-sm transition-all duration-300 min-h-20 placeholder:text-muted-foreground"
         rows={3}
       />
       <div className="flex flex-wrap gap-2 mt-2">

@@ -21,7 +21,8 @@ const TrackingInput: React.FC<TrackingInputProps> = ({ pkg, formContext, handleI
           onChange={handleInputChange}
           placeholder="Tracking Number (Optional)"
           readOnly={formContext === 'edit'}
-          className="w-full pl-12 pr-4 py-4 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-brand/50 focus:border-brand outline-none transition-all font-mono text-sm tracking-wide"
+          // FIX: Semantic colors
+          className="w-full pl-12 pr-4 py-4 bg-surface-muted text-foreground border border-border rounded-xl focus:ring-2 focus:ring-brand/50 focus:border-brand outline-none transition-all font-mono text-sm tracking-wide placeholder:text-muted-foreground"
         />
       </div>
     </div>

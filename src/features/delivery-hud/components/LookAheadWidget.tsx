@@ -1,14 +1,8 @@
-import { Sun, Cloud, CloudDrizzle, CloudSnow, AlertCircle, type LucideProps } from 'lucide-react';
+import { Sun, Cloud, CloudDrizzle, CloudSnow, type LucideProps } from 'lucide-react';
 import React from 'react';
-// import { useAppSelector } from '../../../store';
-// import { cn } from '../../../lib/utils';
 
-// A map for icons
 const iconMap: { [key: string]: React.ForwardRefExoticComponent<Omit<LucideProps, "ref"> & React.RefAttributes<SVGSVGElement>> } = {
-    Sun,
-    Cloud,
-    CloudDrizzle,
-    CloudSnow,
+    Sun, Cloud, CloudDrizzle, CloudSnow,
 };
 
 interface LookAheadItem {
@@ -30,66 +24,41 @@ export interface LookAheadWidgetProps {
 const LookAheadItemDisplay = ({ label, data }: { label: string; data: LookAheadItem }) => {
     const Icon = iconMap[data.icon] || Sun;
     return (
-        <div className="flex justify-between items-center text-sm">
-            <span className="text-muted-foreground">{label}:</span>
-            <div className="flex items-center gap-1">
-              <span className="text-surface-foreground font-medium">{Math.round(data.temp)}°F</span>
-              {data.precip > 0 && <span className="text-muted-foreground">({data.precip}%)</span>}
-              <Icon className="w-4 h-4 text-surface-foreground" />
+        <div className="flex justify-between items-center text-xs sm:text-sm py-1">
+            <span className="text-muted-foreground font-medium w-12">{label}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-foreground font-bold tabular-nums">{Math.round(data.temp)}°</span>
+              {data.precip > 0 && <span className="text-blue-400 text-xs font-bold">({data.precip}%)</span>}
+              <Icon className="w-4 h-4 text-foreground/80" />
             </div>
         </div>
     );
 };
 
-const SkeletonLoader = () => (
-    <div className="space-y-2">
-        <div className="flex justify-between items-center">
-            <div className="h-4 bg-gray-600 rounded w-1/4 animate-pulse"></div>
-            <div className="h-4 bg-gray-600 rounded w-1/3 animate-pulse"></div>
-        </div>
-        <div className="flex justify-between items-center">
-            <div className="h-4 bg-gray-600 rounded w-1/4 animate-pulse"></div>
-            <div className="h-4 bg-gray-600 rounded w-1/3 animate-pulse"></div>
-        </div>
-        <div className="flex justify-between items-center">
-            <div className="h-4 bg-gray-600 rounded w-1/4 animate-pulse"></div>
-            <div className="h-4 bg-gray-600 rounded w-1/3 animate-pulse"></div>
-        </div>
-    </div>
-);
-
 export const LookAheadWidget = ({ lookAheadData, status }: LookAheadWidgetProps) => {
-  const renderContent = () => {
-    if (status === 'loading' || status === 'idle') {
-      return <SkeletonLoader />;
-    }
+  if (status === 'failed') return null; // Hide on error to reduce clutter
 
-    if (status === 'failed') {
+  if (status === 'loading' || !lookAheadData) {
+      // Tiny skeleton
       return (
-        <div className="flex items-center gap-2 text-yellow-400">
-          <AlertCircle className="w-5 h-5" />
-          <span className="text-sm">Weather data unavailable.</span>
+        <div className="bg-surface/80 backdrop-blur-md border border-border rounded-xl p-3 w-40 shadow-lg animate-pulse">
+           <div className="h-4 bg-surface-muted rounded mb-2 w-2/3"></div>
+           <div className="h-3 bg-surface-muted rounded mb-1 w-full"></div>
+           <div className="h-3 bg-surface-muted rounded w-full"></div>
         </div>
       );
-    }
-
-    if (status === 'succeeded' && lookAheadData) {
-      return (
-        <div className="space-y-1">
-          <LookAheadItemDisplay label={lookAheadData.now.time} data={lookAheadData.now} />
-          <LookAheadItemDisplay label={lookAheadData.next_3h.time} data={lookAheadData.next_3h} />
-          <LookAheadItemDisplay label={lookAheadData.next_6h.time} data={lookAheadData.next_6h} />
-        </div>
-      );
-    }
-
-    return null; // Should not happen in practice
-  };
+  }
 
   return (
-    <div className="bg-surface-muted/60 backdrop-blur-sm rounded-lg p-3 w-48">
-      <h3 className="text-surface-foreground font-bold text-sm mb-2">Look-Ahead</h3>
-      {renderContent()}
+    <div className="bg-surface/90 backdrop-blur-xl rounded-xl border border-border/50 shadow-xl p-3 w-44 transition-all hover:bg-surface">
+      <h3 className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-1 border-b border-border/50 pb-1">
+        Forecast
+      </h3>
+      <div className="space-y-0.5">
+        <LookAheadItemDisplay label={lookAheadData.now.time} data={lookAheadData.now} />
+        <LookAheadItemDisplay label={lookAheadData.next_3h.time} data={lookAheadData.next_3h} />
+        <LookAheadItemDisplay label={lookAheadData.next_6h.time} data={lookAheadData.next_6h} />
+      </div>
     </div>
   );
 };

@@ -17,7 +17,6 @@ const button = cva(
         surface: [
           'bg-surface text-foreground border border-border/50',
           'hover:bg-surface-muted hover:border-border',
-          'shadow-sm hover:shadow-md',
         ],
         danger: [
           'bg-red-500/10 text-red-600 border border-red-500/20',

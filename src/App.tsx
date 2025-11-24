@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
-import { router } from './AppRouter';
-import { useTheme } from './hooks/useTheme';
+import { router } from '../src/AppRouter'; // Using alias
+import { useTheme } from '../src/hooks/useTheme'; // Using alias// Using alias
+import ThemeController from './components/theme/ThemeControler';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  useTheme(); // Apply theme based on Redux store
+  
+  // Basic CSS Class switching (light/dark/cyberpunk class on html tag)
+  useTheme(); 
 
   useEffect(() => {
     const storedLogin = localStorage.getItem('isLoggedIn');
@@ -17,8 +20,7 @@ const App: React.FC = () => {
   }, [isLoggedIn]);
 
   if (!isLoggedIn) {
-    return (
-      <div className="min-h-screen grid place-items-center">
+     <div className="min-h-screen grid place-items-center">
         <div className="w-full max-w-md space-y-6 px-6">
           <div className="text-center space-y-2">
             <h1 className="text-3xl font-bold tracking-tight">RuralMail Co‑Pilot</h1>
@@ -36,11 +38,17 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
-    );
-    return ('');
+     return ('');
   }
 
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      {/* The ThemeController sits alongside the Router. 
+          It watches for events emitted by components inside the Router. */}
+      <ThemeController />
+      <RouterProvider router={router} />
+    </>
+  );
 };
 
 export default App;

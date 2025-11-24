@@ -1,4 +1,3 @@
-// src/features/package-management/components/SizeSelect.tsx
 import React from 'react';
 import { Mail, Box, Home } from 'lucide-react';
 import { type Package } from '../../../../db';
@@ -32,11 +31,11 @@ const SizeSelect: React.FC<SizeSelectProps> = ({ pkg, setPkg }) => {
               className={cn(
                 "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all",
                 isActive 
-                  ? "bg-background shadow-sm text-brand ring-1 ring-black/5 dark:ring-white/10" 
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-surface text-foreground shadow-sm ring-1 ring-border" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
               )}
             >
-              <opt.icon size={18} />
+              <opt.icon size={18} className={isActive ? "text-brand" : ""} />
               {opt.label}
             </button>
           );

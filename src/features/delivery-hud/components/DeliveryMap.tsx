@@ -1,4 +1,3 @@
-// src/features/delivery-hud/components/DeliveryMap.tsx
 import React, { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, type ReactNode } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { createRoot } from 'react-dom/client';
@@ -6,7 +5,7 @@ import { toast } from 'sonner';
 import { useAppDispatch, useAppSelector } from '../../../store';
 import { setCurrentStop, setMapOffCenter } from '../hudSlice';
 import type { Stop, Package } from '../../../db';
-import { UserMarker } from './UserMarker';
+import { UserMarker } from '../components/UserMarker';
 
 interface Props {
   route: Stop[];
@@ -20,7 +19,30 @@ interface Props {
   children?: ReactNode;
 }
 
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
+// Helper to validate coordinates prevent Mapbox crashes
+const isValidCoord = (lat: number | undefined, lng: number | undefined): boolean => {
+  return (
+    typeof lat === 'number' &&
+    typeof lng === 'number' &&
+    !isNaN(lat) &&
+    !isNaN(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180
+  );
+};
+
+// Safety check for import.meta env vars
+const getEnvToken = () => {
+  try {
+    return import.meta.env.VITE_MAPBOX_TOKEN;
+  } catch {
+    return '';
+  }
+};
+
+if (mapboxgl) {
+  mapboxgl.accessToken = getEnvToken();
+}
 
 const MapPopupContent: React.FC<{ stop: Stop; stopNumber: number; packageCount: number }> = ({
   stop,
@@ -73,12 +95,18 @@ const DeliveryMap = forwardRef<{ recenterOnCurrent: () => void }, Props>((props,
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  
   const navigationData = useAppSelector(s => s.hud.navigationData);
   const isNavigating = useAppSelector(s => s.hud.isNavigating);
+  
+  const theme = useAppSelector(s => s.settings.theme);
+  const isCyberpunk = theme === 'cyberpunk';
 
   const styleUrl = mapStyle === 'satellite'
     ? 'mapbox://styles/mapbox/satellite-streets-v12'
-    : 'mapbox://styles/mapbox/streets-v12';
+    : isCyberpunk 
+        ? 'mapbox://styles/mapbox/dark-v11' 
+        : 'mapbox://styles/mapbox/streets-v12';
 
   const OFF_CENTER_THRESHOLD = 150;
 
@@ -99,25 +127,30 @@ const DeliveryMap = forwardRef<{ recenterOnCurrent: () => void }, Props>((props,
 
     const stop = fullRoute[currentStopIndex];
 
-    if (cameraMode === 'follow' && position) {
+    if (cameraMode === 'follow' && position && isValidCoord(position.lat, position.lng)) {
       expectedCenter = new mapboxgl.LngLat(position.lng, position.lat);
     } else if (cameraMode === 'overview') {
       let allVisible = true;
       route.forEach(s => {
-        if (s.lat && s.lng && bounds && !bounds.contains([s.lng, s.lat])) allVisible = false;
+        if (isValidCoord(s.lat, s.lng) && bounds && !bounds.contains([s.lng, s.lat])) allVisible = false;
       });
       dispatch(setMapOffCenter(!allVisible || zoom > 17 || zoom < 10 || Math.abs(bearing) > 20));
       return;
     } else if (cameraMode === 'task') {
-      if (position && stop?.lat && stop?.lng) {
+      // Strict checks before math to avoid NaN
+      const hasStop = stop && isValidCoord(stop.lat, stop.lng);
+      const hasPos = position && isValidCoord(position.lat, position.lng);
+
+      if (hasPos && hasStop) {
+        // Midpoint
         expectedCenter = new mapboxgl.LngLat(
-          (position.lng + stop.lng) / 2,
-          (position.lat + stop.lat) / 2
+          (position!.lng + stop!.lng) / 2,
+          (position!.lat + stop!.lat) / 2
         );
-      } else if (stop?.lng && stop?.lat) {
-        expectedCenter = new mapboxgl.LngLat(stop.lng, stop.lat);
-      } else if (position) {
-        expectedCenter = new mapboxgl.LngLat(position.lng, position.lat);
+      } else if (hasStop) {
+        expectedCenter = new mapboxgl.LngLat(stop!.lng, stop!.lat);
+      } else if (hasPos) {
+        expectedCenter = new mapboxgl.LngLat(position!.lng, position!.lat);
       }
       expectedZoom = 15;
     }
@@ -154,12 +187,13 @@ const DeliveryMap = forwardRef<{ recenterOnCurrent: () => void }, Props>((props,
     };
   }, [checkIfOffCenter]);
 
-  // Camera mode auto-snap (never for task mode)
+  // Camera mode auto-snap
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    if (isNavigating && position) {
+    // Validate position before camera update
+    if (isNavigating && position && isValidCoord(position.lat, position.lng)) {
       map.easeTo({
         center: [position.lng, position.lat],
         zoom: 18,
@@ -169,13 +203,17 @@ const DeliveryMap = forwardRef<{ recenterOnCurrent: () => void }, Props>((props,
       });
     } else if (cameraMode === 'overview') {
       const bounds = new mapboxgl.LngLatBounds();
+      let hasPoints = false;
       route.forEach(stop => {
-        if (stop.lat && stop.lng) bounds.extend([stop.lng, stop.lat]);
+        if (isValidCoord(stop.lat, stop.lng)) {
+          bounds.extend([stop.lng, stop.lat]);
+          hasPoints = true;
+        }
       });
-      if (!bounds.isEmpty()) {
+      if (hasPoints && !bounds.isEmpty()) {
         map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 600 });
       }
-    } else if (cameraMode === 'follow' && position) {
+    } else if (cameraMode === 'follow' && position && isValidCoord(position.lat, position.lng)) {
       map.easeTo({
         center: [position.lng, position.lat],
         zoom: 16,
@@ -183,7 +221,6 @@ const DeliveryMap = forwardRef<{ recenterOnCurrent: () => void }, Props>((props,
         duration: 600,
       });
     }
-    // Task mode = no auto-snap
   }, [isNavigating, position, cameraMode, route]);
 
   const recenterOnCurrent = useCallback(() => {
@@ -192,13 +229,17 @@ const DeliveryMap = forwardRef<{ recenterOnCurrent: () => void }, Props>((props,
 
     if (cameraMode === 'overview') {
       const bounds = new mapboxgl.LngLatBounds();
+      let hasPoints = false;
       route.forEach(stop => {
-        if (stop.lat && stop.lng) bounds.extend([stop.lng, stop.lat]);
+        if (isValidCoord(stop.lat, stop.lng)) {
+          bounds.extend([stop.lng, stop.lat]);
+          hasPoints = true;
+        }
       });
-      if (!bounds.isEmpty()) {
+      if (hasPoints && !bounds.isEmpty()) {
         map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 600 });
       }
-    } else if (cameraMode === 'follow' && position) {
+    } else if (cameraMode === 'follow' && position && isValidCoord(position.lat, position.lng)) {
       map.easeTo({
         center: [position.lng, position.lat],
         zoom: 16,
@@ -207,19 +248,20 @@ const DeliveryMap = forwardRef<{ recenterOnCurrent: () => void }, Props>((props,
       });
     } else {
       const stop = fullRoute[currentStopIndex];
-      if (!stop || typeof stop.lng !== 'number' || typeof stop.lat !== 'number') return;
-
-      if (position) {
-        const bounds = new mapboxgl.LngLatBounds();
-        bounds.extend([position.lng, position.lat]);
-        bounds.extend([stop.lng, stop.lat]);
-        map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 600 });
-      } else {
-        map.easeTo({
-          center: [stop.lng, stop.lat],
-          zoom: 16,
-          duration: 600,
-        });
+      // STRICT Check: stop must exist and have valid numbers
+      if (stop && isValidCoord(stop.lat, stop.lng)) {
+        if (position && isValidCoord(position.lat, position.lng)) {
+          const bounds = new mapboxgl.LngLatBounds();
+          bounds.extend([position.lng, position.lat]);
+          bounds.extend([stop.lng, stop.lat]);
+          map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 600 });
+        } else {
+          map.easeTo({
+            center: [stop.lng, stop.lat],
+            zoom: 16,
+            duration: 600,
+          });
+        }
       }
     }
 
@@ -230,47 +272,41 @@ const DeliveryMap = forwardRef<{ recenterOnCurrent: () => void }, Props>((props,
     recenterOnCurrent,
   }));
 
-  // Initial load recenter
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const onLoad = () => recenterOnCurrent();
-
-    if (map.isStyleLoaded()) {
-      onLoad();
-    } else {
-      map.once('load', onLoad);
-    }
-  }, [recenterOnCurrent]);
-
   // Map initialization
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+    if (!mapboxgl) {
+        toast.error('Mapbox GL not loaded');
+        return;
+    }
 
     try {
       mapRef.current = new mapboxgl.Map({
         container: containerRef.current,
         style: styleUrl,
-        center: [-79.59574, 40.787342],
+        center: [-79.59574, 40.787342], // Default Safe Center
         zoom: 12,
+        attributionControl: false, // Cleaner UI
       });
 
       mapRef.current.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
-
       mapRef.current.on('error', () => toast.error('Map error — check token or network.'));
+      
+      // Initial load
+      mapRef.current.once('load', () => recenterOnCurrent());
+
     } catch {
       toast.error('Map failed to initialize.');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Style change
+  // Style change handler
   useEffect(() => {
     mapRef.current?.setStyle(styleUrl);
   }, [styleUrl]);
 
-  // Markers
+  // Markers handling
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -279,6 +315,9 @@ const DeliveryMap = forwardRef<{ recenterOnCurrent: () => void }, Props>((props,
     markersRef.current = [];
 
     (route ?? []).forEach(stop => {
+      // Skip stops with invalid coordinates to prevent crashes
+      if (!isValidCoord(stop.lat, stop.lng)) return;
+
       const stopNumber = fullRoute.findIndex(s => s.id === stop.id);
       if (stopNumber === -1) return;
 
@@ -310,43 +349,26 @@ const DeliveryMap = forwardRef<{ recenterOnCurrent: () => void }, Props>((props,
     });
   }, [route, fullRoute, packages, dispatch]);
 
-  // Current stop styling
-  useEffect(() => {
-    markersRef.current.forEach(marker => {
-      const el = marker.getElement();
-      const markerStopIndex = parseInt(el.dataset.stopIndex ?? '-1', 10);
-      const isCurrent = markerStopIndex === currentStopIndex;
-
-      const root = (el as HTMLElement & { _reactRootContainer?: ReturnType<typeof createRoot> })._reactRootContainer;
-      if (root) {
-        root.render(<StopMarkerIcon stopNumber={markerStopIndex + 1} isCurrent={isCurrent} />);
-      }
-
-      const popup = marker.getPopup();
-      if (isCurrent && popup && !popup.isOpen()) {
-        marker.togglePopup();
-      } else if (!isCurrent && popup && popup.isOpen()) {
-        marker.togglePopup();
-      }
-    });
-  }, [currentStopIndex]);
-
-  // User marker
+  // User Marker Logic
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !position) return;
+    if (!map || !position || !isValidCoord(position.lat, position.lng)) return;
 
+    // Create the marker only once
     if (!userMarkerRef.current) {
       const el = document.createElement('div');
       const root = createRoot(el);
       root.render(<UserMarker />);
-      userMarkerRef.current = new mapboxgl.Marker(el).setLngLat([position.lng, position.lat]).addTo(map);
+      userMarkerRef.current = new mapboxgl.Marker(el)
+        .setLngLat([position.lng, position.lat])
+        .addTo(map);
     } else {
+      // Update position smoothly
       userMarkerRef.current.setLngLat([position.lng, position.lat]);
     }
   }, [position]);
 
-  // Navigation line
+  // Navigation line with Cyberpunk support
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -363,19 +385,35 @@ const DeliveryMap = forwardRef<{ recenterOnCurrent: () => void }, Props>((props,
       source.setData(navigationData.geometry as GeoJSON.GeoJSON);
     } else {
       map.addSource(id, { type: 'geojson', data: navigationData.geometry as GeoJSON.GeoJSON });
+      
       map.addLayer({
         id,
         type: 'line',
         source: id,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': 'var(--color-brand)', 'line-width': 8, 'line-opacity': 0.9 },
+        paint: { 
+            'line-color': isCyberpunk ? '#00ffff' : '#3b82f6',
+            'line-width': isCyberpunk ? 8 : 8, 
+            'line-opacity': 0.9,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any, 
       });
     }
-  }, [navigationData]);
+    
+    if (map.getLayer(id)) {
+        map.setPaintProperty(id, 'line-color', isCyberpunk ? '#00ffff' : '#3b82f6');
+    }
+
+  }, [navigationData, isCyberpunk]);
 
   return (
     <div className="w-full h-full relative">
       <div ref={containerRef} className="w-full h-full" />
+      
+      {isCyberpunk && isNavigating && (
+          <div className="absolute inset-0 pointer-events-none cyberpunk-grid-overlay" />
+      )}
+
       <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 p-4 pointer-events-none">
         {children}
       </div>

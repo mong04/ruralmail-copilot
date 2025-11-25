@@ -32,24 +32,29 @@
   --radius-md: 0.375rem;
 }
 
-/* --- THEME DEFINITIONS --- */
-
-/* 1. DEFAULT THEME (Professional Slate/Blue) */
+/* --- 1. DEFAULT THEME (Light / Paper) --- */
 :root {
   --background: hsl(210 20% 98%);
   --foreground: hsl(222 20% 14%);
+  
   --surface: hsl(0 0% 100%);
   --surface-foreground: hsl(222 20% 14%);
-  --surface-muted: hsl(210 20% 96%);
+  /* Muted Surface: Light Grey for Inputs */
+  --surface-muted: hsl(210 20% 96%); 
+  
   --brand: hsl(221 83% 53%);
   --brand-foreground: hsl(210 40% 98%);
+  
   --border: hsl(220 13% 91%);
+  
   --success: hsl(142 76% 36%);
   --warning: hsl(38 92% 50%);
   --danger: hsl(0 84% 60%);
   --danger-foreground: hsl(210 40% 98%);
+  
   --muted: hsl(215 16% 47%);
   --muted-foreground: hsl(215 16% 57%);
+  
   --accent: hsl(210 20% 96%);
   --accent-foreground: hsl(222 20% 14%);
 
@@ -58,48 +63,7 @@
   --radius-md: 0.25rem;
 }
 
-/* Bottom nav sizing token so layouts can adapt. Includes device safe-area inset when available. */
-:root {
-  --bottom-nav-height: calc(72px + env(safe-area-inset-bottom, 0px)); /* default nav height + safe-area */
-  --bottom-nav-height-base: 72px;
-}
-
-/* Header sizing token for consistent layout calculations (accounts for device notch/safe-area) */
-:root {
-  --header-height: calc(64px + env(safe-area-inset-top, 0px));
-}
-
-/* Utility to expose header height as a class (useful for JS inline fallback) */
-.h-header { height: var(--header-height); }
-
-/* Utility to allow a section intentionally to overlap the nav (use sparingly) */
-.overlap-bottom-nav { margin-bottom: calc(var(--bottom-nav-height) * -1); }
-
-/* Utility: apply bottom padding equal to bottom nav height */
-.pb-bottom-nav { padding-bottom: calc(var(--bottom-nav-height) + 8px); }
-
-/* FAB offset to position floating action buttons above the bottom nav */
-.fab-offset { padding-bottom: calc(var(--bottom-nav-height) + 16px); }
-
-/* Custom glow effect for floating action buttons */
-.btn-glow {
-  box-shadow: 0 0 10px color-mix(in srgb, var(--brand) 15%, transparent),
-              0 0 20px color-mix(in srgb, var(--brand) 10%, transparent),
-              0 0 40px color-mix(in srgb, var(--brand) 5%, transparent);
-}
-
-/* Utility: full-viewport containers that stop above the persistent bottom nav
-   Use this for route-level screens or overlays that should not be covered by the nav. */
-.viewport-above-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: var(--bottom-nav-height);
-  display: block;
-}
-
-
+/* --- 2. DARK THEME (Slate) --- */
 .dark {
   --background: hsl(222 47% 11%);
   --foreground: hsl(210 40% 98%);
@@ -119,203 +83,73 @@
   --accent-foreground: hsl(210 40% 98%);
 }
 
-/* 2. CYBERPUNK THEME (Neon/Zinc) */
+/* --- 3. CYBERPUNK THEME (Void / Neon) --- */
 [data-theme="cyberpunk"] {
-  /* Core Palette Overrides */
-  --background: hsl(240 10% 3.9%); /* #09090b (Zinc 950) */
-  --foreground: hsl(0 0% 98%);
+  /* Deep Void Background */
+  --background: #0a0014; 
+  --foreground: #e0faff; /* Ice White Text */
   
-  --surface: hsl(240 5.9% 10%); /* #18181b */
-  --surface-foreground: hsl(0 0% 98%);
-  --surface-muted: hsl(240 3.7% 15.9%);
+  /* Surface: Semi-transparent black for cards */
+  --surface: rgba(15, 0, 35, 0.6); 
+  --surface-foreground: #e0faff;
   
-  --brand: hsl(190 100% 50%); /* Cyan Neon */
-  --brand-foreground: hsl(240 10% 3.9%); /* Black text on Cyan */
+  /* Surface Muted: THE FIX - Deep Black/Cyan tint for Inputs */
+  --surface-muted: rgba(0, 0, 0, 0.6); 
   
-  --border: hsl(240 3.7% 15.9%);
+  /* High-Contrast Neon */
+  --brand: #00f0ff; 
+  --brand-foreground: #000000; /* Text on brand buttons is black */
   
-  --success: hsl(142 70% 50%); /* Neon Green */
-  --warning: hsl(45 93% 47%); /* Neon Amber */
-  --danger: hsl(0 84% 60%);   /* Neon Red */
-  --danger-foreground: hsl(240 10% 3.9%);
+  /* Borders: Dim Cyan */
+  --border: rgba(0, 240, 255, 0.3);
+  
+  --success: #0aff60;
+  --warning: #fcee0a;
+  --danger: #ff003c;
+  --danger-foreground: #fff;
 
-  --muted: hsl(240 5% 65%);
-  --muted-foreground: hsl(240 5% 75%);
-  --accent: hsl(190 100% 20%); /* Darker cyan */
-  --accent-foreground: hsl(190 100% 50%); /* Neon Cyan */
+  --muted: rgba(0, 240, 255, 0.4);
+  --muted-foreground: rgba(0, 240, 255, 0.7);
   
-  /* Cyberpunk Geometry: Sharper corners */
+  --accent: #2d0046;
+  --accent-foreground: #d600ff;
+  
+  /* Sharp Tech Geometry */
   --radius-xl: 0.25rem; 
   --radius-lg: 0.125rem;
   --radius-md: 0rem;
 }
 
-/* --- CYBERPUNK EXCLUSIVE EFFECTS --- */
-
-/* 1. Neon Button Overrides */
-[data-theme="cyberpunk"] button[class*="bg-brand"] {
-  box-shadow: 0 0 10px var(--brand), 0 0 20px var(--brand);
-  text-shadow: 0 0 5px rgba(0,0,0,0.5);
-  border: 1px solid var(--brand);
-  position: relative;
-  overflow: visible;
+/* --- UTILITIES --- */
+:root {
+  --bottom-nav-height: calc(72px + env(safe-area-inset-bottom, 0px));
+  --header-height: calc(64px + env(safe-area-inset-top, 0px));
+  
+  /* Transparent Tints for badges */
+  --brand-10: color-mix(in srgb, var(--brand) 10%, transparent);
+  --danger-10: color-mix(in srgb, var(--danger) 10%, transparent);
+  --warning-10: color-mix(in srgb, var(--warning) 10%, transparent);
+  --success-10: color-mix(in srgb, var(--success) 10%, transparent);
 }
 
-/* Flicker Animation for Neon Buttons on Hover */
-[data-theme="cyberpunk"] button[class*="bg-brand"]:hover {
-  animation: neon-flicker 0.2s infinite alternate;
-}
-
-@keyframes neon-flicker {
-  0% { box-shadow: 0 0 10px var(--brand), 0 0 20px var(--brand); opacity: 1; }
-  100% { box-shadow: 0 0 15px var(--brand), 0 0 30px var(--brand); opacity: 0.9; }
-}
-
-/* 2. Scanline Animation */
-CSS/* Scanlines */
-.cyberpunk-scanlines {
-  background: linear-gradient(transparent 50%, rgba(0,240,255,0.03) 50%);
-  background-size: 100% 4px;
-  animation: scanlines 8s linear infinite;
-}
-
-
-/* VHS jitter */
-.cyberpunk-vhs-jitter {
-  background: linear-gradient(90deg, transparent 98%, rgba(0,240,255,0.05) 100%);
-  animation: vhs 0.1s infinite;
-}
-
-/* Glitch transition overlay */
-.cyberpunk-horizontal-glitch {
-  background: linear-gradient(90deg, transparent 48%, rgba(0,240,255,0.15) 50%, transparent 52%);
-  animation: glitch 0.3s infinite;
-}
-
-/* Sparks */
-.cyberpunk-spark {
-  @apply absolute w-2 h-2 bg-cyan-400 rounded-full blur-sm;
-  box-shadow: 0 0 10px #00f0ff;
-}
-
-@keyframes scanlines { 0% { transform: translateY(0); } 100% { transform: translateY(4px); } }
-@keyframes vhs { 0%,100% { transform: translateX(0); } 50% { transform: translateX(2px); } }
-@keyframes glitch { 0%,100% { clip-path: polygon(0 0,100% 0,100% 100%,0 100%); } 50% { clip-path: polygon(0 45%,100% 45%,100% 55%,0 55%); } }
-
-/* 3. Grid Overlay for Map */
-.cyberpunk-grid-overlay {
-  background-size: 40px 40px;
-  background-image:
-    linear-gradient(to right, rgba(255, 0, 80, 0.1) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 0, 80, 0.1) 1px, transparent 1px);
-  mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
-  pointer-events: none;
-  z-index: 5;
-}
-
-/* Ensure root elements fill the viewport */
 html, body, #root { height: 100%; }
 
-/* --- DERIVED COLOR VARIANTS (10% tints) --- */
-:root {
-  /* Use color-mix to create subtle background tints for badges and chips */
-  --brand-10: color-mix(in srgb, var(--brand) 8%, transparent);
-  --danger-10: color-mix(in srgb, var(--danger) 8%, transparent);
-  --warning-10: color-mix(in srgb, var(--warning) 8%, transparent);
-  --success-10: color-mix(in srgb, var(--success) 8%, transparent);
+/* Navigation Bar Adaptation */
+[data-theme="cyberpunk"] nav,
+[data-theme="cyberpunk"] header {
+  background-color: rgba(10, 0, 20, 0.85) !important;
+  backdrop-filter: blur(12px);
+  border-color: var(--border);
 }
 
-/* --- Semantic utility classes (theme-aware) --- */
-.btn-primary { background-color: var(--brand); color: var(--brand-foreground); }
-.btn-primary:hover { filter:brightness(0.95); }
-
-.btn-success { background-color: var(--success); color: var(--color-foreground); }
-.btn-success:hover { filter:brightness(0.95); }
-
-.btn-danger { background-color: var(--danger); color: var(--danger-foreground); }
-.btn-danger:hover { filter:brightness(0.95); }
-
-.badge-info { background-color: var(--brand-10); color: var(--brand); }
-.badge-warning { background-color: var(--warning-10); color: var(--warning); }
-.badge-danger { background-color: var(--danger-10); color: var(--danger); }
-
-.pkg-small { color: var(--brand); background-color: var(--brand-10); }
-.pkg-medium { color: var(--warning); background-color: var(--warning-10); }
-.pkg-large { color: var(--danger); background-color: var(--danger-10); }
-.pkg-default { color: var(--muted); background-color: color-mix(in srgb, var(--muted) 8%, transparent); }
-
-/* Overlay and surface helpers (use theme tokens) */
-.bg-overlay { background-color: var(--surface); }
-.text-surface-foreground { color: var(--surface-foreground); }
-
-/* Accent / status utilities */
-.text-accent { color: var(--accent); }
-.text-accent-foreground { color: var(--accent-foreground); }
-.bg-accent-10 { background-color: color-mix(in srgb, var(--accent) 8%, transparent); }
-.border-accent-30 { border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
-
-.text-warning { color: var(--warning); }
-.bg-warning-10 { background-color: color-mix(in srgb, var(--warning) 8%, transparent); }
-.border-warning-30 { border-color: color-mix(in srgb, var(--warning) 30%, transparent); }
-
-.text-success { color: var(--success); }
-.bg-success-10 { background-color: color-mix(in srgb, var(--success) 8%, transparent); }
-.border-success-30 { border-color: color-mix(in srgb, var(--success) 30%, transparent); }
-
-.text-danger { color: var(--danger); }
-.bg-danger-10 { background-color: color-mix(in srgb, var(--danger) 8%, transparent); }
-.border-danger { border-color: var(--danger); }
-
-/* Icon accent and glow helpers */
-.icon-accent { color: var(--accent); }
-.icon-accent-weak { color: color-mix(in srgb, var(--accent) 60%, transparent); }
-/* .glow-accent { box-shadow: 0 8px 30px color-mix(in srgb, var(--accent) 25%, transparent); } */
-
-/* Small button ghost variant used in LoadTruck header */
-.btn-ghost-accent {
-  color: var(--muted);
-  background: transparent;
-}
-.btn-ghost-accent:hover {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
+/* Grid Pattern Utility */
+.bg-grid-pattern {
+  background-size: 20px 20px;
+  background-image: 
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
 }
 
-/* ────────────────────────────── */
-/* CYBERPUNK THEME — 100% SEMANTIC */
-/* ────────────────────────────── */
-
-.theme-cyberpunk {
-  /* Deep void background */
-  --background: #0a0014;
-  
-  /* Glass panels become ultra-dark with cyan tint */
-  --surface: rgba(15, 0, 35, 0.4);
-  --surface-muted: rgba(20, 0, 40, 0.3);
-  
-  /* Neon cyan brand */
-  --brand: #00ffff;
-  --brand-foreground: #000;
-  
-  /* Borders glow cyan */
-  --border: rgba(0, 255, 255, 0.3);
-  
-  /* Text becomes bright for contrast */
-  --foreground: #e0faff;
-  --muted-foreground: #88c0d0;
-}
-
-/* Active nav item neon glow — uses semantic --brand */
-.theme-cyberpunk .drop-shadow-glow {
-  filter: drop-shadow(0 0 16px var(--brand)) 
-          drop-shadow(0 0 32px var(--brand));
-}
-
-/* Ensure backdrop-blur works over void */
-.theme-cyberpunk header,
-.theme-cyberpunk nav {
-  background: color-mix(in srgb, var(--surface) 90%, transparent) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-color: var(--border) !important;
-}
+/* Floating Action Button Offset */
+.fab-offset { padding-bottom: calc(var(--bottom-nav-height) + 16px); }

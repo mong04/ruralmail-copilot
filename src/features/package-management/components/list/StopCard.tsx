@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { type Package, type Stop } from '../../../../db';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Box, Mail, Home, AlertCircle } from 'lucide-react';
+import { ChevronDown, Box, Mail, Home, AlertCircle, Plus } from 'lucide-react';
 import { formatAddressForDisplay } from '../../../../utils/addressFormat';
 import { PackageListItem } from './PackageListItem';
 import { Badge } from '../../../../components/ui/Badge'; 
 import { Card } from '../../../../components/ui/Card';   
 import { cn } from '../../../../lib/utils';
+import { useAppSelector } from '../../../../store';
 
 interface StopCardProps {
   stopIndex: number;
@@ -26,6 +27,9 @@ export const StopCard: React.FC<StopCardProps> = ({
   onAddAtStop,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const theme = useAppSelector((state) => state.settings.theme);
+  const isCyberpunk = theme === 'cyberpunk';
+
   const isUnassigned = stopIndex === -1;
   const rawAddress = stop?.full_address || "Unassigned / Unknown";
   const { number, street } = formatAddressForDisplay(rawAddress);
@@ -45,67 +49,70 @@ export const StopCard: React.FC<StopCardProps> = ({
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="mb-4" 
+      className="mb-2" 
     >
-      <Card className="overflow-hidden shadow-sm border border-border bg-surface group">
+      <Card className="overflow-hidden bg-surface group shadow-sm hover:shadow-md transition-all duration-300">
         
-        {/* HEADER */}
+        {/* HEADER - CLICKABLE AREA */}
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="w-full p-4 flex items-center gap-4 bg-surface hover:bg-surface-muted/50 transition-colors text-left relative z-10"
+          className="w-full p-4 sm:p-5 flex items-center gap-4 text-left relative z-10 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
         >
-          {/* STOP BADGE */}
+          {/* 1. STOP BADGE (Number) */}
           <div className={cn(
-            "w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 shadow-sm font-bold text-lg border transition-colors",
+            "w-14 h-14 rounded-2xl flex flex-col items-center justify-center shrink-0 shadow-sm font-black text-xl border transition-all duration-300",
             isUnassigned 
                 ? "bg-surface-muted text-muted-foreground border-border" 
-                : "bg-brand text-brand-foreground border-brand/50 shadow-brand/20"
+                : isCyberpunk 
+                    ? "bg-black border-brand text-brand shadow-[0_0_10px_rgba(0,240,255,0.2)]" 
+                    : "bg-brand text-brand-foreground border-transparent shadow-brand/20"
           )}>
             <span>{isUnassigned ? '?' : stopIndex + 1}</span>
           </div>
 
-          {/* INFO & CARGO */}
-          <div className="flex-1 min-w-0">
-             <div className="flex items-baseline gap-2 mb-1.5">
-                <span className="text-xl font-black text-foreground leading-none tracking-tight">{number}</span>
-                <span className="text-sm font-semibold text-muted-foreground truncate leading-none">{street}</span>
+          {/* 2. INFO & CARGO */}
+          <div className="flex-1 min-w-0 flex flex-col justify-center">
+             {/* Address */}
+             <div className="flex items-baseline gap-2 mb-2">
+                <span className="text-2xl font-black text-foreground leading-none tracking-tight">{number}</span>
+                <span className="text-base font-semibold text-muted-foreground truncate leading-none">{street}</span>
              </div>
 
-             {/* CARGO CLUSTER */}
+             {/* Cargo Badges */}
              <div className="flex items-center gap-2 flex-wrap">
                  {summary.small > 0 && (
-                   <Badge variant="default" className="gap-1.5 px-2 py-0.5">
-                     <Mail size={12} /> {summary.small}
+                   <Badge variant="default" className="gap-1.5 px-2.5 py-1 text-xs">
+                     <Mail size={14} /> {summary.small}
                    </Badge>
                  )}
                  {summary.medium > 0 && (
-                   <Badge variant="warning" className="gap-1.5 px-2 py-0.5">
-                     <Box size={12} /> {summary.medium}
+                   <Badge variant="warning" className="gap-1.5 px-2.5 py-1 text-xs">
+                     <Box size={14} /> {summary.medium}
                    </Badge>
                  )}
                  {summary.large > 0 && (
-                   <Badge variant="danger" className="gap-1.5 px-2 py-0.5">
-                     <Home size={12} /> {summary.large}
+                   <Badge variant="danger" className="gap-1.5 px-2.5 py-1 text-xs">
+                     <Home size={14} /> {summary.large}
                    </Badge>
                  )}
-                {packages.length === 0 && <span className="text-xs text-muted-foreground">Empty stop</span>}
+                {packages.length === 0 && <span className="text-xs font-medium text-muted-foreground/60 italic">Empty stop</span>}
              </div>
           </div>
 
-          {/* CHEVRON */}
+          {/* 3. CHEVRON */}
           <div className="text-muted-foreground/40 group-hover:text-foreground/70 transition-colors">
               <motion.div animate={{ rotate: isOpen ? 180 : 0 }}>
-                  <ChevronDown size={20} />
+                  <ChevronDown size={24} strokeWidth={3} />
               </motion.div>
           </div>
           
-          {/* Warning Dot */}
+          {/* 4. WARNING DOT (Absolute) */}
           {stop?.notes && (
-              <div className="absolute top-3 right-3 p-1">
-                  <div className="w-2 h-2 rounded-full bg-warning border border-surface shadow-sm animate-pulse" />
+              <div className="absolute top-4 right-4">
+                  <div className="w-3 h-3 rounded-full bg-warning border-2 border-surface shadow-sm animate-pulse" />
               </div>
           )}
         </button>
@@ -119,43 +126,52 @@ export const StopCard: React.FC<StopCardProps> = ({
               exit={{ height: 0, opacity: 0 }}
               className="overflow-hidden border-t border-border bg-surface-muted/30"
             >
+               {/* NOTES BANNER */}
                {stop?.notes && (
-                   // SEMANTIC WARNING BANNER
-                   <div className="px-4 py-2 bg-warning/10 text-warning text-xs font-bold uppercase tracking-wide flex items-center gap-2 border-b border-warning/20">
-                       <AlertCircle size={12} />
+                   <div className="px-5 py-3 bg-warning/10 text-warning text-xs sm:text-sm font-bold uppercase tracking-wide flex items-center gap-2 border-b border-warning/20">
+                       <AlertCircle size={16} />
                        {stop.notes}
                    </div>
                )}
 
-               <AnimatePresence initial={false} mode='popLayout'>
-                 {packages.map((pkg, idx) => (
-                   <motion.div
-                      key={pkg.id}
-                      layout
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0, transition: { duration: 0.2 } }}
-                   >
-                     <PackageListItem
-                       pkg={pkg}
-                       onEdit={() => onEdit(pkg)}
-                       onDelete={() => onDelete(pkg)}
-                       isLast={idx === packages.length - 1}
-                     />
-                   </motion.div>
-                 ))}
-               </AnimatePresence>
+               {/* PACKAGE LIST */}
+               <div className="divide-y divide-border/40">
+                 <AnimatePresence initial={false} mode='popLayout'>
+                   {packages.map((pkg, idx) => (
+                     <motion.div
+                        key={pkg.id}
+                        layout
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0, transition: { duration: 0.2 } }}
+                     >
+                       <PackageListItem
+                         pkg={pkg}
+                         onEdit={() => onEdit(pkg)}
+                         onDelete={() => onDelete(pkg)}
+                         isLast={idx === packages.length - 1}
+                       />
+                     </motion.div>
+                   ))}
+                 </AnimatePresence>
+               </div>
 
-                 <div className="p-3 flex justify-center border-t border-border/30 bg-surface-muted/50">
+                 {/* ADD BUTTON (Footer) */}
+                 <div className="p-4 flex justify-center border-t border-border/30 bg-surface-muted/50">
                   <button 
                     onClick={() => onAddAtStop({ 
                       assignedStopId: stop?.id, 
                       assignedStopNumber: stopIndex,
                       assignedAddress: stop?.full_address 
                     })}
-                    className="flex items-center gap-2 text-xs font-bold bg-brand text-brand-foreground hover:bg-brand/90 py-2 px-6 rounded-full transition-all active:scale-95 border border-transparent shadow-sm"
+                    className={cn(
+                        "flex items-center gap-2 text-sm font-bold py-3 px-8 rounded-xl transition-all active:scale-95 shadow-sm",
+                        isCyberpunk 
+                            ? "bg-black border border-brand text-brand hover:bg-brand/10" 
+                            : "bg-surface border border-border text-foreground hover:bg-surface-muted"
+                    )}
                   >
-                    <span>+</span> Add Package
+                    <Plus size={18} strokeWidth={3} /> Add Package Here
                   </button>
                  </div>
             </motion.div>

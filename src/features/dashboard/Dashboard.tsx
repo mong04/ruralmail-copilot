@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
+// ... (getDashboardContent helper remains the same) ...
 const getDashboardContent = (theme: string, richEnabled: boolean) => {
   const isCyberpunk = theme === 'cyberpunk' && richEnabled;
 
@@ -71,13 +72,13 @@ const Dashboard: React.FC = () => {
   return (
     <div className="flex flex-col min-h-full p-4 sm:p-6 pb-32 space-y-5 select-none">
       
-      {/* 1. HEADER - Big & Clear */}
+      {/* 1. HEADER */}
       <div className="text-center space-y-1 pt-2">
         {isRich ? (
           <CyberpunkText 
             text={content.greeting} 
             as="h1" 
-            className="text-3xl sm:text-4xl font-black tracking-tighter text-brand drop-shadow-[0_0_10px_rgba(0,240,255,0.5)]" 
+            className="text-3xl sm:text-4xl font-black tracking-tighter text-brand drop-shadow-[0_0_25px_rgba(0,240,255,0.8)]" 
           />
         ) : (
           <h1 className={cn("text-3xl font-bold tracking-tight", isCyberpunkTheme ? "text-brand" : "text-foreground")}>
@@ -86,44 +87,45 @@ const Dashboard: React.FC = () => {
         )}
         <p className={cn(
           "text-sm font-medium",
-          isRich ? "text-brand/80 font-mono tracking-widest uppercase" : "text-muted-foreground"
+          isRich ? "text-brand/80 font-mono tracking-widest uppercase drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]" : "text-muted-foreground"
         )}>
           {content.subtext}
         </p>
       </div>
 
-      {/* 2. HERO ACTION - Massive Target */}
+      {/* 2. HERO ACTION */}
       <Link to="/delivery" className="group relative block w-full">
          {isRich && (
-            <div className="absolute inset-0 bg-brand/20 blur-xl rounded-2xl opacity-50 group-hover:opacity-100 transition-opacity duration-500 animate-pulse" />
+            <div className="absolute inset-0 bg-brand/20 blur-2xl rounded-2xl opacity-60 group-hover:opacity-100 transition-opacity duration-500 animate-pulse" />
          )}
          
          <div className={cn(
            "relative flex flex-col items-center justify-center h-32 rounded-2xl border transition-all duration-300 active:scale-[0.98]",
            isCyberpunkTheme
-             ? "bg-black border-brand text-brand shadow-[0_0_20px_rgba(0,240,255,0.15)] group-hover:bg-brand/10" 
+             ? "bg-black border-brand text-brand shadow-[0_0_30px_rgba(0,240,255,0.3)] group-hover:bg-brand/10" 
              : "bg-brand text-brand-foreground border-transparent shadow-lg shadow-brand/20 hover:bg-brand/90"
          )}>
-            <Truck size={48} strokeWidth={isRich ? 1.5 : 2.5} className="mb-2" />
+            <Truck size={48} strokeWidth={isRich ? 1.5 : 2.5} className={isRich ? "drop-shadow-[0_0_10px_rgba(0,240,255,0.8)] mb-2" : "mb-2"} />
             <span className={cn(
               "text-2xl font-black",
-              isRich ? "font-mono tracking-[0.2em]" : "tracking-wide"
+              isRich ? "font-mono tracking-[0.2em] drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]" : "tracking-wide"
             )}>
               {content.actions.start}
             </span>
             
+            {/* Cyberpunk Decorators - Brighter */}
             {isRich && (
               <>
-                <div className="absolute top-2 left-2 w-3 h-3 border-t-2 border-l-2 border-brand" />
-                <div className="absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-brand" />
-                <div className="absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-brand" />
-                <div className="absolute bottom-2 right-2 w-3 h-3 border-b-2 border-r-2 border-brand" />
+                <div className="absolute top-2 left-2 w-3 h-3 border-t-2 border-l-2 border-brand drop-shadow-[0_0_5px_rgba(0,240,255,1)]" />
+                <div className="absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-brand drop-shadow-[0_0_5px_rgba(0,240,255,1)]" />
+                <div className="absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-brand drop-shadow-[0_0_5px_rgba(0,240,255,1)]" />
+                <div className="absolute bottom-2 right-2 w-3 h-3 border-b-2 border-r-2 border-brand drop-shadow-[0_0_5px_rgba(0,240,255,1)]" />
               </>
             )}
          </div>
       </Link>
 
-      {/* 3. PRIMARY GRID - Large Icons, Readable Text */}
+      {/* 3. PRIMARY GRID */}
       <div className="grid grid-cols-2 gap-4">
         
         {/* Mailbag */}
@@ -135,18 +137,17 @@ const Dashboard: React.FC = () => {
           )}>
             <div className={cn(
               "flex items-center justify-center transition-transform group-hover:scale-110 duration-300 mb-1",
-              "w-20 h-20 rounded-3xl", // Increased Icon Container Size
+              "w-20 h-20 rounded-3xl",
               isCyberpunkTheme 
-                ? "bg-transparent text-brand border border-brand/30 shadow-[0_0_15px_rgba(0,240,255,0.1)]" 
+                // GLOW UPGRADE: Stronger shadow (0.4 opacity) + Box Shadow
+                ? "bg-transparent text-brand border-2 border-brand/50 shadow-[0_0_25px_rgba(0,240,255,0.4)]" 
                 : "bg-surface-muted text-brand"
             )}>
-               <Mails size={40} strokeWidth={isRich ? 1.5 : 2} />
+               <Mails size={40} strokeWidth={isRich ? 1.5 : 2} className={isRich ? "drop-shadow-[0_0_8px_rgba(0,240,255,1)]" : ""} />
             </div>
             <span className={cn(
-              "font-bold text-center px-2 leading-tight",
-              // Font size bumped for glanceability
-              "text-base sm:text-lg", 
-              isRich ? "font-mono text-brand/90 tracking-wider" : "text-foreground"
+              "font-bold text-center px-2 leading-tight text-base sm:text-lg",
+              isRich ? "font-mono text-brand/90 tracking-wider drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]" : "text-foreground"
             )}>
               {content.actions.mailbag}
             </span>
@@ -164,22 +165,22 @@ const Dashboard: React.FC = () => {
               "flex items-center justify-center transition-transform group-hover:scale-110 duration-300 mb-1",
               "w-20 h-20 rounded-3xl",
               isCyberpunkTheme 
-                ? "bg-transparent text-warning border border-warning/30 shadow-[0_0_15px_rgba(252,238,10,0.1)]" 
+                // GLOW UPGRADE: Stronger Warning Glow
+                ? "bg-transparent text-warning border-2 border-warning/50 shadow-[0_0_25px_rgba(252,238,10,0.4)]" 
                 : "bg-surface-muted text-warning"
             )}>
-               <List size={40} strokeWidth={isRich ? 1.5 : 2} />
+               <List size={40} strokeWidth={isRich ? 1.5 : 2} className={isRich ? "drop-shadow-[0_0_8px_rgba(252,238,10,1)]" : ""} />
             </div>
             <span className={cn(
-              "font-bold text-center px-2 leading-tight",
-              "text-base sm:text-lg",
-              isRich ? "font-mono text-warning/90 tracking-wider" : "text-foreground"
+              "font-bold text-center px-2 leading-tight text-base sm:text-lg",
+              isRich ? "font-mono text-warning/90 tracking-wider drop-shadow-[0_0_5px_rgba(252,238,10,0.5)]" : "text-foreground"
             )}>
               {content.actions.route}
             </span>
           </Card>
         </Link>
 
-        {/* Settings - Full Width Bar */}
+        {/* Settings */}
         <Link to="/settings" className="col-span-2">
            <Card className={cn(
             "h-24 px-6 hover:border-muted-foreground/50 transition-colors group",
@@ -187,31 +188,28 @@ const Dashboard: React.FC = () => {
             isRich ? "bg-black/50" : "bg-surface"
           )}>
             <div className="flex items-center justify-center gap-5 w-full relative">
-                {/* Icon */}
                 <div className={cn(
                   "flex items-center justify-center transition-transform group-hover:rotate-90 duration-500",
                   "p-3 rounded-xl",
                   isCyberpunkTheme
-                    ? "bg-transparent text-muted-foreground border border-border/30"
+                    ? "bg-transparent text-muted-foreground border border-border/50 shadow-[0_0_15px_rgba(255,255,255,0.1)]"
                     : "bg-surface-muted text-muted-foreground"
                 )}>
                   <Settings size={32} />
                 </div>
                 
-                {/* Text - Bold & Large */}
                 <span className={cn(
                   "font-bold truncate max-w-[60%]",
                   isRich 
-                    ? "font-mono text-muted-foreground tracking-widest text-2xl" 
+                    ? "font-mono text-muted-foreground tracking-widest text-2xl drop-shadow-sm" 
                     : "text-xl text-foreground"
                 )}>
                   {content.actions.settings}
                 </span>
 
-                {/* Chevron */}
                 <div className="absolute right-0 top-1/2 -translate-y-1/2">
                     {isCyberpunkTheme ? (
-                       <ChevronRight size={32} className="text-muted-foreground group-hover:text-brand transition-colors" />
+                       <ChevronRight size={32} className="text-muted-foreground group-hover:text-brand transition-colors drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]" />
                     ) : (
                        <div className="w-3 h-3 rounded-full bg-success ring-4 ring-success/20" />
                     )}
@@ -221,10 +219,9 @@ const Dashboard: React.FC = () => {
         </Link>
       </div>
 
-      {/* 4. STATUS READOUT - High Contrast & Larger Text */}
+      {/* 4. STATUS READOUT */}
       <Card className={cn(
         "p-5 sm:p-6 space-y-4",
-        // Added extra padding bottom for Cyberpunk mode to clear decorators
         isRich ? "bg-black/40 border-dashed border-border pb-12" : "bg-surface/50"
       )}>
         <h3 className={cn(
@@ -234,16 +231,18 @@ const Dashboard: React.FC = () => {
           {content.status.title}
         </h3>
         
+        {/* Status Rows - Increased glow on values */}
         <div className="space-y-4">
             <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
-                   {isRich ? <Zap size={20} className="text-warning" /> : <MapPin size={20} className="text-muted-foreground" />}
-                   {/* Text increased to text-base (16px) */}
+                   {isRich ? <Zap size={20} className="text-warning drop-shadow-[0_0_8px_rgba(252,238,10,0.8)]" /> : <MapPin size={20} className="text-muted-foreground" />}
                    <span className="text-base font-semibold text-foreground">{content.status.row1}</span>
                 </div>
                 <span className={cn(
                     "text-sm font-bold px-3 py-1.5 rounded",
-                    isRich ? "bg-brand/10 text-brand border border-brand/20 font-mono shadow-[0_0_10px_rgba(0,240,255,0.2)]" : "bg-success/10 text-success"
+                    isRich 
+                        ? "bg-brand/10 text-brand border border-brand/40 font-mono shadow-[0_0_15px_rgba(0,240,255,0.3)]" 
+                        : "bg-success/10 text-success"
                 )}>
                     {content.status.row1Value}
                 </span>
@@ -251,12 +250,14 @@ const Dashboard: React.FC = () => {
 
             <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
-                   {isRich ? <ShieldCheck size={20} className="text-success" /> : <Activity size={20} className="text-muted-foreground" />}
+                   {isRich ? <ShieldCheck size={20} className="text-success drop-shadow-[0_0_8px_rgba(10,255,96,0.8)]" /> : <Activity size={20} className="text-muted-foreground" />}
                    <span className="text-base font-semibold text-foreground">{content.status.row2}</span>
                 </div>
                 <span className={cn(
                     "text-sm font-bold px-3 py-1.5 rounded",
-                    isRich ? "bg-success/10 text-success border border-success/20 font-mono shadow-[0_0_10px_rgba(10,255,96,0.2)]" : "bg-surface-muted text-muted-foreground"
+                    isRich 
+                        ? "bg-success/10 text-success border border-success/40 font-mono shadow-[0_0_15px_rgba(10,255,96,0.3)]" 
+                        : "bg-surface-muted text-muted-foreground"
                 )}>
                     {content.status.row2Value}
                 </span>

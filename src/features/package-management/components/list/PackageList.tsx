@@ -5,7 +5,7 @@ import { type Package, type Stop } from '../../../../db';
 import { StopCard } from './StopCard'; 
 import { Box } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
-import 'react-swipeable-list/dist/styles.css';
+import { cn } from '../../../../lib/utils';
 
 interface PackageListProps {
   packages: Package[];
@@ -42,17 +42,16 @@ const PackageList: React.FC<PackageListProps> = ({
   }, [packages, route]);
 
   return (
-    <div className="flex flex-col pb-40 px-3 pt-2 space-y-4">
+    <div className="flex flex-col pt-4 px-4 sm:px-6 space-y-4">
       <AnimatePresence initial={false}>
         {groupedStops.map(({ stopIndex, stop, packages }) => {
+            // Unique key ensures full re-render if package count changes, 
+            // fixing potential swipe-action glitches or badge count staleness.
+            const signature = `${stopIndex}-${packages.length}-${packages.map(p=>p.id).join('')}`;
             
-            // ✅ THE MAGIC FIX: Create a unique signature for this specific state of the card.
-            // If a package is added, deleted, or resized, this string changes.
-            // This forces React to fully re-mount the card, fixing the Swipe listeners and Badge counts.
-
             return (
                 <StopCard 
-                    key={stopIndex} // <--- The Key forces the refresh
+                    key={signature}
                     stopIndex={stopIndex}
                     stop={stop}
                     packages={packages}
@@ -65,11 +64,15 @@ const PackageList: React.FC<PackageListProps> = ({
       </AnimatePresence>
 
       {packages.length === 0 && (
-        <div className="flex flex-col items-center justify-center pt-32 text-muted-foreground">
-            <div className="w-20 h-20 bg-surface-muted rounded-full flex items-center justify-center mb-4 border border-border/50">
-                <Box size={32} className="text-muted" />
+        <div className="flex flex-col items-center justify-center pt-32 text-muted-foreground opacity-60">
+            <div className={cn(
+                "w-24 h-24 rounded-full flex items-center justify-center mb-4 border-2 border-dashed",
+                "bg-surface-muted border-border"
+            )}>
+                <Box size={40} className="text-muted-foreground" />
             </div>
-            <p className="text-lg font-medium">Ready to load</p>
+            <p className="text-xl font-bold tracking-tight">Manifest Empty</p>
+            <p className="text-sm">Load packages to begin.</p>
         </div>
       )}
     </div>

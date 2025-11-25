@@ -11,10 +11,10 @@ import PackageList from '../components/list/PackageList';
 import PackageForm from '../components/form/PackageForm';
 import { PackagesActionBar } from '../components/actions/PackagesActionBar';
 import { Button } from '../../../components/ui/Button';
-import Portal from '../../../components/ui/Portal'; // ✅ NEW IMPORT
+// Removed Portal import - we will render inline for better Z-index control
 
 // Icons & Utils
-import { Keyboard, Truck } from 'lucide-react';
+import { Keyboard, Truck, Plus } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
 const Packages: React.FC = () => {
@@ -22,8 +22,13 @@ const Packages: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useDispatch<AppDispatch>();
 
+  // Selectors
   const { packages, loading, error } = useSelector((state: RootState) => state.packages);
   const route = useSelector((state: RootState) => state.route.route);
+  const { theme, richThemingEnabled } = useSelector((state: RootState) => state.settings);
+
+  const isCyberpunk = theme === 'cyberpunk';
+  const isRich = isCyberpunk && richThemingEnabled;
 
   // Local State
   const [searchQuery, setSearchQuery] = useState('');
@@ -59,7 +64,7 @@ const Packages: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [isFormActive, navigate, setSearchParams]);
 
-  // --- HANDLERS (Unchanged) ---
+  // --- HANDLERS ---
   const handleStartEdit = (pkg: Package) => {
     setEditingPackage(pkg);
     setFormContext('edit');
@@ -105,31 +110,35 @@ const Packages: React.FC = () => {
 
   // --- RENDER ---
 
-  if (loading) return <div className="p-6 text-center animate-pulse text-foreground">Loading manifest...</div>;
-  if (error) return <div className="p-6 text-center text-danger">Error: {error}</div>;
+  if (loading) return <div className="p-6 text-center animate-pulse text-foreground font-medium">Loading manifest...</div>;
+  if (error) return <div className="p-6 text-center text-danger font-bold">Error: {error}</div>;
 
   if (route.length === 0) {
     return (
-      <div className="text-center space-y-4 p-6 flex flex-col items-center justify-center h-full">
-        <h2 className="text-xl font-semibold text-danger">Route Not Found</h2>
-        <p className="text-muted">You must set up your route before you can add packages.</p>
-        <Button onClick={() => navigate('/route-setup')}>Go to Route Setup</Button>
+      <div className="text-center space-y-6 p-8 flex flex-col items-center justify-center h-full bg-background">
+        <div className="p-6 bg-surface rounded-full border border-dashed border-border">
+           <Truck size={48} className="text-muted-foreground" />
+        </div>
+        <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-foreground">Route Not Found</h2>
+            <p className="text-muted-foreground max-w-xs mx-auto">You must import or create a route before managing packages.</p>
+        </div>
+        <Button onClick={() => navigate('/route-setup')} size="lg">Go to Route Setup</Button>
       </div>
     );
   }
 
   return (
-    // 1. Use h-full to fit within the parent layout (BottomNavLayout)
     <div className="flex flex-col h-full bg-background relative overflow-hidden">
       
-      {/* 2. Sticky Header */}
-      <div className="flex-none z-20">
+      {/* 1. Sticky Header (z-40 to sit above list items but below form backdrop) */}
+      <div className="flex-none z-40">
         <PackagesActionBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
       </div>
 
-      {/* 3. Scrollable Content */}
-      <div className="flex-1 overflow-y-auto relative scroll-smooth">
-        <div className={cn("w-full max-w-3xl mx-auto", isFormActive ? 'hidden' : 'block')}>
+      {/* 2. Scrollable Content */}
+      <div className="flex-1 overflow-y-auto relative scroll-smooth no-scrollbar">
+        <div className={cn("w-full max-w-3xl mx-auto pb-32", isFormActive ? 'hidden' : 'block')}>
           <PackageList
             packages={filteredPackages}
             searchQuery={searchQuery}
@@ -140,57 +149,72 @@ const Packages: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. PORTALLED INTERFACE ELEMENTS (Break out of layout) */}
-      <Portal>
-        <div className="pointer-events-none fixed inset-0 z-50 flex flex-col justify-end">
-            
-            {/* Bottom Gradient Fade - stop above the bottom nav so it doesn't darken the nav */}
-            <div
-              className="absolute left-0 right-0 h-40 bg-linear-to-t from-background via-background/80 to-transparent z-0"
-              style={{ bottom: 'calc(var(--bottom-nav-height) + 8px)' }}
-            />
+      {/* 3. THEME-AWARE FABS (Inline Absolute) */}
+      {/* Removed Portal. Now absolute positioned relative to this container.
+          z-30 ensures it is above the list (z-0) and header shadow, 
+          but correctly covered by the PackageForm backdrop (z-60). 
+      */}
+      <div className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none flex flex-col justify-end">
+          
+          {/* Gradient Fade */}
+          <div
+            className="absolute left-0 right-0 h-40 bg-linear-to-t from-background via-background/80 to-transparent z-0"
+            style={{ bottom: 0 }} 
+          />
 
-            {/* FAB Cluster - Positioned absolutely above bottom nav */}
-            {/* bottom-[88px] accounts for Nav Bar (approx 60-70px) + padding */}
-            <div className="relative z-10 fab-offset px-6 w-full max-w-md mx-auto">
-                <div className="flex items-end justify-center gap-8 pointer-events-auto">
-                    
-                    {/* Manual Entry */}
-                    <Button
-                        onClick={() => {
-                            setEditingPackage(null);
-                            setFormContext('manual');
-                            setSearchParams({ form: 'true' });
-                        }}
-                        variant="surface"
-                        className="w-12 h-12 rounded-full shadow-lg p-0 border border-white/10 bg-surface/80 backdrop-blur-md active:scale-90 transition-all hover:border-white/30"
-                    >
-                        <Keyboard size={20} className="text-muted-foreground" />
-                    </Button>
+          {/* FAB Cluster */}
+          <div className="relative z-10 px-6 w-full max-w-md mx-auto pb-4">
+              <div className="flex items-end justify-center gap-6 pointer-events-auto">
+                  
+                  {/* A. MANUAL ENTRY */}
+                  <Button
+                      onClick={() => {
+                          setEditingPackage(null);
+                          setFormContext('manual');
+                          setSearchParams({ form: 'true' });
+                      }}
+                      variant="surface"
+                      className={cn(
+                          "w-14 h-14 rounded-2xl shadow-lg p-0 border active:scale-95 transition-all",
+                          isCyberpunk 
+                              ? "bg-black/80 border-brand/30 text-brand hover:bg-brand/10 hover:border-brand/50 shadow-[0_0_15px_rgba(0,240,255,0.1)]" 
+                              : "bg-surface border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
+                      )}
+                      aria-label="Manual Entry"
+                  >
+                      {isCyberpunk ? <Keyboard size={24} /> : <Plus size={28} />}
+                  </Button>
 
-                    {/* LOAD TRUCK (Hero) */}
-                    <button
-                        onClick={() => navigate('/load-truck')}
-                        className="relative group -top-1"
-                    >
-                        <div className="absolute inset-0 bg-accent-10 rounded-full blur-md opacity-40 group-hover:opacity-60 transition-opacity" />
-                        <div className="relative btn-primary shadow-2xl shadow-brand/30 text-brand-foreground w-16 h-16 rounded-full flex items-center justify-center transform transition-all active:scale-95 hover:scale-105 border-2 border-border/20">
-                            <Truck size={32} className="-ml-0.5" />
-                        </div>
-                    </button>
+                  {/* B. LOAD TRUCK (Hero) */}
+                  <button
+                      onClick={() => navigate('/load-truck')}
+                      className="relative group -top-2"
+                      aria-label="Load Truck Mode"
+                  >
+                      {/* Glow Layer */}
+                      <div className={cn(
+                          "absolute inset-0 rounded-full blur-xl transition-opacity duration-500",
+                          isRich ? "bg-brand/40 opacity-60 group-hover:opacity-100 animate-pulse" : "bg-brand/20 opacity-0 group-hover:opacity-50"
+                      )} />
+                      
+                      {/* Button Body */}
+                      <div className={cn(
+                          "relative w-20 h-20 rounded-full flex items-center justify-center transform transition-all duration-300 active:scale-95 hover:scale-105",
+                          isCyberpunk 
+                              ? "bg-black border-2 border-brand text-brand shadow-[0_0_20px_rgba(0,240,255,0.3)]" 
+                              : "bg-brand text-brand-foreground shadow-xl shadow-brand/30"
+                      )}>
+                          <Truck size={36} strokeWidth={isRich ? 1.5 : 2.5} className="-ml-0.5" />
+                      </div>
+                  </button>
 
-                    {/* Ghost Spacer for symmetry (Optional) */}
-                    <div className="w-12" />
-                </div>
-            </div>
-        </div>
+                  {/* Spacer for balance */}
+                  <div className="w-14" /> 
+              </div>
+          </div>
+      </div>
 
-        {/* Manual Form (Also Portalled automatically by its own implementation? Check PackageForm) */}
-        {/* If PackageForm uses Portal internally, we are good. If not, we should wrap it or leave it. */}
-        {/* PackageForm usually creates its own Fixed overlay, so it's fine in the main tree. */}
-      </Portal>
-
-      {/* Form is rendered here but uses fixed positioning */}
+      {/* 4. PACKAGE FORM DRAWER (z-60+) */}
       <PackageForm
         show={isFormActive}
         formContext={formContext}

@@ -18,7 +18,7 @@ const ThemeController: React.FC<{ children: React.ReactNode }> = ({ children }) 
   // Apply global class immediately
   useLayoutEffect(() => {
     document.documentElement.classList.toggle('theme-cyberpunk', isCyberpunkActive);
-    document.body.style.background = isCyberpunkActive ? '#0d0015' : '';
+    // document.body.style.background = isCyberpunkActive ? '#0d0015' : '';
   }, [isCyberpunkActive]);
 
   useEffect(() => {
@@ -51,20 +51,23 @@ const ThemeController: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   return (
     <div className="relative min-h-screen">
-      {/* 1. Cyberpunk background + overlay — rendered FIRST in React tree */}
+      {/* 1. Cyberpunk background + overlay — Now just the rain, high z-index */}
       {isCyberpunkActive && (
-        <div className="fixed inset-0 -z-20 pointer-events-none">
-          <div className="absolute inset-0 bg-[#0d0015]" />
+        // ✅ Keep the z-index fix here
+        <div className="fixed inset-0 pointer-events-none z-[40]"> 
           <CyberpunkOverlay />
+          {/* <div className="absolute inset-0 bg-[#0d0015]" /> */}
+          
         </div>
       )}
 
-      {/* 2. Your actual app content — on top */}
-      <div className={isCyberpunkActive ? 'relative z-10' : ''}>
+      {/* 2. Your actual app content — Remove z-index/relative to prevent dimming/layering */}
+      {/* 🛑 FIX: Change this div back to a simple container */}
+      <div className={isCyberpunkActive ? '' : ''}> 
         {children}
       </div>
 
-      {/* 3. Sparks — on top of everything */}
+      {/* 3. Sparks — (remains the same) */}
       {isCyberpunkActive &&
         activeSparks.map(spark => (
           <Sparks

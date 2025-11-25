@@ -132,6 +132,10 @@
   --success-10: color-mix(in srgb, var(--success) 10%, transparent);
 }
 
+/* [data-theme="cyberpunk"] canvas {
+  z-index: 10 !important;
+} */
+
 html, body, #root { height: 100%; }
 
 /* Navigation Bar Adaptation */

@@ -8,7 +8,7 @@ interface NotesInputProps {
   setPkg: React.Dispatch<React.SetStateAction<Partial<Package>>>;
 }
 
-const quickTags = ['Bin 1', 'Bin 2', 'Front Seat', 'Back Door'];
+const quickTags = ['Bin 1', 'Bin 2', 'Front Seat', 'Back Door', 'Heavy', 'Fragile'];
 
 const NotesInput: React.FC<NotesInputProps> = ({ pkg, handleInputChange, setPkg }) => {
   const handleTagClick = (tag: string) => {
@@ -23,19 +23,19 @@ const NotesInput: React.FC<NotesInputProps> = ({ pkg, handleInputChange, setPkg 
 
   return (
     <div>
-      <label className="block text-sm font-semibold text-foreground mb-2">
-        Load Location / Notes (Optional)
+      <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 ml-1">
+        Notes / Location
       </label>
       <textarea
         name="notes"
         value={pkg.notes || ''}
         onChange={handleInputChange}
-        placeholder="e.g. Bin 3, Front Shelf or Fragile"
-        // FIX: Semantic styling
-        className="w-full p-4 text-base bg-surface-muted text-foreground border-2 border-border rounded-xl focus:ring-4 focus:ring-brand/30 focus:border-brand shadow-sm transition-all duration-300 min-h-20 placeholder:text-muted-foreground"
+        placeholder="e.g. Bin 3, Front Shelf..."
+        // SEMANTIC TEXTAREA
+        className="w-full p-4 text-base bg-surface-muted text-foreground border border-border rounded-xl focus:ring-2 focus:ring-brand/20 focus:border-brand outline-none transition-all min-h-20 placeholder:text-muted-foreground/50 resize-none"
         rows={3}
       />
-      <div className="flex flex-wrap gap-2 mt-2">
+      <div className="flex flex-wrap gap-2 mt-3">
         {quickTags.map((tag) => (
           <Button
             key={tag}
@@ -43,6 +43,7 @@ const NotesInput: React.FC<NotesInputProps> = ({ pkg, handleInputChange, setPkg 
             variant="surface"
             size="sm"
             onClick={() => handleTagClick(tag)}
+            className="text-xs h-8 rounded-lg bg-surface border-border hover:border-brand/50 hover:text-brand transition-colors"
           >
             + {tag}
           </Button>

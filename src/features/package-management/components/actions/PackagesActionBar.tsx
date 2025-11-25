@@ -21,10 +21,9 @@ export const PackagesActionBar: React.FC<ActionBarProps> = ({ searchQuery, setSe
 
   return (
     <div className="sticky top-0 z-40 w-full">
-      {/* Glass Background Layer */}
-      <div className="absolute inset-0 bg-background/80 backdrop-blur-xl border-b border-border shadow-sm" />
+      {/* SEMANTIC GLASS LAYER */}
+      <div className="absolute inset-0 bg-background/80 backdrop-blur-md border-b border-border shadow-sm support-[backdrop-filter]:bg-background/60" />
       
-      {/* Content */}
       <div className="relative max-w-md mx-auto flex items-center gap-3 h-16 px-4">
         <AnimatePresence mode="wait">
           {isSearchMode ? (
@@ -42,15 +41,16 @@ export const PackagesActionBar: React.FC<ActionBarProps> = ({ searchQuery, setSe
                   type="text" 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search..."
-                  className="w-full bg-surface-muted rounded-full pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-brand outline-none border border-border text-foreground"
+                  placeholder="Search tracking, address..."
+                  // SEMANTIC INPUT STYLES
+                  className="w-full bg-surface-muted text-foreground placeholder:text-muted-foreground rounded-full pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-brand focus:border-transparent outline-none border border-border transition-all"
                 />
               </div>
               <Button 
                 variant="ghost" 
                 size="sm" 
                 onClick={() => { setIsSearchMode(false); setSearchQuery(''); }}
-                className="text-brand shrink-0"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
               >
                 Cancel
               </Button>
@@ -70,20 +70,19 @@ export const PackagesActionBar: React.FC<ActionBarProps> = ({ searchQuery, setSe
                     variant="ghost" 
                     size="sm"
                     onClick={() => setIsSearchMode(true)}
-                    className="w-10 h-10 p-0 rounded-full bg-surface-muted hover:bg-surface-muted/80 border border-border"
-                    aria-label="Search"
+                    className="w-10 h-10 p-0 rounded-full bg-surface-muted text-muted-foreground hover:text-foreground border border-transparent hover:border-border transition-all"
                  >
                     <Search size={20} />
                  </Button>
 
-                 <div className="w-px h-6 bg-border mx-1"></div>
+                 <div className="w-px h-6 bg-border mx-1 opacity-50"></div>
 
                  <Button 
                     variant="ghost"
                     size="sm"
                     onClick={() => dispatch(savePackagesToDB(packages))}
                     disabled={packages.length === 0}
-                    className="w-10 h-10 p-0 rounded-full text-brand hover:text-brand/80 hover:bg-brand/10"
+                    className="w-10 h-10 p-0 rounded-full text-brand hover:bg-brand/10 disabled:opacity-30"
                  >
                     <Save size={20} />
                  </Button>
@@ -92,7 +91,7 @@ export const PackagesActionBar: React.FC<ActionBarProps> = ({ searchQuery, setSe
                     variant="ghost"
                     size="sm"
                     onClick={() => { if(confirm('Clear all?')) dispatch(clearPackagesFromDB()) }}
-                    className="w-10 h-10 p-0 rounded-full text-danger hover:text-danger/80 hover:bg-danger/10"
+                    className="w-10 h-10 p-0 rounded-full text-danger hover:bg-danger/10"
                  >
                     <Trash2 size={20} />
                  </Button>

@@ -107,7 +107,7 @@ const AddressInput: React.FC<AddressInputProps> = ({
             onChange={(e) => { setIsInteracted(true); setAddress(e.target.value); }}
             onFocus={handleFocus}
             placeholder="Search Address..."
-            // FIX: Semantic colors for background and text
+            // FULLY SEMANTIC INPUT STYLING
             className="w-full pl-12 pr-4 py-4 text-xl font-bold bg-surface-muted text-foreground border-2 border-transparent focus:border-brand rounded-2xl outline-none transition-all placeholder:text-muted-foreground/50 placeholder:font-normal shadow-inner"
           />
       </div>
@@ -119,7 +119,7 @@ const AddressInput: React.FC<AddressInputProps> = ({
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                // FIX: Semantic colors for dropdown
+                // SEMANTIC DROPDOWN
                 className="absolute z-30 w-full mt-2 bg-surface border border-border rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto"
             >
                 {suggestions.map((item) => {

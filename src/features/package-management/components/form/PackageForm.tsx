@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { type AppDispatch, type RootState } from '../../../../store'; // Relative Path
-import { addPackage, updatePackage } from '../../store/packageSlice'; // Relative Path
+import { type AppDispatch, type RootState } from '../../../../store';
+import { addPackage, updatePackage } from '../../store/packageSlice';
 import { toast } from 'sonner';
-import { type Package } from '../../../../db'; // Relative Path
+import { type Package } from '../../../../db';
 import { motion, AnimatePresence, type PanInfo, useDragControls } from 'framer-motion';
 import AddressInput, { type AddressMatch } from './AddressInput';
 import TrackingInput from './TrackingInput';
 import SizeSelect from './SizeSelect';
 import NotesInput from './NotesInput';
 import ActionButtons from '../actions/Actionbuttons';
+import { useAppSelector } from '../../../../store';
 
 function generateUUID(): string {
   return window.crypto?.randomUUID?.() || Date.now().toString();
@@ -32,6 +33,7 @@ const PackageForm: React.FC<PackageFormProps> = ({
 }) => {
   const dispatch = useDispatch<AppDispatch>();
   const route = useSelector((state: RootState) => state.route.route);
+  const theme = useAppSelector(state => state.settings.theme); // For specific styling overrides
   const controls = useDragControls();
 
   const [pkg, setPkg] = useState<Partial<Package>>({ tracking: '', size: 'medium', notes: '' });
@@ -112,6 +114,11 @@ const PackageForm: React.FC<PackageFormProps> = ({
 
   const isSubmitDisabled = !pkg.tracking?.trim() && !address.trim();
 
+  // Cyberpunk Glow Effect for the Drawer Border
+  const drawerBorderClass = theme === 'cyberpunk' 
+    ? 'border-t border-brand shadow-[0_-5px_20px_rgba(0,240,255,0.15)]' 
+    : 'border-t border-border';
+
   return (
     <AnimatePresence>
       {show && (
@@ -122,8 +129,7 @@ const PackageForm: React.FC<PackageFormProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onCancel}
-            // UPDATED: z-[60] to sit above the FABs (which are z-50)
-            className="fixed inset-0 z-60"
+            className="fixed inset-0 z-60 bg-black/40 backdrop-blur-sm"
           />
 
           {/* Drawer Container */}
@@ -138,8 +144,8 @@ const PackageForm: React.FC<PackageFormProps> = ({
             dragListener={false}
             dragControls={controls}
             onDragEnd={handleDragEnd}
-            // UPDATED: z-[70] to sit above the backdrop and everything else
-            className="fixed bottom-0 left-0 right-0 z-70 bg-surface text-foreground rounded-t-3xl shadow-2xl flex flex-col max-h-[92vh] border-t border-border"
+            // SEMANTIC BACKGROUNDS
+            className={`fixed bottom-0 left-0 right-0 z-70 bg-surface text-foreground rounded-t-3xl shadow-2xl flex flex-col max-h-[92vh] ${drawerBorderClass}`}
             style={{ touchAction: 'none' }} 
           >
             {/* Drag Handle */}
@@ -147,7 +153,7 @@ const PackageForm: React.FC<PackageFormProps> = ({
                 className="w-full flex justify-center pt-4 pb-2 cursor-grab active:cursor-grabbing touch-none"
                 onPointerDown={(e) => controls.start(e)} 
             >
-               <div className="w-16 h-1.5 bg-muted/40 rounded-full pointer-events-none" />
+               <div className="w-16 h-1.5 bg-muted-foreground/20 rounded-full pointer-events-none" />
             </div>
 
             <div 

@@ -32,10 +32,10 @@ const SizeSelect: React.FC<SizeSelectProps> = ({ pkg, setPkg }) => {
                 "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all",
                 isActive 
                   ? "bg-surface text-foreground shadow-sm ring-1 ring-border" 
-                  : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
               )}
             >
-              <opt.icon size={18} className={isActive ? "text-brand" : ""} />
+              <opt.icon size={18} className={isActive ? "text-brand" : "text-muted-foreground"} />
               {opt.label}
             </button>
           );

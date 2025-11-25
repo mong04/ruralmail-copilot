@@ -11,11 +11,12 @@ interface BadgeProps {
 
 export const Badge: React.FC<BadgeProps> = ({ variant = 'default', className, children }) => {
   const variants = {
+    // SEMANTIC MAPPING
     default: 'bg-brand/10 text-brand border-brand/20',
-    success: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-    warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
-    danger:  'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
-    muted:   'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 border-transparent',
+    success: 'bg-success/10 text-success border-success/20',
+    warning: 'bg-warning/10 text-warning border-warning/20',
+    danger:  'bg-danger/10 text-danger border-danger/20',
+    muted:   'bg-surface-muted text-muted-foreground border-transparent',
     outline: 'bg-transparent border-border text-muted-foreground',
   };
 

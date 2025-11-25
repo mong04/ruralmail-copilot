@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { type Package, type Stop } from '../../../../db'; // Adjust imports based on file location!
+import { type Package, type Stop } from '../../../../db';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Box, Mail, Home, AlertCircle } from 'lucide-react';
 import { formatAddressForDisplay } from '../../../../utils/addressFormat';
@@ -50,7 +50,6 @@ export const StopCard: React.FC<StopCardProps> = ({
       exit={{ opacity: 0, scale: 0.95 }}
       className="mb-4" 
     >
-      {/* Added: border-border to ensure visibility on all backgrounds */}
       <Card className="overflow-hidden shadow-sm border border-border bg-surface group">
         
         {/* HEADER */}
@@ -60,7 +59,7 @@ export const StopCard: React.FC<StopCardProps> = ({
         >
           {/* STOP BADGE */}
           <div className={cn(
-            "w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 shadow-sm font-bold text-lg border",
+            "w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 shadow-sm font-bold text-lg border transition-colors",
             isUnassigned 
                 ? "bg-surface-muted text-muted-foreground border-border" 
                 : "bg-brand text-brand-foreground border-brand/50 shadow-brand/20"
@@ -78,21 +77,21 @@ export const StopCard: React.FC<StopCardProps> = ({
              {/* CARGO CLUSTER */}
              <div className="flex items-center gap-2 flex-wrap">
                  {summary.small > 0 && (
-                   <Badge className="gap-1.5 badge-info border-transparent px-2 py-0.5">
+                   <Badge variant="default" className="gap-1.5 px-2 py-0.5">
                      <Mail size={12} /> {summary.small}
                    </Badge>
                  )}
                  {summary.medium > 0 && (
-                   <Badge className="gap-1.5 badge-warning border-transparent px-2 py-0.5">
+                   <Badge variant="warning" className="gap-1.5 px-2 py-0.5">
                      <Box size={12} /> {summary.medium}
                    </Badge>
                  )}
                  {summary.large > 0 && (
-                   <Badge className="gap-1.5 badge-danger border-transparent px-2 py-0.5">
+                   <Badge variant="danger" className="gap-1.5 px-2 py-0.5">
                      <Home size={12} /> {summary.large}
                    </Badge>
                  )}
-                {packages.length === 0 && <span className="text-xs text-muted">Empty stop</span>}
+                {packages.length === 0 && <span className="text-xs text-muted-foreground">Empty stop</span>}
              </div>
           </div>
 
@@ -106,7 +105,7 @@ export const StopCard: React.FC<StopCardProps> = ({
           {/* Warning Dot */}
           {stop?.notes && (
               <div className="absolute top-3 right-3 p-1">
-                  <div className="w-2 h-2 rounded-full bg-amber-500 border border-surface shadow-sm" />
+                  <div className="w-2 h-2 rounded-full bg-warning border border-surface shadow-sm animate-pulse" />
               </div>
           )}
         </button>
@@ -121,7 +120,8 @@ export const StopCard: React.FC<StopCardProps> = ({
               className="overflow-hidden border-t border-border bg-surface-muted/30"
             >
                {stop?.notes && (
-                   <div className="px-4 py-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold uppercase tracking-wide flex items-center gap-2 border-b border-amber-500/20">
+                   // SEMANTIC WARNING BANNER
+                   <div className="px-4 py-2 bg-warning/10 text-warning text-xs font-bold uppercase tracking-wide flex items-center gap-2 border-b border-warning/20">
                        <AlertCircle size={12} />
                        {stop.notes}
                    </div>
@@ -153,7 +153,7 @@ export const StopCard: React.FC<StopCardProps> = ({
                       assignedStopNumber: stopIndex,
                       assignedAddress: stop?.full_address 
                     })}
-                    className="flex items-center gap-2 text-xs font-bold btn-primary py-2 px-6 rounded-full transition-all active:scale-95 border border-brand/10"
+                    className="flex items-center gap-2 text-xs font-bold bg-brand text-brand-foreground hover:bg-brand/90 py-2 px-6 rounded-full transition-all active:scale-95 border border-transparent shadow-sm"
                   >
                     <span>+</span> Add Package
                   </button>

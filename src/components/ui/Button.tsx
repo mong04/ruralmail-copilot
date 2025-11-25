@@ -4,32 +4,32 @@ import { twMerge } from 'tailwind-merge';
 import { Loader2 } from 'lucide-react';
 
 const button = cva(
-  // Base: Physics (scale), Layout (flex), and Focus states
   'relative inline-flex items-center justify-center rounded-xl font-medium transition-all duration-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand/50 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed overflow-hidden select-none',
   {
     variants: {
       variant: {
         primary: [
           'bg-brand text-brand-foreground',
-          'hover:bg-brand/90',
+          'hover:brightness-110', 
           'border border-transparent', 
         ],
         surface: [
-          'bg-surface text-foreground border border-border/50',
-          'hover:bg-surface-muted hover:border-border',
+          'bg-surface text-foreground border border-border',
+          'hover:bg-surface-muted hover:border-border/80',
         ],
         danger: [
-          'bg-red-500/10 text-red-600 border border-red-500/20',
-          'hover:bg-red-500/20 hover:border-red-500/30',
-          'dark:text-red-400 dark:border-red-400/20',
+          // FULLY SEMANTIC: Uses defined CSS variables for danger state
+          'bg-danger/10 text-danger border border-danger/20',
+          'hover:bg-danger/20 hover:border-danger/30',
         ],
         ghost: [
           'bg-transparent text-muted-foreground',
           'hover:bg-surface-muted hover:text-foreground',
         ],
         glass: [
-            'bg-white/10 backdrop-blur-md border border-white/20 text-white',
-            'hover:bg-white/20 hover:border-white/30 shadow-sm'
+            // Special case for overlay elements, kept neutral but theme-aware
+            'bg-surface/10 backdrop-blur-md border border-white/20 text-white',
+            'hover:bg-surface/20 hover:border-white/30 shadow-sm'
         ]
       },
       size: {
@@ -64,7 +64,7 @@ export const Button: React.FC<ButtonProps> = ({
       {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
       {children}
       
-      {/* Subtle Highlight Overlay for "Glossy" feel on primary buttons */}
+      {/* Gloss Effect for Primary Buttons only */}
       {variant === 'primary' && (
         <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/20 pointer-events-none" />
       )}

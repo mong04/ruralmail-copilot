@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 
-const CyberpunkOverlay: React.FC = () => {
+export const CyberpunkOverlay: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {

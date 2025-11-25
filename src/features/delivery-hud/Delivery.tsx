@@ -15,7 +15,7 @@ import {
   selectDynamicHudAlert,
   setCurrentStop
 } from './hudSlice';
-import { type Stop } from '../../db';
+import { type Stop, type Package } from '../../db';
 import { showNotification } from '../notification/notificationSlice';
 import { markPackagesDelivered } from '../package-management/store/packageSlice';
 import DeliveryMap from './components/DeliveryMap';
@@ -28,40 +28,46 @@ import NavigationPanel from './components/NavigationPanel';
 import distance from '@turf/distance';
 import { HudBanner } from '../notification/HudBanner';
 import { geocodeStop, updateStop } from '../route-setup/routeSlice';
-import { triggerThemeFx } from '../../lib/theme-fx'; // ✅ NEW IMPORT
+import { triggerThemeFx } from '../../lib/theme-fx';
+
+// Fix 3: Stable constant for empty packages to satisfy useMemo dependency rules
+const EMPTY_PACKAGES: Package[] = [];
 
 const Delivery: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
+  // State Selectors
   const routeState = useAppSelector((state) => state.route);
   const packageState = useAppSelector((state) => state.packages);
   const hud = useAppSelector((state) => state.hud);
   const settings = useAppSelector((state) => state.settings);
+  // Fix 2: Removed unused 'theme' variable
 
-  // New Weather Data Selectors
+  // Data Selectors
   const briefingData = useAppSelector(selectWeatherBriefingData);
   const lookAheadData = useAppSelector(selectLookAheadData);
   const hudAlertData = useAppSelector(selectDynamicHudAlert);
 
-  const route = routeState.route; // full Stop[]
-  const packages = packageState.packages ?? []; // Package[]
+  const route = routeState.route; 
+  // Fix 3: Use stable constant
+  const packages = packageState.packages ?? EMPTY_PACKAGES;
+  
   const {
     currentStop,
     position,
     voiceEnabled,
     mapStyle,
     cameraMode,
-    status,  // Use status instead of loading
+    status,
     isNavigating,
     navigationData,
     navigationStepIndex,
   } = hud;
 
-  // A ref to store a stop that has just been geocoded and is ready for navigation.
   const pendingNavigationTarget = useRef<Stop | null>(null);
 
-  // Active stops: only those with packages
+  // Active stops logic
   const activeStops = useMemo(() => (route ?? []).filter((stop, idx) =>
     packages.some(
       (pkg) =>
@@ -72,24 +78,19 @@ const Delivery: React.FC = () => {
     )
   ), [route, packages]);
 
-  // Ref to prevent re-checking on every render
   const lastCheckedPosition = useRef<{ lat: number; lng: number } | null>(null);
-  
   const deliveryMapRef = useRef<{ recenterOnCurrent: () => void } | null>(null);
 
-
+  // --- Effects ---
   useEffect(() => {
     if (activeStops.length > 0) {
       dispatch(setCurrentStop(0));
     }
   }, [activeStops.length, dispatch]);
 
-
-  // Effect to check for navigation step advancement
   useEffect(() => {
     if (!isNavigating || !position || !navigationData) return;
 
-    // Avoid re-calculating if position hasn't changed
     if (
       lastCheckedPosition.current &&
       lastCheckedPosition.current.lat === position.lat &&
@@ -102,136 +103,94 @@ const Delivery: React.FC = () => {
     const currentStep = navigationData.steps[navigationStepIndex];
     const nextStep = navigationData.steps[navigationStepIndex + 1];
 
-    // Ensure the next step and its location exist before calculating distance.
-    if (!currentStep || !nextStep || !nextStep.location) return; // End of the route or invalid next step
+    if (!currentStep || !nextStep || !nextStep.location) return;
 
     const userPoint: [number, number] = [position.lng, position.lat];
     const nextManeuverPoint: [number, number] = nextStep.location;
-
-    // Calculate distance in meters
     const distanceToNextManeuver = distance(userPoint, nextManeuverPoint, { units: 'meters' });
 
-    // If user is within 20 meters of the next turn, advance the step
     if (distanceToNextManeuver < 20) {
       dispatch(advanceNavigationStep());
     }
   }, [position, isNavigating, navigationData, navigationStepIndex, dispatch]);
 
-  // Watch geolocation
+  // Geolocation & Weather
   useEffect(() => {
     if ('geolocation' in navigator) {
-      // We only need to get the position once to fetch weather.
-      // watchPosition is better for continuous tracking on the map.
       const watcher = navigator.geolocation.watchPosition( 
         (pos) => {
           const { latitude, longitude, heading } = pos.coords;
-          const newPosition: { lat: number; lng: number; heading?: number } = {
-            lat: latitude,
-            lng: longitude,
-          };
-
-          // Only include heading if it's a valid number provided by the device
+          const newPosition: { lat: number; lng: number; heading?: number } = { lat: latitude, lng: longitude };
           if (typeof heading === 'number' && !isNaN(heading)) {
             newPosition.heading = heading;
           }
           dispatch(updatePosition(newPosition));
-
-          // Fetch weather only if we don't have it and are not currently loading it.
-          // We only want to fetch if the status is 'idle'.
           if (status === 'idle') {
             dispatch(fetchForecast(newPosition));
             dispatch(fetchSevereAlerts(newPosition));
           }
         },
-        () => { // Removed 'err' as it was unused
+        () => {
           dispatch(showNotification({
             type: 'error',
             message: 'Geolocation failed',
-            description: 'Please enable location permissions to use navigation and weather features.',
+            description: 'Please enable location permissions.',
           }));
         },
         { enableHighAccuracy: true }
       );
       return () => navigator.geolocation.clearWatch(watcher);
-    } else {
-      dispatch(showNotification({
-        type: 'error',
-        message: 'Geolocation Not Supported',
-        description: 'Your browser does not support geolocation.',
-      }));
     }
-  }, [dispatch, status]); // Dependency is now on status
+  }, [dispatch, status]);
 
-  // Wrap handleNavigate in useCallback to stabilize its reference for use in effects.
+  // Navigation Handler
   const handleNavigate = useCallback((stopToNavigate?: Stop) => {
-    // Use the provided stop, or fall back to the current active stop from state.
     const stop = stopToNavigate || activeStops[currentStop];
-
     if (!stop) {
-      dispatch(showNotification({
-        type: 'warning',
-        message: 'No Stop Selected',
-        description: 'There is no active stop to navigate to.',
-      }));
+      dispatch(showNotification({ type: 'warning', message: 'No Stop Selected', description: 'No active stop to navigate to.' }));
       return;
     }
 
-    // If the stop doesn't have coordinates, geocode it first.
     if (!stop.lat || !stop.lng) {
-      pendingNavigationTarget.current = stop; // Set this stop as our pending target
+      pendingNavigationTarget.current = stop;
       dispatch(showNotification({ type: 'info', message: `Geocoding ${stop.address_line1}...`}));
       dispatch(geocodeStop(stop)).then(action => {
         if (geocodeStop.fulfilled.match(action)) {
-          // Update the stop in the main route state
           const stopIndex = route.findIndex(s => s.id === action.payload.id);
-          if (stopIndex !== -1) {
-            dispatch(updateStop({ index: stopIndex, stop: action.payload }));
-          }
+          if (stopIndex !== -1) dispatch(updateStop({ index: stopIndex, stop: action.payload }));
         }
       });
     } else {
-      // The stop already has coordinates, so we can navigate immediately.
       const { lat, lng } = stop;
       const navApp = settings.preferredNavApp || 'in-app';
-      let url: string;
 
-      switch (navApp) {
-        case 'google':
-          url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-          window.open(url, '_blank', 'noopener,noreferrer');
-          break;
-        case 'apple':
-          url = `http://maps.apple.com/?daddr=${lat},${lng}`;
-          window.open(url, '_blank', 'noopener,noreferrer');
-          break;
-        case 'waze':
-          url = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
-          window.open(url, '_blank', 'noopener,noreferrer');
-          break;
-        case 'in-app':
-        default:
-          // Only pass the 'end' parameter. The thunk gets the start position from state.
-          dispatch(fetchDirections({ end: { location: [lng, lat] } }));
-          triggerThemeFx('navigation-start'); // ✅ Generic Event
-          break;
+      if (navApp === 'in-app') {
+        dispatch(fetchDirections({ end: { location: [lng, lat] } }));
+        triggerThemeFx('navigation-start');
+      } else {
+        // External Maps Logic
+        let url = '';
+        if (navApp === 'google') url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+        else if (navApp === 'apple') url = `http://maps.apple.com/?daddr=${lat},${lng}`;
+        else if (navApp === 'waze') url = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
+        window.open(url, '_blank', 'noopener,noreferrer');
       }
     }
   }, [activeStops, currentStop, dispatch, route, settings.preferredNavApp]);
 
-  // This effect runs after a stop has been successfully geocoded.
-  // If the geocoded stop matches our pending navigation target, we proceed with navigation.
   useEffect(() => {
     if (pendingNavigationTarget.current && routeState.loading === false) {
       const freshlyGeocodedStop = route.find(s => s.id === pendingNavigationTarget.current?.id);
       if (freshlyGeocodedStop && freshlyGeocodedStop.lat && freshlyGeocodedStop.lng) {
-        // The stop now has coordinates, proceed with navigation.
         handleNavigate(freshlyGeocodedStop); 
       }
     }
   }, [route, routeState.loading, handleNavigate]);
 
   return (
-    <div className="z-30 h-screen w-screen flex flex-col overflow-hidden">
+    <div className="z-30 h-screen w-screen flex flex-col overflow-hidden bg-black">
+      {/* Fix 1: Removed unused CyberpunkOverlay import and usage.
+          ThemeController handles the overlay globally. */}
       <HudBanner />
 
       <div className="grow relative">
@@ -246,22 +205,29 @@ const Delivery: React.FC = () => {
           mapStyle={mapStyle}
           cameraMode={cameraMode}
         >
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-auto">
-            <NavigationPanel />
+          {/* HUD LAYOUT */}
+          
+          {/* Top Center: Turn-by-Turn */}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-auto w-full max-w-md px-4">
+             <NavigationPanel />
           </div>
           
+          {/* Top Right: Next Stop Preview */}
           <div className={`absolute right-4 z-10 pointer-events-auto transition-all duration-300 ease-in-out ${isNavigating ? 'top-24' : 'top-20'}`}>
             <LookAheadWidget lookAheadData={lookAheadData} status={status} />
           </div>
 
-          <div className="absolute bottom-4 right-4 z-10 pointer-events-auto">
-            <MapControls onRecenter={() => deliveryMapRef.current?.recenterOnCurrent()} 
-              isMapOffCenter={hud.isMapOffCenter}  
-            />
+          {/* Bottom Right: Map Controls */}
+          <div className="absolute bottom-32 right-4 z-10 pointer-events-auto">
+             <MapControls 
+               onRecenter={() => deliveryMapRef.current?.recenterOnCurrent()} 
+               isMapOffCenter={hud.isMapOffCenter}  
+             />
           </div>
         </DeliveryMap>
       </div>
 
+      {/* Bottom Panel: The Tactical Deck */}
       <DeliveryHUDPanel
         currentStop={currentStop}
         route={activeStops}
@@ -274,44 +240,32 @@ const Delivery: React.FC = () => {
           const currentStopObj = activeStops[currentStop];
           if (!currentStopObj?.id) return;
           
-          // ✅ Generic Event Trigger: "I just delivered something, here is where it happened."
-          // The DeliveryHUDPanel handles the click, but we can grab the active element or passed event
+          // Trigger FX
           const btn = document.activeElement as HTMLElement;
           triggerThemeFx('package-delivered', btn);
 
           dispatch(markPackagesDelivered({ stopId: currentStopObj.id }));
-
+          
+          // Auto-Advance Logic
           const nextActiveIndex = activeStops.slice(currentStop + 1).findIndex(stop =>
             packages.some(
-              p =>
-                !p.delivered &&
-                (p.assignedStopId === stop.id ||
-                  (!p.assignedStopId && typeof p.assignedStopNumber === 'number' && route[p.assignedStopNumber]?.id === stop.id))
+              p => !p.delivered && (p.assignedStopId === stop.id || (!p.assignedStopId && typeof p.assignedStopNumber === 'number' && route[p.assignedStopNumber]?.id === stop.id))
             )
           );
 
-          if (nextActiveIndex !== -1) {
-            const jumpsNeeded = nextActiveIndex + 1;
-            for (let i = 0; i < jumpsNeeded; i++) {
-              dispatch(advanceStop());
-            }
-          } else {
-            const remaining = activeStops.length - currentStop - 1;
-            for (let i = 0; i < remaining; i++) {
-              dispatch(advanceStop());
-            }
-          }
+          const jumps = nextActiveIndex !== -1 ? nextActiveIndex + 1 : activeStops.length - currentStop - 1;
+          for (let i = 0; i < jumps; i++) dispatch(advanceStop());
 
           if (isNavigating) {
             dispatch(exitNavigation());
-            triggerThemeFx('navigation-end'); // ✅ Generic Event
+            triggerThemeFx('navigation-end');
           }
         }}
         onNavigate={() => handleNavigate()}
         onExit={() => navigate('/')}
         onStopNavigation={() => {
             dispatch(exitNavigation());
-            triggerThemeFx('navigation-end'); // ✅ Generic Event
+            triggerThemeFx('navigation-end');
         }}
       />
 
@@ -319,7 +273,6 @@ const Delivery: React.FC = () => {
         briefingData={briefingData}
         onDismiss={() => dispatch(dismissBriefing())}
       />
-
     </div>
   );
 };

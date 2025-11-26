@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// --- 1. STRICT TYPE DEFINITIONS ---
-
+// --- TYPE DEFINITIONS (To fix "any" errors) ---
 interface SpeechRecognitionEvent extends Event {
   resultIndex: number;
   results: SpeechRecognitionResultList;
@@ -45,147 +44,114 @@ declare global {
   }
 }
 
-// --- 2. THE HOOK ---
-
 export const useVoiceInput = (isListeningProp: boolean) => {
   const [transcript, setTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  // NEW: Track physical mic state for UI feedback
   const [isListening, setIsListening] = useState(false);
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const isPausedRef = useRef(false);
 
-  // 1. Wake Lock Management
+  // 1. Wake Lock
   useEffect(() => {
     const requestWakeLock = async () => {
       if ('wakeLock' in navigator && isListeningProp) {
         try {
           wakeLockRef.current = await navigator.wakeLock.request('screen');
-        } catch {
-           // Ignore wake lock errors (feature might not be available)
-        }
+        } catch { /* Ignore */ }
       }
     };
     if (isListeningProp) requestWakeLock();
     return () => {
-      wakeLockRef.current?.release().catch(() => {
-        // Ignore wake lock release errors
-      });
+      wakeLockRef.current?.release().catch(() => { /* Ignore */ });
     };
   }, [isListeningProp]);
 
-  // 2. Speech Recognition Setup
+  // 2. Speech Recognition
   useEffect(() => {
     const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    if (!SpeechRecognitionConstructor) {
-      console.warn("Speech Recognition not supported.");
-      return;
-    }
+    if (!SpeechRecognitionConstructor) return;
 
     const recognition = new SpeechRecognitionConstructor();
-    recognition.continuous = false; 
+    recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalTrans = '';
       let interimTrans = '';
-
       for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTrans += result[0].transcript;
-        } else {
-          interimTrans += result[0].transcript;
-        }
+        const res = event.results[i];
+        if (res.isFinal) finalTrans += res[0].transcript;
+        else interimTrans += res[0].transcript;
       }
-
+      
       if (finalTrans) {
         setTranscript(finalTrans);
-        setIsProcessing(true); 
+        setIsProcessing(true);
       } else {
         setTranscript(interimTrans);
       }
     };
 
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
-
+    recognition.onstart = () => setIsListening(true);
+    
     recognition.onend = () => {
       setIsListening(false);
+      // Auto-restart if permitted
       if (isListeningProp && !isProcessing && !isPausedRef.current) {
-        try {
-          recognition.start();
-        } catch { 
-          // Ignore auto-restart errors
-        }
+        try { recognition.start(); } catch { /* Ignore */ }
       }
     };
 
-    recognition.onerror = () => {
-      setIsListening(false);
-    };
+    recognition.onerror = () => setIsListening(false);
 
     recognitionRef.current = recognition;
     
-    // Initial Start
     if (isListeningProp) {
       isPausedRef.current = false;
-      try { 
-        recognition.start(); 
-      } catch { 
-        // Ignore initial start errors
-      }
+      try { recognition.start(); } catch { /* Ignore */ }
     }
 
     return () => {
       isPausedRef.current = true;
       if (recognitionRef.current) {
-        try { 
-          recognitionRef.current.abort(); 
-        } catch { 
-          // Ignore abort errors during cleanup
-        }
+        try { recognitionRef.current.abort(); } catch { /* Ignore */ }
       }
     };
   }, [isListeningProp, isProcessing]);
 
-  // 3. Control Methods
+  // 3. Methods
 
   const start = useCallback(() => {
     isPausedRef.current = false;
-    setIsProcessing(false); 
-    try { 
-      recognitionRef.current?.start(); 
-    } catch {
-      // Ignore start errors (e.g. already started)
-    }
+    setIsProcessing(false); // Clear processing flag to allow loop
+    try { recognitionRef.current?.start(); } catch { /* Ignore */ }
   }, []);
 
   const stop = useCallback(() => {
     isPausedRef.current = true;
-    try { 
-      recognitionRef.current?.abort(); 
-    } catch { 
-      // Ignore stop errors
-    }
+    try { recognitionRef.current?.abort(); } catch { /* Ignore */ }
   }, []);
 
   const reset = useCallback(() => {
     setTranscript('');
     setIsProcessing(false);
     isPausedRef.current = false;
+    // We added a slight delay in your original to ensure smooth restart
+    setTimeout(() => {
+        try { recognitionRef.current?.start(); } catch { /* Ignore */ }
+    }, 100);
   }, []);
 
   return { 
     transcript, 
     isProcessing, 
-    isListening, 
+    isListening, // Exported for UI
     reset, 
     stop, 
-    start 
+    start // Exported for Logic
   };
 };

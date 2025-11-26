@@ -1,11 +1,10 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { Mic, X, RefreshCw, Loader2, Search, Keyboard, AlertCircle } from 'lucide-react';
+import { Mic, X, AlertCircle, Keyboard, CheckCircle2 } from 'lucide-react';
 import { RouteBrain, type Prediction } from '../../utils/RouteBrain';
 import { useVoiceInput } from '../../../../hooks/useVoiceInput';
 import { useSound } from '../../../../hooks/useSound';
 import { type Stop, type Package } from '../../../../db';
-import { Card } from '../../../../components/ui/Card';
-import { Badge } from '../../../../components/ui/Badge';
+import { Button } from '../../../../components/ui/Button';
 
 interface VoiceEntryProps {
   route: Stop[];
@@ -14,41 +13,70 @@ interface VoiceEntryProps {
   onManualFallback: (transcript: string) => void;
 }
 
-type ViewStatus = 'listening' | 'processing' | 'error' | 'success';
-
 export const VoiceEntry: React.FC<VoiceEntryProps> = ({ 
   route, 
   onPackageConfirmed, 
   onClose,
   onManualFallback 
 }) => {
+  // 1. Initialize Brain
   const brain = useMemo(() => new RouteBrain(route), [route]);
   
+  // 2. Mic & Sound
+  // We use 'stop' to physically cut the mic during the countdown
+  // We removed 'speak' because this view is designed for rapid, silent confirmation
   const { transcript, isProcessing, reset, stop } = useVoiceInput(true);
-  const { speak, playTone } = useSound(); 
-  const [prediction, setPrediction] = useState<Prediction | null>(null);
-  const [status, setStatus] = useState<ViewStatus>('listening'); 
+  const { playTone } = useSound(); 
   
+  // 3. State
+  const [prediction, setPrediction] = useState<Prediction | null>(null);
+  const [status, setStatus] = useState<'listening' | 'processing' | 'error' | 'success'>('listening'); 
   const [timer, setTimer] = useState<number | null>(null);
   
-  const delayRef = useRef<NodeJS.Timeout | null>(null);
+  // 4. Refs
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 0. Start Blip
-  useEffect(() => {
-    playTone('start');
-  }, [playTone]);
+  // --- LOGIC ---
 
-  // 1. Predict Logic
+  const handleConfirm = useCallback((finalPred: Prediction | null) => {
+    const target = finalPred || prediction;
+    if (target?.stop) {
+      setStatus('success');
+      playTone('success');
+
+      if (target.source === 'fuzzy') {
+        brain.learn(target.originalTranscript, target.stop.id);
+      }
+
+      onPackageConfirmed({
+        assignedStopId: target.stop.id,
+        assignedAddress: target.stop.full_address,
+        assignedStopNumber: route.findIndex(r => r.id === target.stop?.id)
+      });
+      
+      // Cleanup & Reset
+      setPrediction(null);
+      setTimer(null);
+      setStatus('listening');
+      // Reactivate mic for next entry
+      reset(); 
+    }
+  }, [brain, onPackageConfirmed, route, prediction, reset, playTone]);
+
+  // PREDICTION LOOP
   useEffect(() => {
+    // GUARD: If countdown is active, ignore all input
+    if (timer !== null) return; 
+
     if (isProcessing && transcript) {
-      // ✅ NEW: Handle Explicit Cancel Commands
       const cleanText = transcript.toLowerCase().trim();
-      if (cleanText === 'cancel' || cleanText === 'stop' || cleanText === 'no') {
-         setPrediction(null); // This kills the Auto-Commit timer
+      
+      // 1. Cancel Commands
+      if (['cancel', 'stop', 'no', 'wrong'].includes(cleanText)) {
+         setPrediction(null); 
          setStatus('listening');
-         playTone('start'); // Polite blip
-         reset(); // Clear input
+         playTone('error'); 
+         reset(); 
          return;
       }
 
@@ -57,209 +85,163 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
       const result = brain.predict(transcript);
       setPrediction(result);
 
+      // 2. Low Confidence / No Match
       if (!result.stop || result.confidence < 0.4) {
         setStatus('error');
-        playTone('error');
-
-        const retryTimer = setTimeout(() => {
-           setPrediction(null);
-           setStatus('listening');
-           reset(); 
-        }, 2000);
-
-        return () => clearTimeout(retryTimer);
       }
-      
-      else if (result.confidence <= 0.85) {
-        playTone('start');
-      }
-
-    } else if (!isProcessing && !transcript) {
-        if (status !== 'error') setStatus('listening');
+    } else if (!isProcessing && !transcript && status !== 'error' && status !== 'success') {
+        setStatus('listening');
     }
-  }, [isProcessing, transcript, brain, playTone, reset, status]);
+  }, [isProcessing, transcript, brain, playTone, reset, status, timer]);
 
-  // 2. Confirm Handler
-  const handleConfirm = useCallback((finalPred: Prediction | null) => {
-    const target = finalPred || prediction;
-    if (target?.stop) {
-      setStatus('success');
-      if (target.source === 'fuzzy') {
-        brain.learn(target.originalTranscript, target.stop.id);
-      }
-
-      playTone('success');
-
-      onPackageConfirmed({
-        assignedStopId: target.stop.id,
-        assignedAddress: target.stop.full_address,
-        assignedStopNumber: route.findIndex(r => r.id === target.stop?.id)
-      });
-      
-      setPrediction(null);
-      setStatus('listening');
-      reset(); 
-    }
-  }, [brain, onPackageConfirmed, route, prediction, reset, playTone]);
-
-  // 3. Manual Fallback
-  const handleManualFallback = () => {
-    if (delayRef.current) clearTimeout(delayRef.current);
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    window.speechSynthesis.cancel();
-    onManualFallback(transcript);
-  };
-
-// 4. Auto-Commit Logic (The "Magic" Sequence)
+  // AUTO-COMMIT LOGIC
   useEffect(() => {
-    if (delayRef.current) clearTimeout(delayRef.current);
     if (intervalRef.current) clearInterval(intervalRef.current);
-    setTimer(null);
 
+    // If High Confidence Match...
     if (prediction?.stop && prediction.confidence > 0.85) {
-      const validStop = prediction.stop; 
       
-      // 1. Kill Mic
-      stop();
+      // 1. CUT THE MIC
+      // This prevents the "Feedback Loop" and background noise processing
+      stop(); 
       
-      // 🔊 2. INSTANT FEEDBACK: "Lock-on" Chirp
-      playTone('lock'); 
+      // 2. Visual Lock
+      playTone('lock');
+      
+      // 3. Start Countdown
+      let timeLeft = 3;
+      setTimer(timeLeft);
 
-      // 3. Wait for Bluetooth/Audio driver...
-      delayRef.current = setTimeout(() => {
+      intervalRef.current = setInterval(() => {
+        timeLeft -= 1;
+        setTimer(timeLeft);
         
-        const conciseAddress = validStop.address_line1 || validStop.full_address || "Stop found";
-        
-        // 4. Robot Voice Verification
-        speak(conciseAddress, () => {
-           
-           // 5. Re-open Mic for Commands ("Cancel")
-           reset(); 
-           
-           // 6. Start Visual Timer
-           let timeLeft = 3; 
-           setTimer(timeLeft);
-
-           intervalRef.current = setInterval(() => {
-             timeLeft -= 1;
-             setTimer(timeLeft);
-             if (timeLeft <= 0) {
-               if (intervalRef.current) clearInterval(intervalRef.current);
-               handleConfirm(prediction); 
-             }
-           }, 1000);
-        });
-        
-      }, 400); // The "Bluetooth Breath" delay
+        if (timeLeft <= 0) {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          handleConfirm(prediction);
+        }
+      }, 1000);
 
       return () => {
-        if (delayRef.current) clearTimeout(delayRef.current);
         if (intervalRef.current) clearInterval(intervalRef.current);
       };
+    } else {
+        setTimer(null);
     }
-  }, [prediction, handleConfirm, speak, stop, reset, playTone]); // Added playTone
+  }, [prediction, handleConfirm, playTone, stop]);
 
-  // Render Helpers
-  const getCircleColor = () => {
+  // --- RENDER HELPERS ---
+
+  const getStatusColor = () => {
     switch (status) {
-        case 'error': return 'bg-danger text-danger-foreground';
-        case 'success': return 'bg-success text-success-foreground';
-        case 'processing': return 'bg-brand text-brand-foreground animate-pulse';
-        default: return 'bg-brand text-brand-foreground';
+        case 'error': return 'text-danger border-danger animate-pulse';
+        case 'success': return 'text-success border-success';
+        case 'processing': return 'text-brand border-brand animate-pulse';
+        default: return 'text-brand border-brand';
     }
-  };
-
-  const getStatusText = () => {
-      switch (status) {
-          case 'error': return 'No match found. Retrying...';
-          case 'processing': return 'Checking route...';
-          case 'success': return 'Saved!';
-          default: return 'Listening...';
-      }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-surface/95 backdrop-blur-md flex flex-col p-6 animate-in fade-in">
-      <div className="flex justify-between items-center mb-8">
-        <h2 className="text-2xl font-bold">Voice Mode</h2>
-        <button onClick={onClose} className="p-4 bg-surface-muted rounded-full active:scale-95 transition">
-          <X size={32} />
-        </button>
+    <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-xl flex flex-col p-6 animate-in fade-in duration-200">
+      
+      {/* Header */}
+      <div className="flex justify-between items-center mb-12">
+        <h2 className="text-xl font-bold text-muted-foreground flex items-center gap-2">
+            <Mic size={20} className="text-brand" /> Voice Input
+        </h2>
+        <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={onClose} 
+            className="rounded-full hover:bg-danger/10 hover:text-danger"
+        >
+          <X size={24} />
+        </Button>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center gap-6">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col items-center justify-center gap-8">
         
-        <div className="text-center space-y-2">
-          <p className="text-muted text-lg">I heard...</p>
-          <p className="text-3xl font-mono font-bold text-foreground min-h-12">
-            {transcript || "..."}
+        {/* Transcript */}
+        <div className="text-center space-y-2 min-h-[100px] w-full max-w-lg">
+          <p className="text-muted-foreground text-xs font-bold tracking-widest uppercase">Live Transcript</p>
+          <p className="text-2xl md:text-3xl font-mono font-bold text-foreground wrap-break-word leading-tight">
+            {transcript || <span className="opacity-20">Listening...</span>}
           </p>
         </div>
 
+        {/* Match Card */}
         {prediction && prediction.stop && status !== 'error' ? (
-          <Card className="w-full max-w-md p-6 border-4 border-brand bg-brand/5 transform transition-all duration-300 scale-105">
-            <div className="text-center space-y-4">
-              
-              {timer !== null && timer > 0 ? (
-                 <div className="flex items-center justify-center gap-2 text-brand font-bold animate-pulse">
-                    <Loader2 className="animate-spin" />
-                    Auto-saving in {timer}s...
-                 </div>
-              ) : (
-                 <div className="h-6 text-muted font-medium">Verifying...</div>
-              )}
+          <div className="w-full max-w-md relative animate-in zoom-in-95 duration-200">
+             
+             <div className="relative w-full p-8 bg-surface border border-brand/50 flex flex-col items-center text-center shadow-2xl rounded-xl overflow-hidden">
+                
+                {/* Timer Bar */}
+                <div className="absolute top-0 left-0 right-0 h-1 bg-surface-muted">
+                    {timer !== null && (
+                        <div 
+                           className="h-full bg-brand transition-all duration-1000 ease-linear" 
+                           style={{ width: `${(timer / 3) * 100}%` }} 
+                        />
+                    )}
+                </div>
 
-              <div>
-                <h3 className="text-3xl font-bold text-foreground leading-tight">
+                <h3 className="text-2xl md:text-3xl font-black text-foreground leading-tight mt-4">
                    {prediction.stop.full_address}
                 </h3>
-                <Badge variant="success" className="mt-2 text-lg px-3 py-1">
+                
+                <div className="mt-4 px-4 py-1 bg-success/10 text-success border border-success/30 rounded-full text-sm font-bold">
                   Stop #{route.findIndex(r => r.id === prediction.stop?.id) + 1}
-                </Badge>
-              </div>
+                </div>
 
-              <div className="flex gap-4 pt-6">
-                 <button 
-                   onClick={handleManualFallback}
-                   className="flex-1 py-6 bg-surface-muted text-foreground rounded-2xl font-bold text-xl flex items-center justify-center gap-2 active:bg-surface-muted/80 transition-colors"
-                 >
-                   <Search size={24} /> Search
-                 </button>
-                 
-                 {(timer === null || timer > 0) && (
-                    <button 
-                      onClick={() => handleConfirm(prediction)}
-                      className="flex-1 py-6 bg-brand text-brand-foreground rounded-2xl font-bold text-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
-                    >
-                      <RefreshCw size={24} /> Save Now
-                    </button>
-                 )}
-              </div>
-            </div>
-          </Card>
-        ) : (
-          <div className="relative mt-8 flex flex-col items-center gap-8">
-            <div className="relative">
-                {status === 'listening' && (
-                    <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping duration-2000"></div>
-                )}
-                <div className={`relative p-10 rounded-full shadow-2xl transition-colors duration-300 ${getCircleColor()}`}>
-                   {status === 'error' ? <AlertCircle size={64} /> : <Mic size={64} />}
+                {/* Actions */}
+                <div className="flex gap-3 w-full mt-8">
+                   <Button 
+                     variant="ghost"
+                     onClick={() => {
+                        setTimer(null);
+                        setPrediction(null);
+                        // Reactivate Mic manually if they click Wrong
+                        reset();
+                     }}
+                     className="flex-1 border border-border text-muted-foreground hover:text-foreground"
+                   >
+                     Wrong?
+                   </Button>
+                   
+                   {(timer === null || timer > 0) && (
+                      <Button 
+                        variant="primary"
+                        onClick={() => handleConfirm(prediction)}
+                        className="flex-1 shadow-lg shadow-brand/20 gap-2"
+                      >
+                        <CheckCircle2 size={18} />
+                        CONFIRM {timer !== null && `(${timer}s)`}
+                      </Button>
+                   )}
                 </div>
             </div>
-            <div className="space-y-4 text-center">
-                <p className={`font-medium text-lg ${status === 'error' ? 'text-danger' : 'text-muted'}`}>
-                   {getStatusText()}
-                </p>
-                <button 
-                    onClick={handleManualFallback}
-                    className="text-muted hover:text-foreground font-semibold flex items-center gap-2 px-4 py-2 rounded-lg border border-transparent hover:border-border transition-all"
-                >
-                    <Keyboard size={20} /> Switch to Manual
-                </button>
-            </div>
+          </div>
+        ) : (
+          /* Idle Visual */
+          <div className="relative mt-8">
+             <div className={`absolute inset-0 rounded-full opacity-20 ${status === 'listening' ? 'animate-ping bg-brand' : ''}`}></div>
+             <div className={`relative p-8 rounded-full border-2 ${getStatusColor()} transition-colors duration-300 bg-surface shadow-xl`}>
+                {status === 'error' ? <AlertCircle size={48} /> : <Mic size={48} />}
+             </div>
           </div>
         )}
+      </div>
+      
+      {/* Footer */}
+      <div className="mt-auto flex justify-center pb-4">
+         <Button 
+            variant="ghost" 
+            className="text-muted-foreground gap-2 hover:text-foreground" 
+            onClick={() => onManualFallback(transcript)}
+         >
+            <Keyboard size={16} /> Switch to Manual Keyboard
+         </Button>
       </div>
     </div>
   );

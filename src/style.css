@@ -3,20 +3,14 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* Semantic Color Mapping */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  
   --color-surface: var(--surface);
   --color-surface-foreground: var(--surface-foreground);
   --color-surface-muted: var(--surface-muted);
-  
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
-  
   --color-border: var(--border);
-  
-  /* Status Tokens */
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
@@ -26,21 +20,21 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-danger-foreground: var(--danger-foreground);
 
-  /* Radii */
   --radius-xl: 0.75rem;
   --radius-lg: 0.5rem;
   --radius-md: 0.375rem;
 }
 
-/* --- 1. DEFAULT THEME (Light / Paper) --- */
+/* =========================================
+   1. LIGHT THEME (Default)
+   ========================================= */
 :root {
   --background: hsl(210 20% 98%);
   --foreground: hsl(222 20% 14%);
   
   --surface: hsl(0 0% 100%);
   --surface-foreground: hsl(222 20% 14%);
-  /* Muted Surface: Light Grey for Inputs */
-  --surface-muted: hsl(210 20% 96%); 
+  --surface-muted: hsl(210 20% 96%);
   
   --brand: hsl(221 83% 53%);
   --brand-foreground: hsl(210 40% 98%);
@@ -58,102 +52,324 @@
   --accent: hsl(210 20% 96%);
   --accent-foreground: hsl(222 20% 14%);
 
-  --radius-xl: 0.75rem;
-  --radius-lg: 0.5rem;
-  --radius-md: 0.25rem;
+  --bottom-nav-height: calc(72px + env(safe-area-inset-bottom, 0px));
+  --header-height: calc(64px + env(safe-area-inset-top, 0px));
 }
 
-/* --- 2. DARK THEME (Slate) --- */
+/* =========================================
+   2. DARK THEME
+   ========================================= */
 .dark {
   --background: hsl(222 47% 11%);
   --foreground: hsl(210 40% 98%);
+  
   --surface: hsl(217 33% 17%);
   --surface-foreground: hsl(210 40% 98%);
   --surface-muted: hsl(217 33% 20%);
+  
   --brand: hsl(217 91% 60%);
   --brand-foreground: hsl(0 0% 100%);
+  
   --border: hsl(217 33% 25%);
+  
   --success: hsl(142 60% 55%);
   --warning: hsl(35 85% 62%);
   --danger: hsl(0 72% 51%);
   --danger-foreground: hsl(0 0% 100%);
+  
   --muted: hsl(220 10% 70%);
   --muted-foreground: hsl(220 10% 80%);
+  
   --accent: hsl(217 33% 20%);
   --accent-foreground: hsl(210 40% 98%);
 }
 
-/* --- 3. CYBERPUNK THEME (Void / Neon) --- */
+/* =========================================
+   3. CYBERPUNK 2077 THEME (The Narrative HUD)
+   ========================================= */
 [data-theme="cyberpunk"] {
-  /* Deep Void Background */
-  --background: #0a0014; 
-  --foreground: #e0faff; /* Ice White Text */
-  
-  /* Surface: Semi-transparent black for cards */
-  --surface: rgba(15, 0, 35, 0.6); 
+  /* COLORS */
+  --background: #000000; 
+  --foreground: #e0faff; 
+  --surface: rgba(10, 0, 35, 0.92);
   --surface-foreground: #e0faff;
-  
-  /* Surface Muted: THE FIX - Deep Black/Cyan tint for Inputs */
-  --surface-muted: rgba(0, 0, 0, 0.6); 
-  
-  /* High-Contrast Neon */
-  --brand: #00f0ff; 
-  --brand-foreground: #000000; /* Text on brand buttons is black */
-  
-  /* Borders: Dim Cyan */
-  --border: rgba(0, 240, 255, 0.3);
-  
-  --success: #0aff60;
-  --warning: #fcee0a;
-  --danger: #ff003c;
-  --danger-foreground: #fff;
+  --surface-muted: rgba(5, 0, 25, 0.95);
 
-  --muted: rgba(0, 240, 255, 0.4);
-  --muted-foreground: rgba(0, 240, 255, 0.7);
+  --brand: #00f0ff; 
+  --brand-foreground: #000000;
+  --border: rgba(0, 240, 255, 0.45);
+
+  --success: #0aff60; 
+  --warning: #fcee0a; 
+  --danger: #ff003c;  
+  --danger-foreground: #ffffff;
+
+  --muted: rgba(0, 240, 255, 0.5); 
+  --muted-foreground: rgba(0, 240, 255, 0.85);
   
-  --accent: #2d0046;
+  --accent: #1a0033;
   --accent-foreground: #d600ff;
-  
-  /* Sharp Tech Geometry */
-  --radius-xl: 0.25rem; 
-  --radius-lg: 0.125rem;
-  --radius-md: 0rem;
+
+  --radius-xl: 2px;
+  --radius-lg: 1px;
+  --radius-md: 0px;
+
+  font-family: "Courier New", "Roboto Mono", "Fira Code", monospace !important;
+  letter-spacing: 0.02em;
 }
 
-/* --- UTILITIES --- */
-:root {
-  --bottom-nav-height: calc(72px + env(safe-area-inset-bottom, 0px));
-  --header-height: calc(64px + env(safe-area-inset-top, 0px));
+/* --- CYBERPUNK OVERRIDES --- */
+
+/* 1. RESET TYPOGRAPHY */
+[data-theme="cyberpunk"] div,
+[data-theme="cyberpunk"] span,
+[data-theme="cyberpunk"] li,
+[data-theme="cyberpunk"] p {
+  text-transform: none;
+  font-weight: normal;
+}
+
+/* 2. HUD HEADERS */
+[data-theme="cyberpunk"] h1,
+[data-theme="cyberpunk"] h2 {
+  position: relative;
+  display: inline-block;
+  width: 100%; 
+  text-transform: uppercase !important;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--foreground);
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+}
+
+[data-theme="cyberpunk"] h1::before,
+[data-theme="cyberpunk"] h2::before {
+  content: "SYS.ROOT_ACCESS //"; 
+  display: block;
+  font-size: 0.7rem; 
+  line-height: 1;
+  color: var(--brand);
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+[data-theme="cyberpunk"] h1::after,
+[data-theme="cyberpunk"] h2::after {
+  content: "";
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 100%; height: 2px;
+  background: var(--brand);
+  box-shadow: 0 0 8px var(--brand);
+  clip-path: polygon(0 0, 70% 0, 75% 100%, 0% 100%); 
+}
+
+/* 3. TRANSMISSION PARAGRAPHS */
+[data-theme="cyberpunk"] p {
+  border-left: 2px solid var(--muted);
+  padding-left: 1rem;
+  margin-bottom: 1rem;
+  position: relative;
+  font-family: "Roboto Mono", monospace;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
+[data-theme="cyberpunk"] p::before {
+  content: "";
+  position: absolute;
+  left: -2px; top: 0;
+  width: 2px; height: 12px; 
+  background: var(--success);
+  box-shadow: 0 0 5px var(--success);
+}
+
+/* 4. TACTICAL BUTTONS */
+[data-theme="cyberpunk"] button {
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  transition: all 0.1s ease;
+  position: relative;
+}
+
+/* 5. UTILITY: TACTICAL CARD */
+[data-theme="cyberpunk"] .cyber-card {
+  background: linear-gradient(135deg, rgba(10,0,35,0.95) 0%, rgba(5,0,25,0.98) 100%);
+  border: 1px solid var(--border);
+  clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
+  padding: 1.5rem;
+  position: relative;
+  box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.05);
+}
+[data-theme="cyberpunk"] .cyber-card::after {
+  content: "NET_SEC // 77";
+  position: absolute;
+  bottom: 4px; right: 25px;
+  font-size: 0.5rem;
+  color: var(--muted);
+  letter-spacing: 2px;
+  opacity: 0.7;
+}
+
+/* =========================================
+   4. DESKTOP INTERACTION (Mouse Hover)
+   ========================================= */
+@media (hover: hover) {
   
-  /* Transparent Tints for badges */
+  [data-theme="cyberpunk"] button:hover {
+    text-shadow: 2px 0 var(--danger), -2px 0 var(--brand);
+    transform: translateX(1px);
+  }
+
+  [data-theme="cyberpunk"] button:hover::before {
+    content: attr(data-text);
+    position: absolute; inset: 0;
+    color: var(--danger);
+    background: transparent;
+    mix-blend-mode: hard-light;
+    clip-path: inset(0 0 0 0);
+    z-index: 10;
+    pointer-events: none;
+    transform: translate(-3px, 0);
+    opacity: 0.7;
+  }
+
+  [data-theme="cyberpunk"] button:hover::after {
+    content: attr(data-text);
+    position: absolute; inset: 0;
+    color: var(--brand);
+    background: transparent;
+    mix-blend-mode: hard-light;
+    clip-path: inset(0 0 0 0);
+    z-index: 10;
+    pointer-events: none;
+    transform: translate(3px, 0);
+    opacity: 0.7;
+  }
+
+  [data-theme="cyberpunk"] .glitch-container:hover {
+    animation: container-rattle 0.2s infinite linear;
+  }
+}
+
+/* =========================================
+   5. MOBILE INTERACTION (Randomized Chaos)
+   ========================================= */
+@media (hover: none) {
+  
+  /* 1. ANIMATIONS */
+  @keyframes cyber-shake-mobile {
+    0%, 94% { transform: translate(0,0); }
+    95% { transform: translate(-1px, 1px); } 
+    96% { transform: translate(1px, -1px); }
+    97%, 100% { transform: translate(0,0); }
+  }
+
+  @keyframes cyber-glitch-red-mobile {
+    0%, 94% { opacity: 0; transform: translate(0,0); }
+    95% { opacity: 0.8; transform: translate(-3px, 0); }
+    96% { opacity: 0.8; transform: translate(-2px, 1px); }
+    97%, 100% { opacity: 0; transform: translate(0,0); }
+  }
+
+  @keyframes cyber-glitch-blue-mobile {
+    0%, 94% { opacity: 0; transform: translate(0,0); }
+    95% { opacity: 0.8; transform: translate(3px, 0); }
+    96% { opacity: 0.8; transform: translate(2px, -1px); }
+    97%, 100% { opacity: 0; transform: translate(0,0); }
+  }
+
+  /* 2. IDLE STATE: The Heartbeat Glitch (Randomized) */
+  [data-theme="cyberpunk"] button:not(:disabled) {
+    /* Uses custom variables for independent timing */
+    animation: cyber-shake-mobile var(--glitch-duration, 5s) infinite linear;
+    animation-delay: var(--glitch-delay, 0s);
+  }
+
+  [data-theme="cyberpunk"] button:not(:disabled)::before,
+  [data-theme="cyberpunk"] button:not(:disabled)::after {
+    content: attr(data-text);
+    position: absolute; inset: 0;
+    background: transparent;
+    font-weight: 700;
+    pointer-events: none;
+    z-index: 10;
+    display: flex; align-items: center; justify-content: center;
+    mix-blend-mode: hard-light;
+  }
+
+  [data-theme="cyberpunk"] button:not(:disabled)::before {
+    color: var(--danger);
+    /* Inherit duration/delay so it syncs with physical shake */
+    animation: cyber-glitch-red-mobile var(--glitch-duration, 5s) infinite linear;
+    animation-delay: var(--glitch-delay, 0s);
+  }
+
+  [data-theme="cyberpunk"] button:not(:disabled)::after {
+    color: var(--brand);
+    animation: cyber-glitch-blue-mobile var(--glitch-duration, 5s) infinite linear;
+    /* Offset logic: Start delay + 0.1s sync offset */
+    animation-delay: calc(var(--glitch-delay, 0s) + 0.1s);
+  }
+
+  /* 3. ACTIVE STATE: The "Press" (Instant Feedback) */
+  [data-theme="cyberpunk"] button:active {
+    transform: scale(0.96) !important;
+    background-color: var(--brand) !important;
+    color: #000 !important;
+    box-shadow: 0 0 15px var(--brand);
+    animation: none; 
+  }
+
+  [data-theme="cyberpunk"] .glitch-container:active {
+    animation: container-rattle 0.1s infinite linear;
+  }
+}
+
+/* =========================================
+   6. UTILITIES
+   ========================================= */
+:root {
   --brand-10: color-mix(in srgb, var(--brand) 10%, transparent);
   --danger-10: color-mix(in srgb, var(--danger) 10%, transparent);
   --warning-10: color-mix(in srgb, var(--warning) 10%, transparent);
   --success-10: color-mix(in srgb, var(--success) 10%, transparent);
 }
 
-/* [data-theme="cyberpunk"] canvas {
-  z-index: 10 !important;
-} */
+.cyberpunk-fx-container {
+  contain: strict;
+  isolation: isolate;
+  transform: translateZ(0);
+  will-change: transform;
+  pointer-events: none;
+}
 
-html, body, #root { height: 100%; }
-
-/* Navigation Bar Adaptation */
 [data-theme="cyberpunk"] nav,
 [data-theme="cyberpunk"] header {
-  background-color: rgba(10, 0, 20, 0.85) !important;
-  backdrop-filter: blur(12px);
-  border-color: var(--border);
+  background: rgba(10, 0, 35, 0.95) !important; 
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
 }
 
-/* Grid Pattern Utility */
-.bg-grid-pattern {
-  background-size: 20px 20px;
-  background-image: 
-    linear-gradient(to right, var(--border) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
-  mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+.fab-offset {
+  padding-bottom: calc(var(--bottom-nav-height) + 16px);
 }
 
-/* Floating Action Button Offset */
-.fab-offset { padding-bottom: calc(var(--bottom-nav-height) + 16px); }
+html, body, #root { 
+  height: 100%; 
+  background-color: var(--background); 
+  color: var(--foreground);
+}
+
+@keyframes container-rattle {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(-2px, 1px); }
+  50% { transform: translate(1px, -1px); }
+  75% { transform: translate(-1px, -1px); }
+  100% { transform: translate(0, 0); }
+}

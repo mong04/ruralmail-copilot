@@ -221,7 +221,7 @@ const Dashboard: React.FC = () => {
 
       {/* 4. STATUS READOUT */}
       <Card className={cn(
-        "p-5 sm:p-6 space-y-4",
+        "p-5 sm:p-6",
         isRich ? "bg-black/40 border-dashed border-border pb-12" : "bg-surface/50"
       )}>
         <h3 className={cn(

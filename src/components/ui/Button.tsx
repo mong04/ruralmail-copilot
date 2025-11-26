@@ -1,4 +1,5 @@
-import React from 'react';
+// src/components/ui/Button.tsx
+import React, { useMemo } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { twMerge } from 'tailwind-merge';
 import { Loader2 } from 'lucide-react';
@@ -18,7 +19,6 @@ const button = cva(
           'hover:bg-surface-muted hover:border-border/80',
         ],
         danger: [
-          // FULLY SEMANTIC: Uses defined CSS variables for danger state
           'bg-danger/10 text-danger border border-danger/20',
           'hover:bg-danger/20 hover:border-danger/30',
         ],
@@ -27,7 +27,6 @@ const button = cva(
           'hover:bg-surface-muted hover:text-foreground',
         ],
         glass: [
-            // Special case for overlay elements, kept neutral but theme-aware
             'bg-surface/10 backdrop-blur-md border border-white/20 text-white',
             'hover:bg-surface/20 hover:border-white/30 shadow-sm'
         ]
@@ -51,16 +50,43 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
   isLoading?: boolean;
 };
 
+// Define custom interface so Typescript doesn't complain about CSS variables
+interface CyberStyle extends React.CSSProperties {
+  '--glitch-delay'?: string;
+  '--glitch-duration'?: string;
+}
+
 export const Button: React.FC<ButtonProps> = ({ 
   className, 
   variant, 
   size, 
   children,
   isLoading,
+  style,
   ...props 
 }) => {
+  // 1. Extract text for the glitch layer content
+  const glitchText = typeof children === 'string' ? children : undefined;
+
+  // 2. Randomize the "Heartbeat" (Ran once on mount)
+  // We generate a random Delay (0-7s) and Duration (3-6s)
+  // This ensures every button on the screen has its own rhythm.
+  const randomStyle = useMemo(() => {
+    return {
+      '--glitch-delay': `${Math.random() * 7}s`,
+      '--glitch-duration': `${3 + Math.random() * 3}s`,
+    } as CyberStyle;
+  }, []);
+
   return (
-    <button className={twMerge(button({ variant, size }), className)} disabled={isLoading || props.disabled} {...props}>
+    <button 
+      className={twMerge(button({ variant, size }), className)} 
+      disabled={isLoading || props.disabled} 
+      data-text={glitchText}
+      // Merge our random variables with any existing styles
+      style={{ ...style, ...randomStyle }}
+      {...props}
+    >
       {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
       {children}
       

@@ -4,12 +4,18 @@ import { RouterProvider } from 'react-router-dom';
 import { router } from '../src/AppRouter';
 import { useTheme } from '../src/hooks/useTheme';
 import ThemeController from './components/theme/ThemeController';
+import CyberpunkOverlay from './components/theme/cyberpunk/CyberpunkOverlay'; // ← NEW
+import { useAppSelector } from './store';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
 
-  // Keeps light/dark/cyberpunk class on <html> (your existing hook)
+  // Keeps <html> classes and data-theme in sync
   useTheme();
+
+  const theme = useAppSelector((state) => state.settings.theme);
+  const richEnabled = useAppSelector((state) => state.settings.richThemingEnabled ?? true);
+  const isCyberpunkActive = theme === 'cyberpunk' && richEnabled;
 
   useEffect(() => {
     const stored = localStorage.getItem('isLoggedIn');
@@ -45,10 +51,13 @@ const App: React.FC = () => {
     );
   }
 
-  // ThemeController now wraps the entire app
   return (
     <ThemeController>
+      {/* 1. Your entire app (including BottomNavLayout) */}
       <RouterProvider router={router} />
+
+      {/* 2. THE ONE AND ONLY CYBERPUNK OVERLAY — mounted at true root */}
+      {isCyberpunkActive && <CyberpunkOverlay />}
     </ThemeController>
   );
 };

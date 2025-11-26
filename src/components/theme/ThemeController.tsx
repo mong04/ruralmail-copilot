@@ -7,20 +7,38 @@ import { type FxEventDetail } from '../../lib/theme-fx';
 import CyberpunkOverlay from './cyberpunk/CyberpunkOverlay';
 
 const ThemeController: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // 1. Get State
   const theme = useAppSelector((state) => state.settings.theme || 'light');
   const richThemingEnabled = useAppSelector((state) => state.settings.richThemingEnabled ?? true);
   const { playTone } = useSound();
 
   const [activeSparks, setActiveSparks] = useState<{ id: number; x: number; y: number }[]>([]);
 
+  // 2. Calculate if we are in "Full Cyberpunk Mode"
   const isCyberpunkActive = theme === 'cyberpunk' && richThemingEnabled;
 
-  // Apply global class immediately
+  // 3. APPLY TO HTML TAG (Crucial Fix)
+  // Your CSS uses [data-theme="cyberpunk"], so we must set this attribute on the root.
   useLayoutEffect(() => {
-    document.documentElement.classList.toggle('theme-cyberpunk', isCyberpunkActive);
-    // document.body.style.background = isCyberpunkActive ? '#0d0015' : '';
-  }, [isCyberpunkActive]);
+    const root = document.documentElement;
+    
+    if (isCyberpunkActive) {
+      root.setAttribute('data-theme', 'cyberpunk');
+      root.classList.add('theme-cyberpunk'); // Keep class for backward compatibility
+    } else {
+      // Fallback: If rich theming is off, or theme isn't cyberpunk, 
+      // revert to standard light/dark modes.
+      const fallbackTheme = theme === 'dark' ? 'dark' : 'light';
+      root.setAttribute('data-theme', fallbackTheme);
+      root.classList.remove('theme-cyberpunk');
+      
+      // Ensure Tailwind dark mode works if you use class-based dark mode
+      if (fallbackTheme === 'dark') root.classList.add('dark');
+      else root.classList.remove('dark');
+    }
+  }, [isCyberpunkActive, theme]);
 
+  // 4. Spark FX Logic (Unchanged)
   useEffect(() => {
     if (!isCyberpunkActive) {
       setActiveSparks([]);
@@ -51,23 +69,19 @@ const ThemeController: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   return (
     <div className="relative min-h-screen">
-      {/* 1. Cyberpunk background + overlay — Now just the rain, high z-index */}
+      {/* 1. Cyberpunk effects layer */}
       {isCyberpunkActive && (
-        // ✅ Keep the z-index fix here
-        <div className="fixed inset-0 pointer-events-none z-[40]"> 
+        <div className="fixed inset-0 pointer-events-none z-40"> 
           <CyberpunkOverlay />
-          {/* <div className="absolute inset-0 bg-[#0d0015]" /> */}
-          
         </div>
       )}
 
-      {/* 2. Your actual app content — Remove z-index/relative to prevent dimming/layering */}
-      {/* 🛑 FIX: Change this div back to a simple container */}
-      <div className={isCyberpunkActive ? '' : ''}> 
+      {/* 2. App Content */}
+      <div> 
         {children}
       </div>
 
-      {/* 3. Sparks — (remains the same) */}
+      {/* 3. Sparks */}
       {isCyberpunkActive &&
         activeSparks.map(spark => (
           <Sparks

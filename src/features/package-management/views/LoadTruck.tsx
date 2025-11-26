@@ -61,7 +61,7 @@ export const LoadTruck: React.FC = () => {
     // We store the next mode in a ref to avoid stale closures in the `speak` callback.
     nextModeRef.current = nextMode;
   }, []);
-  const nextModeRef = useRef<U.IMode>('idle');
+  const nextModeRef = useRef<UIMode>('idle');
 
   // 2. Main useEffect for 'speaking' mode
   useEffect(() => {

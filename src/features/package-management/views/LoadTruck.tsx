@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Mic, Activity, PackagePlus, AlertTriangle, 
-  CheckCircle2, AlertCircle, XCircle // Added XCircle
+  CheckCircle2, AlertCircle, XCircle 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -16,6 +16,7 @@ import {
 } from '../store/packageSlice';
 
 import { useVoiceInput } from '../../../hooks/useVoiceInput';
+import { useDebounce } from '../../../hooks/useDebounce';
 import { useSound } from '../../../hooks/useSound';
 import { RouteBrain, type Prediction } from '../utils/RouteBrain';
 import { type Package, type Stop } from '../../../db';
@@ -39,14 +40,21 @@ export const LoadTruck: React.FC = () => {
   const brain = useMemo(() => new RouteBrain(route), [route]);
   
   // VOICE HOOK
-  // ✅ Destructure voiceError to display it
-  const { transcript, isProcessing, isListening, voiceError, reset, stop, start } = useVoiceInput(false); 
+  // Removed 'isProcessing' since we rely on the debounce hook for timing now
+  const { transcript, isListening, voiceError, reset, stop, start } = useVoiceInput(true); 
+  
+  // DEBOUNCE: Wait 400ms after user stops speaking before processing
+  const debouncedTranscript = useDebounce(transcript, 400);
+
   const { speak, playTone } = useSound();
 
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [status, setStatus] = useState<'idle' | 'suggestion' | 'locked' | 'saved' | 'unknown'>('idle');
   const [history, setHistory] = useState<string[]>([]); 
   
+  // Track last processed string to avoid re-running logic on same text
+  const [lastProcessed, setLastProcessed] = useState<string>('');
+
   const safetyTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- ACTIONS ---
@@ -74,6 +82,7 @@ export const LoadTruck: React.FC = () => {
       setTimeout(() => {
           setStatus('idle');
           setPrediction(null);
+          setLastProcessed(''); // Clear processed tracking
           reset(); 
           start(); 
       }, 800);
@@ -123,7 +132,10 @@ export const LoadTruck: React.FC = () => {
 
   const handleSelectSuggestion = useCallback((selectedStop: Stop) => {
       if (!prediction) return;
+      
+      // LEARN: Teach the brain this alias
       brain.learn(prediction.originalTranscript, selectedStop.id);
+      
       commitPackage(selectedStop, prediction.extracted);
   }, [prediction, brain, commitPackage]);
 
@@ -135,6 +147,7 @@ export const LoadTruck: React.FC = () => {
       setTimeout(() => {
           setStatus('idle');
           setPrediction(null);
+          setLastProcessed(''); 
           reset();
           start(); 
       }, 1500);
@@ -157,12 +170,17 @@ export const LoadTruck: React.FC = () => {
     }
   }, [dispatch, loadingSession.isActive, playTone, reset, start]);
 
+  // MAIN LOGIC LOOP
   useEffect(() => {
     if (status === 'locked' || status === 'saved') return;
 
-    if (isProcessing && transcript) {
-      const cleanText = transcript.toLowerCase().trim();
+    // Only process if we have debounced text AND it's new
+    if (debouncedTranscript && debouncedTranscript !== lastProcessed) {
+      
+      const cleanText = debouncedTranscript.toLowerCase().trim();
+      setLastProcessed(debouncedTranscript); // Mark as handled
 
+      // 1. Suggestion Mode Commands
       if (status === 'suggestion' && prediction) {
           if (['one', '1', 'first', 'yes'].some(w => cleanText.includes(w))) {
              handleSelectSuggestion(prediction.candidates[0]); return;
@@ -173,39 +191,41 @@ export const LoadTruck: React.FC = () => {
           if (['no', 'cancel', 'wrong'].some(w => cleanText.includes(w))) {
              setStatus('idle'); reset(); start(); return;
           }
+          // If they say a new address instead, fall through to normal prediction logic below
       }
 
+      // 2. Global Commands
       if (['finish', 'done', 'complete'].some(cmd => cleanText.includes(cmd))) {
           handleFinishLoad(); return;
       }
-      if (['cancel', 'wrong', 'no'].some(cmd => cleanText.includes(cmd))) {
+      if (['cancel', 'wrong', 'no', 'reset'].some(cmd => cleanText.includes(cmd))) {
           setStatus('idle'); reset(); start(); return;
       }
 
-      if (status === 'idle') {
-          const result = brain.predict(transcript);
-          setPrediction(result);
+      // 3. Prediction Logic
+      const result = brain.predict(debouncedTranscript);
+      setPrediction(result);
 
-          if (!result.stop) {
-              if (transcript.length > 4) {
-                 handleUnknown();
-              } else {
-                 reset();
-                 start(); 
-              }
-          } 
-          else if (result.confidence > 0.8 || result.source === 'alias' || result.source === 'stop_number') {
-              handleLock(result);
-          } 
-          else if (result.confidence > 0.45) {
-              handleSuggestion(result);
+      if (!result.stop) {
+          // Only trigger error if the user actually said something substantial (ignore short noise)
+          if (debouncedTranscript.length > 4) {
+             handleUnknown();
+          } else {
+             reset();
+             start(); 
           }
-          else {
-              handleUnknown();
-          }
+      } 
+      else if (result.confidence > 0.75 || result.source === 'alias' || result.source === 'stop_number') {
+          handleLock(result);
+      } 
+      else if (result.confidence > 0.4) {
+          handleSuggestion(result);
+      }
+      else {
+          handleUnknown();
       }
     }
-  }, [isProcessing, transcript, brain, status, prediction, handleFinishLoad, handleLock, handleSuggestion, handleSelectSuggestion, handleUnknown, reset, start]);
+  }, [debouncedTranscript, lastProcessed, brain, status, prediction, handleFinishLoad, handleLock, handleSuggestion, handleSelectSuggestion, handleUnknown, reset, start]);
 
   useEffect(() => {
       return () => {
@@ -256,7 +276,6 @@ export const LoadTruck: React.FC = () => {
             </div>
         </header>
 
-        {/* ✅ NEW: ERROR HUD */}
         <AnimatePresence>
             {voiceError && (
                 <motion.div 
@@ -298,6 +317,12 @@ export const LoadTruck: React.FC = () => {
                             <p className="text-muted-foreground text-sm uppercase tracking-widest mt-2">
                                 "123 Main" &bull; "Stop 5" &bull; "Large"
                             </p>
+                            {/* Visual feedback for debouncing */}
+                            {transcript && (
+                                <p className="mt-4 text-brand font-mono text-lg animate-pulse">
+                                    {transcript}
+                                </p>
+                            )}
                         </div>
                     </motion.div>
                 )}

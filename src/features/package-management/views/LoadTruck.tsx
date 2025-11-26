@@ -244,42 +244,6 @@ export const LoadTruck: React.FC = () => {
     }
   }, [debouncedTranscript, isSpeaking, lastProcessed, brain, status, playTone, robustSpeakAndRestart, handleVoiceCommands, commitPackage, suggestOptions]);
 
-  // Prediction Loop (on debounced transcript)
-  useEffect(() => {
-    // Guards
-    if (!debouncedTranscript || isSpeaking || Date.now() < ignoreAudioUntil.current || status === 'paused') {
-      return;
-    }
-    if (debouncedTranscript === lastProcessed) return;
-
-    const clean = debouncedTranscript.toLowerCase().trim();
-
-    // Command Handling (highest priority)
-    if (handleVoiceCommands(clean)) {
-      return;
-    }
-
-    setLastProcessed(clean);
-    const pred = brain.predict(debouncedTranscript);
-    setPrediction(pred);
-
-    if (pred.stop && pred.confidence > 0.85) {
-      // High confidence: Auto-commit
-      setStatus('locked');
-      playTone('lock');
-      commitPackage(pred.stop, pred.extracted);
-    } else if (pred.candidates.length > 0 && pred.confidence > 0.4) {
-      // Medium: Suggest options via TTS
-      setStatus('suggestion');
-      suggestOptions(pred.candidates);
-    } else {
-      // Low: No match found
-      setStatus('unknown');
-      robustSpeakAndRestart('No match found. Please repeat the address.');
-      playTone('error');
-    }
-  }, [debouncedTranscript, isSpeaking, lastProcessed, brain, status, playTone, robustSpeakAndRestart, handleVoiceCommands, commitPackage, suggestOptions]); // This block is now duplicated, I will remove it.
-
   // Safety Timer: Reset if stuck >10s
   useEffect(() => {
     if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);

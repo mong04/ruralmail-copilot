@@ -197,16 +197,18 @@ export const useVoiceInput = (isListeningProp: boolean) => {
     isPausedRef.current = false;
     setIsProcessing(false);
     
-    // Hard Reset
-    try { recognitionRef.current?.abort(); } catch { /* Ignore */ }
-    
     if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     
+    // If recognition is already listening, don't try to start it again.
+    if (isListening) {
+      return;
+    }
+
     restartTimerRef.current = setTimeout(() => {
         try { 
           recognitionRef.current?.start(); 
         } catch (e) {
-          handleError('ManualStart', e);
+           handleError('ManualStart', e);
         }
     }, 300); // Increased for stability
   }, [handleError]);

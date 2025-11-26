@@ -171,6 +171,20 @@ const packageSlice = createSlice({
         toast.success(`${count} package(s) marked delivered`);
       }
     },
+    /**
+     * Reducer to remove the last added package (for undo).
+     */
+    removeLastPackage: (state) => {
+      if (state.packages.length > 0) {
+        state.packages.pop();
+        if (state.loadingSession?.isActive) {
+          state.loadingSession.count = Math.max(0, state.loadingSession.count - 1);
+        }
+        toast.success('Last package removed');
+      } else {
+        toast.info('No packages to remove');
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -221,6 +235,7 @@ export const {
   startLoadingSession,
   endLoadingSession,
   incrementLoadCount,
+  removeLastPackage, // New export
 } = packageSlice.actions;
 
 export default packageSlice.reducer;

@@ -78,7 +78,6 @@ export const useVoiceInput = (isListeningProp: boolean) => {
     } else if (rawError instanceof Error) {
       message = rawError.message;
     } else if (isSpeechError(rawError)) {
-      // FIX 1: Type-safe access without 'any'
       const code = rawError.error;
       switch (code) {
         case 'not-allowed': message = 'Mic Permission Denied'; break;
@@ -89,7 +88,6 @@ export const useVoiceInput = (isListeningProp: boolean) => {
       }
     }
 
-    // FIX 2: Removed unused 'prev'
     setVoiceError(`${source}: ${message}`);
     
     // Auto-clear soft errors after a few seconds
@@ -126,7 +124,7 @@ export const useVoiceInput = (isListeningProp: boolean) => {
     }
 
     const recognition = new SpeechRecognitionConstructor();
-    recognition.continuous = false; 
+    recognition.continuous = true; // Changed to true for continuous listening
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
@@ -154,17 +152,15 @@ export const useVoiceInput = (isListeningProp: boolean) => {
     
     recognition.onend = () => {
       setIsListening(false);
-      // Auto-restart
+      // Auto-restart with delay for stability
       if (isListeningProp && !isProcessing && !isPausedRef.current) {
         restartTimerRef.current = setTimeout(() => {
             try { 
               recognition.start(); 
             } catch {
-              // FIX 3: Removed unused 'e'. 
-              // If auto-restart fails (e.g. already started), we silently ignore it 
-              // to prevent error spam.
+              // Silently ignore
             }
-        }, 150); 
+        }, 300); // Increased delay for Bluetooth
       }
     };
 
@@ -190,7 +186,7 @@ export const useVoiceInput = (isListeningProp: boolean) => {
       try { 
         recognition.abort(); 
       } catch {
-        // FIX 4: Removed unused 'e' (cleanup aborts are safe to ignore)
+        // Ignore
       }
     };
   }, [isListeningProp, isProcessing, handleError]);
@@ -210,10 +206,9 @@ export const useVoiceInput = (isListeningProp: boolean) => {
         try { 
           recognitionRef.current?.start(); 
         } catch (e) {
-          // FIX 5: Using 'e' here because manual start failure IS important
           handleError('ManualStart', e);
         }
-    }, 200); 
+    }, 300); // Increased for stability
   }, [handleError]);
 
   const stop = useCallback(() => {

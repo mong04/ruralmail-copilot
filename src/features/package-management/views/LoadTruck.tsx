@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Mic, Activity, PackagePlus, AlertTriangle, 
-  CheckCircle2, AlertCircle, XCircle, Volume2, X 
+  CheckCircle2, AlertCircle, XCircle, X 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -13,7 +13,8 @@ import {
   addPackage, 
   startLoadingSession, 
   endLoadingSession, 
-  incrementLoadCount 
+  incrementLoadCount,
+  removeLastPackage
 } from '../store/packageSlice';
 
 import { useVoiceInput } from '../../../hooks/useVoiceInput';
@@ -34,10 +35,10 @@ export const LoadTruck: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   
-  // --- REDUX STATE ---
+  // Redux State
   const route = useSelector((state: RootState) => state.route.route);
-  const loadingSession = useSelector((state: RootState) => state.packages.loadingSession) ?? {
-    isActive: false, count: 0
+  const loadingSession = useSelector((state: RootState) => state.packages.loadingSession) ?? { 
+    isActive: false, count: 0 
   };
 
   // --- BRAIN ---
@@ -45,528 +46,437 @@ export const LoadTruck: React.FC = () => {
   
   // --- HOOKS ---
   const { transcript, isListening, voiceError, reset, stop, start } = useVoiceInput(true); 
-  const debouncedTranscript = useDebounce(transcript, 400); 
+  const debouncedTranscript = useDebounce(transcript, 350); // Slightly faster debounce
   const { speak, playTone } = useSound();
 
   // --- LOCAL STATE ---
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false); 
-  const [status, setStatus] = useState<'idle' | 'suggestion' | 'locked' | 'saved' | 'unknown'>('idle');
+  const [status, setStatus] = useState<'listening' | 'suggestion' | 'locked' | 'saved' | 'unknown' | 'paused'>('listening');
   const [history, setHistory] = useState<string[]>([]); 
   const [lastProcessed, setLastProcessed] = useState<string>('');
 
   // --- REFS ---
   const safetyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const speakTimerRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // ✅ NEW: Echo Cancellation Ref
-  // Stores a timestamp. Any audio received BEFORE this time is ignored.
-  const ignoreAudioUntil = useRef<number>(0);
+  const ignoreAudioUntil = useRef<number>(Date.now()); // Echo cancellation
 
-  /**
-   * 🎤 ROBUST TTS SYSTEM (Fixed for Feedback Loops)
-   */
+  // --- EFFECTS ---
+
   const robustSpeakAndRestart = useCallback((text: string) => {
-    // 1. Enter Speaking Mode
     setIsSpeaking(true);
-    
-    // 2. Kill the mic AND clear any current transcript buffer
-    stop(); 
-    reset(); 
+    stop();
+    reset();
 
     let hasRecovered = false;
-
     const recover = (source: 'finish' | 'timeout' | 'interrupt') => {
-        if (hasRecovered) return; 
-        hasRecovered = true;
-
-        setIsSpeaking(false);
-        
-        // ✅ CRITICAL: Set Cooldown
-        // We ignore all microphone input for 1.2 seconds AFTER speech ends.
-        // This gives the room echo time to die down and the mic time to stabilize.
-        ignoreAudioUntil.current = Date.now() + 1200;
-
-        if (source === 'timeout') toast.warning("Audio reset");
-        
-        // Restart Input
-        if (source !== 'interrupt') {
-             playTone('start');
-             // Small delay to ensure browser 'speech end' event is fully cleared
-             setTimeout(() => start(), 100); 
-        }
+      if (hasRecovered) return;
+      hasRecovered = true;
+      if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
+      setIsSpeaking(false);
+      ignoreAudioUntil.current = Date.now() + 500; // Shorter echo cooldown
+      
+      // Only restart if not intentionally paused or interrupted
+      if (source !== 'interrupt' && status !== 'paused') {
+        playTone('start');
+        setTimeout(() => start(), 150); // Stability buffer
+      }
     };
 
-    // Watchdog
-    if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
-    speakTimerRef.current = setTimeout(() => {
-        console.warn("TTS Watchdog triggered");
-        recover('timeout');
-    }, 5000);
+    speakTimerRef.current = setTimeout(() => recover('timeout'), 4000);
+    speak(text, () => recover('finish'));
 
-    // Speak
-    speak(text, () => {
-        if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
-        recover('finish');
-    });
-    
-  }, [speak, start, stop, reset, playTone]);
+  }, [stop, reset, playTone, start, speak, status]);
 
-  /**
-   * 🛑 SAFE INTERRUPT (Fixed for "Recognition Already Started")
-   */
-  const handleInterrupt = useCallback(() => {
-      // 1. Kill TTS
-      if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
-      window.speechSynthesis.cancel();
-      
-      // 2. Clear Flags
-      setIsSpeaking(false);
-      setLastProcessed('');
-      setPrediction(null);
-      setStatus('idle');
-      
-      // 3. Clear Buffer
-      reset();
-
-      // 4. Safe Restart
-      // We don't call start() immediately. We wait 300ms to let the abort() in reset() finish.
-      playTone('start');
-      setTimeout(() => {
-          start();
-      }, 300);
-
-  }, [playTone, start, reset]);
-
-
-  // --- CORE ACTIONS ---
+  // --- HELPERS ---
 
   const commitPackage = useCallback((stopItem: Stop, extracted: Prediction['extracted']) => {
-      const stopNum = route.findIndex(r => r.id === stopItem.id);
-      
-      const newPkg: Package = {
-          id: crypto.randomUUID(),
-          tracking: '',
-          size: extracted.size, 
-          notes: extracted.notes.join(', ') || 'Voice Load',
-          assignedStopId: stopItem.id,
-          assignedStopNumber: stopNum,
-          assignedAddress: stopItem.full_address
-      };
+    if (isSpeaking) return; // Prevent double commit
 
-      dispatch(addPackage(newPkg));
-      dispatch(incrementLoadCount());
-      
-      playTone('success');
-      setStatus('saved');
-      setHistory(prev => [`#${stopNum + 1} - ${stopItem.address_line1}`, ...prev.slice(0, 4)]);
-
-      setTimeout(() => {
-          setStatus('idle');
-          setPrediction(null);
-          setLastProcessed(''); 
-          reset(); 
-          // Note: We use start() here, but the feedback loop is prevented
-          // because we aren't speaking out loud in this flow.
-          start(); 
-      }, 800);
-  }, [dispatch, playTone, reset, start, route]);
-
-  const handleLock = useCallback((pred: Prediction) => {
-    if (!pred.stop) return;
+    const stopNum = route.findIndex(r => r.id === stopItem.id) + 1;
     
-    setStatus('locked');
-    stop(); 
+    const newPkg: Package = {
+      id: crypto.randomUUID(),
+      tracking: '',
+      size: extracted.size, 
+      notes: extracted.notes.join(', ') || 'Voice Load',
+      assignedStopId: stopItem.id,
+      assignedStopNumber: stopNum,
+      assignedAddress: stopItem.full_address || ''
+    };
 
-    const stopSeq = route.findIndex(r => r.id === pred.stop?.id) + 1;
-    let phrase = `Stop ${stopSeq}.`;
-    if (pred.extracted.size === 'large') phrase += " Large.";
-    else phrase += ` ${pred.stop?.address_line1.split(' ')[0]}`;
-
-    if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+    dispatch(addPackage(newPkg));
+    dispatch(incrementLoadCount());
     
-    safetyTimerRef.current = setTimeout(() => {
-        commitPackage(pred.stop!, pred.extracted);
-    }, 2500);
+    playTone('success');
+    robustSpeakAndRestart(`Package added to stop ${stopNum}. Next package?`);
+    setStatus('saved');
+    setHistory(prev => [`#${stopNum} - ${stopItem.address_line1 || ''}`, ...prev.slice(0, 4)]);
 
-    // Short phrase, usually safe without full robust flow, but we add a mini-cooldown
     setTimeout(() => {
-        speak(phrase);
-        // Protect against self-hearing this confirmation
-        ignoreAudioUntil.current = Date.now() + 2000; 
-    }, 50);
-
-  }, [route, speak, stop, commitPackage]);
-
-  const handleSuggestion = useCallback((pred: Prediction) => {
-      setStatus('suggestion');
-      // Cut mic immediately
-      stop(); 
-      
-      const opt1 = pred.candidates[0]?.address_line1.split(',')[0] ?? "Option 1";
-      const opt2 = pred.candidates[1]?.address_line1.split(',')[0] ?? "Option 2";
-
-      playTone('alert');
-
-      setTimeout(() => {
-          robustSpeakAndRestart(`Say One for ${opt1}. Or Two for ${opt2}.`);
-      }, 100);
-  }, [stop, playTone, robustSpeakAndRestart]);
+      setStatus('listening');
+      setPrediction(null);
+      setLastProcessed(''); 
+      reset(); 
+    }, 1500);
+  }, [route, dispatch, playTone, robustSpeakAndRestart, isSpeaking, reset]);
 
   const handleSelectSuggestion = useCallback((selectedStop: Stop) => {
-      if (!prediction) return;
+    if (!prediction) { return; }
+    // Learn alias if fuzzy
+    if (prediction.source === 'fuzzy') {
       brain.learn(prediction.originalTranscript, selectedStop.id);
-      commitPackage(selectedStop, prediction.extracted);
+    }
+    commitPackage(selectedStop, prediction.extracted);
   }, [prediction, brain, commitPackage]);
 
-  const handleUnknown = useCallback(() => {
-      setStatus('unknown');
-      playTone('error');
-      stop(); 
+  const handleInterrupt = useCallback(() => {
+    if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+    setLastProcessed('');
+    setPrediction(null);
+    setStatus('listening');
+    reset();
+    playTone('error');
+    robustSpeakAndRestart('Cancelled. Ready for next address.');
+  }, [reset, playTone, robustSpeakAndRestart]);
 
-      setTimeout(() => {
-          setStatus('idle');
-          setPrediction(null);
-          setLastProcessed(''); 
-          reset();
-          start(); 
-      }, 1500);
-  }, [playTone, stop, reset, start]);
-
-  const handleFinishLoad = useCallback(() => {
+  const handleVoiceCommands = useCallback((clean: string): boolean => {
+    if (clean.match(/^(pause|stop listening)$/)) {
+      stop();
+      setStatus('paused');
+      robustSpeakAndRestart('Paused. Say resume to continue.');
+      return true;
+    }
+    if (clean.match(/^(resume|start listening)$/)) {
+      start();
+      setStatus('listening');
+      robustSpeakAndRestart('Resumed. Speak the address.');
+      return true;
+    }
+    if (clean.match(/^(undo|delete last|oops)$/)) {
+      if (history.length > 0) {
+        dispatch(removeLastPackage());
+        setHistory(prev => prev.slice(1));
+        robustSpeakAndRestart('Last package undone.');
+        playTone('error');
+      } else {
+        robustSpeakAndRestart('Nothing to undo.');
+      }
+      return true;
+    }
+    if (clean.match(/^(end session|finish loading|done)$/)) {
       dispatch(endLoadingSession());
-      playTone('success');
-      navigate('/packages'); 
-  }, [dispatch, navigate, playTone]);
-
-
-  // --- INITIALIZATION ---
-
-  useEffect(() => {
-    if (!loadingSession.isActive) {
-        dispatch(startLoadingSession());
-        playTone('start');
-        reset(); 
-        start();
+      robustSpeakAndRestart(`Session complete. Loaded ${loadingSession.count} packages.`);
+      setTimeout(() => navigate('/dashboard'), 2000);
+      return true;
     }
-  }, [dispatch, loadingSession.isActive, playTone, reset, start]);
-
-  // --- MAIN INTELLIGENCE LOOP ---
-  useEffect(() => {
-    // 1. Hard Blockers
-    if (isSpeaking || status === 'locked' || status === 'saved') return;
-
-    // 2. Debounce & Cooldown Check
-    if (debouncedTranscript && debouncedTranscript !== lastProcessed) {
-      
-      // ✅ FEEDBACK LOOP KILLER
-      // If we are currently inside the "Echo Cooldown" window, ignore everything.
-      if (Date.now() < ignoreAudioUntil.current) {
-          console.log("Ignored Echo:", debouncedTranscript);
-          return;
-      }
-
-      const cleanText = debouncedTranscript.toLowerCase().trim();
-      setLastProcessed(debouncedTranscript); 
-
-      // 3. Suggestion Mode Commands
-      if (status === 'suggestion' && prediction) {
-          if (['one', '1', 'first', 'yes'].some(w => cleanText.includes(w))) {
-             handleSelectSuggestion(prediction.candidates[0]); return;
-          }
-          if (['two', '2', 'second'].some(w => cleanText.includes(w))) {
-             if (prediction.candidates[1]) handleSelectSuggestion(prediction.candidates[1]); return;
-          }
-          if (['no', 'cancel', 'wrong', 'zero'].some(w => cleanText.includes(w))) {
-             setStatus('idle'); reset(); start(); return;
-          }
-      }
-
-      // 4. Global Commands
-      if (['finish', 'done', 'complete'].some(cmd => cleanText.includes(cmd))) {
-          handleFinishLoad(); return;
-      }
-      if (['cancel', 'wrong', 'no', 'reset'].some(cmd => cleanText.includes(cmd))) {
-          setStatus('idle'); reset(); start(); return;
-      }
-
-      // 5. Brain Prediction
-      const result = brain.predict(debouncedTranscript);
-      setPrediction(result);
-
-      if (!result.stop) {
-          if (debouncedTranscript.length > 4) {
-             handleUnknown();
-          } else {
-             reset(); start(); 
-          }
-      } 
-      else if (result.confidence > 0.75 || result.source === 'alias' || result.source === 'stop_number') {
-          handleLock(result);
-      } 
-      else if (result.confidence > 0.4) {
-          handleSuggestion(result);
-      }
-      else {
-          handleUnknown();
+    if (status === 'suggestion' && clean.match(/^(option (one|two|three)|first|second|third|[123])$/)) {
+      const idx = parseInt(clean.match(/one|1/) ? '1' : clean.match(/two|2/) ? '2' : '3') - 1;
+      if (prediction?.candidates[idx]) {
+        handleSelectSuggestion(prediction.candidates[idx]);
+        return true;
       }
     }
-  }, [debouncedTranscript, lastProcessed, brain, status, prediction, isSpeaking, handleFinishLoad, handleLock, handleSuggestion, handleSelectSuggestion, handleUnknown, reset, start]);
+    if (clean.match(/^(no|wrong|cancel)$/)) {
+      handleInterrupt();
+      return true;
+    }
+    return false;
+  }, [stop, start, robustSpeakAndRestart, status, prediction, history.length, dispatch, playTone, loadingSession.count, navigate, handleSelectSuggestion, handleInterrupt]);
 
-  // --- CLEANUP ---
+  const suggestOptions = useCallback((candidates: Stop[]) => {
+    let suggestionText = 'Did you mean: ';
+    candidates.slice(0, 3).forEach((cand, idx) => {
+      const stopNum = route.findIndex(r => r.id === cand.id) + 1;
+      suggestionText += `Option ${idx + 1}: Stop ${stopNum}, ${cand.address_line1}. `;
+    });
+    suggestionText += 'Say option one, two, or three.';
+    playTone('alert');
+    robustSpeakAndRestart(suggestionText);
+  }, [route, playTone, robustSpeakAndRestart]);
+
+  // Start session on mount
   useEffect(() => {
-      return () => {
-          if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
-          if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
-          window.speechSynthesis.cancel();
-      };
-  }, []);
+    dispatch(startLoadingSession());
+    // Wait a moment for the view to transition in before speaking
+    setTimeout(() => robustSpeakAndRestart('Loading mode activated. Speak the address.'), 500);
+    return () => {
+      dispatch(endLoadingSession());
+      stop();
+    };
+  }, [dispatch, stop, robustSpeakAndRestart]);
 
+  // Prediction Loop (on debounced transcript)
+  useEffect(() => {
+    // Guards
+    if (!debouncedTranscript || isSpeaking || Date.now() < ignoreAudioUntil.current || status === 'paused') {
+      return;
+    }
+    if (debouncedTranscript === lastProcessed) return;
 
-  // --- RENDER ---
-  const stopNumber = prediction?.stop 
-    ? route.findIndex(r => r.id === prediction?.stop?.id) + 1 
-    : '?';
+    const clean = debouncedTranscript.toLowerCase().trim();
 
-  const stateColor = 
-    status === 'locked' || status === 'saved' ? 'text-success border-success' : 
-    status === 'unknown' ? 'text-warning border-warning' : 
-    'text-border border-border';
+    // Command Handling (highest priority)
+    if (handleVoiceCommands(clean)) {
+      return;
+    }
 
-  const glowColor = 
-    status === 'locked' || status === 'saved' ? 'shadow-success/20' : 
-    status === 'unknown' ? 'shadow-warning/20' : 
-    'shadow-brand/20';
+    setLastProcessed(clean);
+    const pred = brain.predict(debouncedTranscript);
+    setPrediction(pred);
 
-    return (
-        <div className="fixed inset-0 bg-background text-foreground flex flex-col font-mono overflow-hidden"
-             style={{ bottom: 'var(--bottom-nav-height)' }}>
-        
-        {/* Background Grid */}
-        <div className="absolute inset-0 z-0 pointer-events-none opacity-10" 
-             style={{ 
-                backgroundImage: 'linear-gradient(var(--color-border) 1px, transparent 1px), linear-gradient(90deg, var(--color-border) 1px, transparent 1px)', 
-                backgroundSize: '40px 40px' 
-             }} 
-        />
+    if (pred.stop && pred.confidence > 0.85) {
+      // High confidence: Auto-commit
+      setStatus('locked');
+      playTone('lock');
+      commitPackage(pred.stop, pred.extracted);
+    } else if (pred.candidates.length > 0 && pred.confidence > 0.4) {
+      // Medium: Suggest options via TTS
+      setStatus('suggestion');
+      suggestOptions(pred.candidates);
+    } else {
+      // Low: No match found
+      setStatus('unknown');
+      robustSpeakAndRestart('No match found. Please repeat the address.');
+      playTone('error');
+    }
+  }, [debouncedTranscript, isSpeaking, lastProcessed, brain, status, playTone, robustSpeakAndRestart, handleVoiceCommands, commitPackage, suggestOptions]);
 
-        {/* Header */}
-        <header className="flex-none flex justify-between items-center p-4 z-20 border-b border-border bg-surface/90 backdrop-blur-md">
-            <Button variant="ghost" onClick={() => navigate(-1)} className="text-xs font-bold text-muted-foreground hover:text-foreground uppercase tracking-widest">
-                <ArrowLeft className="mr-2 w-4 h-4" /> Exit
-            </Button>
-            <div className="flex items-center gap-4">
-                <div className="flex flex-col items-end">
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Session</span>
-                    <span className="text-xl font-bold text-brand tabular-nums leading-none">
-                        {loadingSession.count.toString().padStart(3, '0')}
-                    </span>
+  // Prediction Loop (on debounced transcript)
+  useEffect(() => {
+    // Guards
+    if (!debouncedTranscript || isSpeaking || Date.now() < ignoreAudioUntil.current || status === 'paused') {
+      return;
+    }
+    if (debouncedTranscript === lastProcessed) return;
+
+    const clean = debouncedTranscript.toLowerCase().trim();
+
+    // Command Handling (highest priority)
+    if (handleVoiceCommands(clean)) {
+      return;
+    }
+
+    setLastProcessed(clean);
+    const pred = brain.predict(debouncedTranscript);
+    setPrediction(pred);
+
+    if (pred.stop && pred.confidence > 0.85) {
+      // High confidence: Auto-commit
+      setStatus('locked');
+      playTone('lock');
+      commitPackage(pred.stop, pred.extracted);
+    } else if (pred.candidates.length > 0 && pred.confidence > 0.4) {
+      // Medium: Suggest options via TTS
+      setStatus('suggestion');
+      suggestOptions(pred.candidates);
+    } else {
+      // Low: No match found
+      setStatus('unknown');
+      robustSpeakAndRestart('No match found. Please repeat the address.');
+      playTone('error');
+    }
+  }, [debouncedTranscript, isSpeaking, lastProcessed, brain, status, playTone, robustSpeakAndRestart, handleVoiceCommands, commitPackage, suggestOptions]); // This block is now duplicated, I will remove it.
+
+  // Safety Timer: Reset if stuck >10s
+  useEffect(() => {
+    if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+    safetyTimerRef.current = setTimeout(() => {
+      if (status !== 'listening' && status !== 'paused' && !isSpeaking) {
+        handleInterrupt();
+        toast.warning('Safety timer reset the interface.');
+      }
+    }, 10000);
+    return () => { if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current); };
+  }, [status, isSpeaking, handleInterrupt, robustSpeakAndRestart]);
+
+  // Error Handling
+  useEffect(() => {
+    if (voiceError) {
+      // Don't speak on abort, it's a normal part of the flow
+      if (!voiceError.includes('aborted')) {
+        robustSpeakAndRestart(`Voice Error: ${voiceError}. Please check mic permissions.`);
+      }
+      toast.error(voiceError);
+    }
+  }, [voiceError, robustSpeakAndRestart]);
+
+  return (
+    <div className="fixed inset-0 flex flex-col bg-background text-foreground overflow-hidden">
+      {/* Header */}
+      <header className="flex-none h-16 w-full border-b border-border bg-surface/90 backdrop-blur flex items-center px-4 gap-4 z-20">
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+          <ArrowLeft size={24} />
+        </Button>
+        <div className="flex-1">
+          <h1 className="text-xl font-bold uppercase tracking-widest">Load Truck</h1>
+          <p className="text-xs text-muted-foreground">Voice Mode Active</p>
+        </div>
+        <div className="flex items-center gap-4 text-muted-foreground">
+          <Activity size={16} className={loadingSession.isActive ? 'text-success animate-pulse' : ''} />
+          <span className="text-sm font-bold">{loadingSession.count} Pkgs</span>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col items-center justify-center p-6 gap-8 overflow-hidden relative">
+        <AnimatePresence mode="wait">
+
+          {/* Listening / Paused Indicator */}
+          {(status === 'listening' || status === 'paused') && (
+            <motion.div 
+              key="listening"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex flex-col items-center"
+            >
+              <div className="relative mb-8">
+                <div className={`absolute inset-0 rounded-full opacity-20 ${isListening ? 'animate-ping bg-brand' : ''}`}></div>
+                <div className="relative p-10 rounded-full border-4 border-brand bg-surface shadow-2xl">
+                  <Mic size={80} className="text-brand" />
                 </div>
-                <Activity className="w-5 h-5 text-brand animate-pulse" />
-            </div>
-        </header>
+                {status === 'paused' && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded-full">
+                    <X size={60} className="text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+              <h2 className="text-4xl font-bold text-brand uppercase">{status === 'paused' ? 'Paused' : 'Listening...'}</h2>
+              <p className="mt-4 text-muted-foreground text-center max-w-md">
+                {status === 'paused' ? 'Say "resume" or "start listening" to continue.' : 'Speak the package address. E.g., "123 Main Street, large priority".'}
+              </p>
+            </motion.div>
+          )}
 
-        {/* Error HUD */}
-        <AnimatePresence>
-            {voiceError && (
-                <motion.div 
-                    initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }}
-                    className="absolute top-20 left-4 right-4 z-50 bg-danger/90 text-white p-4 rounded-md shadow-lg backdrop-blur-md flex items-center gap-3 border border-white/20"
+          {/* Locked / High-Confidence Match */}
+          {status === 'locked' && prediction?.stop && (
+            <motion.div 
+              key="locked"
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+              className="w-full max-w-md"
+            >
+              <div className="relative bg-surface border-4 border-brand rounded-xl shadow-2xl overflow-hidden p-6 text-center animate-pulse">
+                <span className="text-sm font-bold uppercase tracking-widest text-brand mb-2 block">MATCH FOUND</span>
+                <h3 className="text-3xl font-black text-foreground mb-4">{prediction.stop.address_line1}</h3>
+                <div className="flex justify-center gap-4 mb-6">
+                  <span className={`px-4 py-2 rounded-full font-bold text-sm ${getSizeColor(prediction.extracted.size)}`}>
+                    {prediction.extracted.size.toUpperCase()}
+                  </span>
+                  {prediction.extracted.priority && (
+                    <span className="px-4 py-2 rounded-full font-bold text-sm text-danger border-danger bg-danger/10">
+                      PRIORITY
+                    </span>
+                  )}
+                </div>
+                <Button variant="ghost" onClick={handleInterrupt} className="text-danger mx-auto">
+                  <XCircle size={20} className="mr-2" /> Cancel
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Saved Confirmation */}
+          {status === 'saved' && (
+            <motion.div 
+              key="saved"
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+              className="flex flex-col items-center"
+            >
+              <div className="p-10 border-4 border-success rounded-full bg-success/10 mb-8">
+                <CheckCircle2 size={80} className="text-success" />
+              </div>
+              <h2 className="text-4xl font-bold text-success uppercase">Package Added</h2>
+            </motion.div>
+          )}
+
+          {/* Suggestions */}
+          {status === 'suggestion' && prediction && (
+            <motion.div 
+              key="suggestion"
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              className="w-full max-w-md flex flex-col gap-4"
+            >
+              <div className="text-center mb-4">
+                <h2 className="text-2xl font-bold text-warning uppercase">Did you mean...?</h2>
+                <p className="text-muted-foreground text-xs">Say "Option one", "two", or "three"</p>
+              </div>
+              {prediction.candidates.slice(0, 3).map((cand, idx) => (
+                <Button 
+                  key={cand.id}
+                  variant="surface" 
+                  onClick={() => handleSelectSuggestion(cand)}
+                  className="h-auto py-4 px-6 flex items-center justify-between border-border hover:border-brand group text-left transition-all"
                 >
-                    <XCircle className="shrink-0" />
-                    <div className="flex-1 text-sm font-bold font-mono">{voiceError}</div>
-                    <Button size="sm" variant="ghost" className="text-white hover:bg-white/20 h-8 w-8 p-0" onClick={() => { reset(); start(); }}>
-                        Run
-                    </Button>
-                </motion.div>
-            )}
+                  <div>
+                    <span className="text-xs text-muted-foreground uppercase tracking-widest block text-brand">
+                      Option {idx + 1}
+                    </span>
+                    <span className="text-lg font-bold text-foreground group-hover:text-brand transition-colors">
+                      {cand.address_line1}
+                    </span>
+                  </div>
+                  <div className="text-xl font-black text-muted-foreground/30 group-hover:text-brand">
+                    #{route.findIndex(r => r.id === cand.id) + 1}
+                  </div>
+                </Button>
+              ))}
+              <Button 
+                variant="ghost" 
+                onClick={handleInterrupt}
+                className="mt-4 text-muted-foreground hover:text-danger"
+              >
+                <AlertCircle size={16} className="mr-2" /> Wrong / Retry
+              </Button>
+            </motion.div>
+          )}
+
+          {/* Unknown / No Match */}
+          {status === 'unknown' && (
+            <motion.div 
+              key="unknown"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex flex-col items-center"
+            >
+              <div className="p-10 border-4 border-warning rounded-full bg-warning/10 animate-pulse mb-8">
+                <AlertTriangle size={80} className="text-warning" />
+              </div>
+              <h2 className="text-4xl font-bold text-warning uppercase">No Match Found</h2>
+              <p className="mt-4 text-muted-foreground font-mono">"{transcript}"</p>
+            </motion.div>
+          )}
+
         </AnimatePresence>
 
-        {/* Main Content */}
-        <main className="flex-1 flex flex-col items-center justify-center relative z-10 w-full p-6">
-            <AnimatePresence mode='wait'>
-                
-                {status === 'idle' && (
-                    <motion.div 
-                        key="idle"
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="flex flex-col items-center gap-10"
-                    >
-                        {/* Dynamic Icon Ring */}
-                        <div className="relative">
-                            
-                            {/* Listening Pulse */}
-                            {isListening && !isSpeaking && (
-                                <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping duration-2000" />
-                            )}
+        {/* Live Transcript Overlay */}
+        <div className="absolute bottom-20 left-0 right-0 text-center pointer-events-none">
+          <p className="text-muted-foreground text-xs font-bold tracking-widest uppercase mb-2">Live Transcript</p>
+          <p className="text-2xl font-mono font-bold text-foreground wrap-break-word leading-tight px-4">
+            {transcript || <span className="opacity-20">Speak now...</span>}
+          </p>
+        </div>
+      </main>
 
-                            {/* Speaking Pulse */}
-                            {isSpeaking && (
-                                <div className="absolute inset-0 bg-warning/20 rounded-full animate-ping duration-1000" />
-                            )}
-                            
-                            <div className={`
-                                relative bg-surface border-2 p-12 rounded-full shadow-xl transition-all duration-300
-                                ${isSpeaking ? 'border-warning scale-110' : isListening ? 'border-brand' : 'border-muted'}
-                            `}>
-                                {isSpeaking ? (
-                                    <Volume2 size={64} className="text-warning animate-pulse" />
-                                ) : (
-                                    <Mic size={64} className={isListening ? 'text-brand' : 'text-muted'} />
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Status Text / Override Controls */}
-                        <div className="text-center relative">
-                            {isSpeaking ? (
-                                <div className="flex flex-col items-center gap-4 animate-in slide-in-from-bottom-2">
-                                    <h2 className="text-2xl font-bold text-warning">AI SPEAKING...</h2>
-                                    
-                                    <Button 
-                                        variant="glass" 
-                                        size="sm"
-                                        onClick={handleInterrupt}
-                                        className="gap-2 border-warning text-warning hover:bg-warning/10"
-                                    >
-                                        <X size={14} /> Interrupt
-                                    </Button>
-                                </div>
-                            ) : (
-                                <>
-                                    <h2 className="text-2xl font-bold text-foreground">
-                                        {isListening ? "LISTENING..." : "PROCESSING"}
-                                    </h2>
-                                    <p className="text-muted-foreground text-sm uppercase tracking-widest mt-2">
-                                        "123 Main" &bull; "Stop 5" &bull; "Large"
-                                    </p>
-                                    {transcript && (
-                                        <p className="mt-4 text-brand font-mono text-lg animate-pulse">
-                                            {transcript}
-                                        </p>
-                                    )}
-                                </>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-
-                {(status === 'locked' || status === 'saved') && prediction && (
-                    <motion.div 
-                        key="locked"
-                        initial={{ opacity: 0, scale: 0.9 }} 
-                        animate={{ opacity: 1, scale: 1 }} 
-                        exit={{ opacity: 0, scale: 1.1 }}
-                        className="w-full max-w-lg"
-                    >
-                        <div className={`relative w-full aspect-square border-2 bg-surface/80 backdrop-blur-xl flex flex-col items-center justify-center ${stateColor} shadow-2xl ${glowColor}`}>
-                            <div className="absolute top-4 right-4 flex flex-col gap-2 items-end">
-                                {prediction.extracted.size !== 'medium' && (
-                                    <span className={`px-2 py-1 text-xs font-black uppercase border ${getSizeColor(prediction.extracted.size)}`}>
-                                        {prediction.extracted.size}
-                                    </span>
-                                )}
-                                {prediction.extracted.priority && (
-                                    <span className="px-2 py-1 text-xs font-black uppercase border text-danger border-danger bg-danger/10">
-                                        PRIORITY
-                                    </span>
-                                )}
-                            </div>
-                            <span className="text-sm font-bold uppercase tracking-[0.3em] mb-4 opacity-80 flex items-center gap-2">
-                                {status === 'saved' ? <CheckCircle2 size={16} /> : null}
-                                {status === 'saved' ? 'Confirmed' : 'Target Lock'}
-                            </span>
-                            <h1 className="text-[10rem] font-black leading-none tracking-tighter drop-shadow-lg">
-                                {stopNumber}
-                            </h1>
-                            <div className="absolute bottom-8 px-6 w-full text-center">
-                                <div className="bg-surface p-4 border border-border/50 shadow-lg rounded-md">
-                                    <span className="text-xl font-bold text-foreground block truncate">
-                                        {prediction.stop?.address_line1}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-
-                {status === 'suggestion' && prediction && (
-                    <motion.div 
-                        key="suggestion"
-                        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                        className="w-full max-w-md flex flex-col gap-4"
-                    >
-                        <div className="text-center mb-4">
-                            <h2 className="text-2xl font-bold text-warning uppercase">Confirm Target</h2>
-                            <p className="text-muted-foreground text-xs">Say "One", "Two", or "No"</p>
-                        </div>
-                        {prediction.candidates.map((cand, idx) => (
-                            <Button 
-                                key={cand.id}
-                                variant="surface" 
-                                onClick={() => handleSelectSuggestion(cand)}
-                                className="h-auto py-4 px-6 flex items-center justify-between border-border hover:border-brand group text-left transition-all"
-                            >
-                                <div>
-                                    <span className="text-xs text-muted-foreground uppercase tracking-widest block text-brand">
-                                        Say "Option {idx + 1}"
-                                    </span>
-                                    <span className="text-lg font-bold text-foreground group-hover:text-brand transition-colors">
-                                        {cand.address_line1}
-                                    </span>
-                                </div>
-                                <div className="text-xl font-black text-muted-foreground/30 group-hover:text-brand">
-                                    #{route.findIndex(r => r.id === cand.id) + 1}
-                                </div>
-                            </Button>
-                        ))}
-                        <Button 
-                            variant="ghost" 
-                            onClick={() => { setStatus('idle'); reset(); start(); }}
-                            className="mt-4 text-muted-foreground hover:text-danger"
-                        >
-                           <AlertCircle size={16} className="mr-2" /> Wrong / Retry
-                        </Button>
-                    </motion.div>
-                )}
-
-                {status === 'unknown' && (
-                    <motion.div 
-                        key="unknown"
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="flex flex-col items-center"
-                    >
-                        <div className="p-10 border-4 border-warning rounded-full bg-warning/10 animate-pulse mb-8">
-                            <AlertTriangle size={80} className="text-warning" />
-                        </div>
-                        <h2 className="text-4xl font-bold text-warning">NO MATCH</h2>
-                        <p className="mt-4 text-muted-foreground font-mono">"{transcript}"</p>
-                    </motion.div>
-                )}
-
-            </AnimatePresence>
-        </main>
-
-        {/* Footer Log */}
-        <footer className="flex-none h-16 w-full border-t border-border bg-surface/90 backdrop-blur flex items-center px-4 z-20">
-            <div className="shrink-0 text-[10px] text-muted-foreground font-bold uppercase tracking-widest mr-4">
-                Log
-            </div>
-            <div className="flex-1 flex gap-2 overflow-hidden">
-                <AnimatePresence initial={false}>
-                {history.map((item, i) => (
-                    <motion.div 
-                        key={i} 
-                        initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-                        className="shrink-0 px-3 py-1 bg-surface-muted rounded border border-border flex items-center gap-2"
-                    >
-                        <PackagePlus size={12} className="text-success" />
-                        <span className="text-xs font-bold text-foreground">{item}</span>
-                    </motion.div>
-                ))}
-                </AnimatePresence>
-            </div>
-        </footer>
+      {/* Footer Log */}
+      <footer className="flex-none h-16 w-full border-t border-border bg-surface/90 backdrop-blur flex items-center px-4 z-20">
+        <div className="shrink-0 text-[10px] text-muted-foreground font-bold uppercase tracking-widest mr-4">
+          Log
+        </div>
+        <div className="flex-1 flex gap-2 overflow-hidden">
+          <AnimatePresence initial={false}>
+            {history.map((item, i) => (
+              <motion.div 
+                key={i} 
+                initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+                className="shrink-0 px-3 py-1 bg-surface-muted rounded border border-border flex items-center gap-2"
+              >
+                <PackagePlus size={12} className="text-success" />
+                <span className="text-xs font-bold text-foreground">{item}</span>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      </footer>
     </div>
   );
 };

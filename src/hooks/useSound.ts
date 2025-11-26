@@ -124,20 +124,31 @@ export const useSound = () => {
         osc.stop(t + 0.1);
       }
       else if (type === 'alert') {
-        // ✅ NEW: "Ambiguity" (Double Beep)
-        // Used when the AI is asking "Did you mean A or B?"
-        osc.type = 'square'; // Distinct, digital sound
-        osc.frequency.setValueAtTime(600, t);
+        // "Ambiguity" (Double Beep)
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, t);
         
-        // Double envelope
         gain.gain.setValueAtTime(0, t);
-        gain.gain.linearRampToValueAtTime(0.05, t + 0.05);
-        gain.gain.setValueAtTime(0, t + 0.1); // Silence
-        gain.gain.setValueAtTime(0.05, t + 0.15); // Beep 2
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
-
+        gain.gain.linearRampToValueAtTime(0.1, t + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+        
         osc.start(t);
-        osc.stop(t + 0.3);
+        osc.stop(t + 0.15);
+
+        // Beep 2
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(800, t + 0.15);
+        gain2.gain.setValueAtTime(0, t + 0.15);
+        gain2.gain.linearRampToValueAtTime(0.1, t + 0.20);
+        gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+        
+        osc2.start(t + 0.15);
+        osc2.stop(t + 0.3);
       }
 
     } catch { 

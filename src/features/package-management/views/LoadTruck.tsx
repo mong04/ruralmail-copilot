@@ -44,88 +44,99 @@ export const LoadTruck: React.FC = () => {
   const brain = useMemo(() => new RouteBrain(route), [route]);
   
   // --- HOOKS ---
-  // We ignore 'isProcessing' from hook because we use our own debounce logic
   const { transcript, isListening, voiceError, reset, stop, start } = useVoiceInput(true); 
-  const debouncedTranscript = useDebounce(transcript, 400); // 400ms pause required
+  const debouncedTranscript = useDebounce(transcript, 400); 
   const { speak, playTone } = useSound();
 
   // --- LOCAL STATE ---
   const [prediction, setPrediction] = useState<Prediction | null>(null);
-  const [isSpeaking, setIsSpeaking] = useState(false); // Visual state for TTS
+  const [isSpeaking, setIsSpeaking] = useState(false); 
   const [status, setStatus] = useState<'idle' | 'suggestion' | 'locked' | 'saved' | 'unknown'>('idle');
   const [history, setHistory] = useState<string[]>([]); 
   const [lastProcessed, setLastProcessed] = useState<string>('');
 
-  // --- REFS (Timers) ---
+  // --- REFS ---
   const safetyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const speakTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // ✅ NEW: Echo Cancellation Ref
+  // Stores a timestamp. Any audio received BEFORE this time is ignored.
+  const ignoreAudioUntil = useRef<number>(0);
 
   /**
-   * 🎤 ROBUST TTS SYSTEM
-   * Handles browser audio failures gracefully.
-   * 1. Stops Mic
-   * 2. Starts Timeout (Watchdog)
-   * 3. Speaks
-   * 4. Recovers (Restarts Mic)
+   * 🎤 ROBUST TTS SYSTEM (Fixed for Feedback Loops)
    */
   const robustSpeakAndRestart = useCallback((text: string) => {
+    // 1. Enter Speaking Mode
     setIsSpeaking(true);
-    stop(); // Cut input to prevent feedback loop
+    
+    // 2. Kill the mic AND clear any current transcript buffer
+    stop(); 
+    reset(); 
 
     let hasRecovered = false;
 
-    // The recovery function that resets the world
     const recover = (source: 'finish' | 'timeout' | 'interrupt') => {
-        if (hasRecovered) return; // Prevent double-fire
+        if (hasRecovered) return; 
         hasRecovered = true;
 
         setIsSpeaking(false);
         
-        if (source === 'timeout') {
-            toast.warning("Audio driver reset");
-        }
-        if (source === 'interrupt') {
-            toast.info("Interrupted");
-        }
+        // ✅ CRITICAL: Set Cooldown
+        // We ignore all microphone input for 1.2 seconds AFTER speech ends.
+        // This gives the room echo time to die down and the mic time to stabilize.
+        ignoreAudioUntil.current = Date.now() + 1200;
 
+        if (source === 'timeout') toast.warning("Audio reset");
+        
         // Restart Input
-        playTone('start');
-        start();
+        if (source !== 'interrupt') {
+             playTone('start');
+             // Small delay to ensure browser 'speech end' event is fully cleared
+             setTimeout(() => start(), 100); 
+        }
     };
 
-    // 1. WATCHDOG: If TTS takes > 5s, assume crash and force reset
+    // Watchdog
     if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
     speakTimerRef.current = setTimeout(() => {
-        console.warn("TTS Watchdog triggered - Forcing recovery");
+        console.warn("TTS Watchdog triggered");
         recover('timeout');
     }, 5000);
 
-    // 2. SPEAK: Attempt to use browser API
+    // Speak
     speak(text, () => {
-        // Success callback
         if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
         recover('finish');
     });
     
-  }, [speak, start, stop, playTone]);
+  }, [speak, start, stop, reset, playTone]);
 
   /**
-   * 🛑 MANUAL INTERRUPT
-   * Allows user to tap "X" to kill audio and listening immediately.
+   * 🛑 SAFE INTERRUPT (Fixed for "Recognition Already Started")
    */
   const handleInterrupt = useCallback(() => {
+      // 1. Kill TTS
       if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
       window.speechSynthesis.cancel();
-      setIsSpeaking(false);
       
-      // Force reset of logic
+      // 2. Clear Flags
+      setIsSpeaking(false);
       setLastProcessed('');
       setPrediction(null);
       setStatus('idle');
       
+      // 3. Clear Buffer
+      reset();
+
+      // 4. Safe Restart
+      // We don't call start() immediately. We wait 300ms to let the abort() in reset() finish.
       playTone('start');
-      start();
-  }, [playTone, start]);
+      setTimeout(() => {
+          start();
+      }, 300);
+
+  }, [playTone, start, reset]);
 
 
   // --- CORE ACTIONS ---
@@ -150,12 +161,13 @@ export const LoadTruck: React.FC = () => {
       setStatus('saved');
       setHistory(prev => [`#${stopNum + 1} - ${stopItem.address_line1}`, ...prev.slice(0, 4)]);
 
-      // Quick visual confirmation before resetting
       setTimeout(() => {
           setStatus('idle');
           setPrediction(null);
           setLastProcessed(''); 
           reset(); 
+          // Note: We use start() here, but the feedback loop is prevented
+          // because we aren't speaking out loud in this flow.
           start(); 
       }, 800);
   }, [dispatch, playTone, reset, start, route]);
@@ -173,20 +185,22 @@ export const LoadTruck: React.FC = () => {
 
     if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
     
-    // Auto-commit watchdog
     safetyTimerRef.current = setTimeout(() => {
         commitPackage(pred.stop!, pred.extracted);
     }, 2500);
 
-    // Speak confirmation (Fire and forget, we don't wait for callback here as timer handles commit)
+    // Short phrase, usually safe without full robust flow, but we add a mini-cooldown
     setTimeout(() => {
-        speak(phrase); 
+        speak(phrase);
+        // Protect against self-hearing this confirmation
+        ignoreAudioUntil.current = Date.now() + 2000; 
     }, 50);
 
   }, [route, speak, stop, commitPackage]);
 
   const handleSuggestion = useCallback((pred: Prediction) => {
       setStatus('suggestion');
+      // Cut mic immediately
       stop(); 
       
       const opt1 = pred.candidates[0]?.address_line1.split(',')[0] ?? "Option 1";
@@ -201,7 +215,6 @@ export const LoadTruck: React.FC = () => {
 
   const handleSelectSuggestion = useCallback((selectedStop: Stop) => {
       if (!prediction) return;
-      // INTELLIGENCE: Teach the brain this alias mapping
       brain.learn(prediction.originalTranscript, selectedStop.id);
       commitPackage(selectedStop, prediction.extracted);
   }, [prediction, brain, commitPackage]);
@@ -211,7 +224,6 @@ export const LoadTruck: React.FC = () => {
       playTone('error');
       stop(); 
 
-      // Error pause
       setTimeout(() => {
           setStatus('idle');
           setPrediction(null);
@@ -241,15 +253,23 @@ export const LoadTruck: React.FC = () => {
 
   // --- MAIN INTELLIGENCE LOOP ---
   useEffect(() => {
-    // 1. Block processing if we are Speaking or already Locked
+    // 1. Hard Blockers
     if (isSpeaking || status === 'locked' || status === 'saved') return;
 
-    // 2. Debounce Check
+    // 2. Debounce & Cooldown Check
     if (debouncedTranscript && debouncedTranscript !== lastProcessed) {
-      const cleanText = debouncedTranscript.toLowerCase().trim();
-      setLastProcessed(debouncedTranscript); // prevent re-entry
+      
+      // ✅ FEEDBACK LOOP KILLER
+      // If we are currently inside the "Echo Cooldown" window, ignore everything.
+      if (Date.now() < ignoreAudioUntil.current) {
+          console.log("Ignored Echo:", debouncedTranscript);
+          return;
+      }
 
-      // 3. Suggestion Mode Specific Commands
+      const cleanText = debouncedTranscript.toLowerCase().trim();
+      setLastProcessed(debouncedTranscript); 
+
+      // 3. Suggestion Mode Commands
       if (status === 'suggestion' && prediction) {
           if (['one', '1', 'first', 'yes'].some(w => cleanText.includes(w))) {
              handleSelectSuggestion(prediction.candidates[0]); return;
@@ -275,11 +295,9 @@ export const LoadTruck: React.FC = () => {
       setPrediction(result);
 
       if (!result.stop) {
-          // Only error if significant text was spoken
           if (debouncedTranscript.length > 4) {
              handleUnknown();
           } else {
-             // Short noise? Just reset silently
              reset(); start(); 
           }
       } 

@@ -56,8 +56,7 @@ export const useSound = () => {
     window.speechSynthesis.speak(utterance);
   }, [getBestVoice]);
 
-  // PROCEDURAL AUDIO
-  // ✅ Added 'alert' to the allowed types
+  // PROCEDURAL AUDIO - Enhanced with confidence-aware tones
   const playTone = useCallback((type: 'success' | 'error' | 'start' | 'lock' | 'alert') => {
     initAudio(); 
     const ctx = audioCtxRef.current;
@@ -156,5 +155,56 @@ export const useSound = () => {
     }
   }, [initAudio]);
 
-  return { speak, playTone };
+  // Advanced tone for confidence levels (0-1)
+  const playAdvancedTone = useCallback((confidence: number) => {
+    initAudio();
+    const ctx = audioCtxRef.current;
+    if (!ctx) return;
+
+    try {
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      // High confidence: ascending pitch
+      if (confidence > 0.8) {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, t);
+        osc.frequency.linearRampToValueAtTime(1200, t + 0.15);
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.12, t + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+        osc.start(t);
+        osc.stop(t + 0.15);
+      }
+      // Medium confidence: stable tone
+      else if (confidence > 0.5) {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(900, t);
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.1, t + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+        osc.start(t);
+        osc.stop(t + 0.2);
+      }
+      // Low confidence: descending beep
+      else {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, t);
+        osc.frequency.linearRampToValueAtTime(400, t + 0.15);
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.08, t + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+        osc.start(t);
+        osc.stop(t + 0.15);
+      }
+    } catch {
+      // Ignore audio errors
+    }
+  }, [initAudio]);
+
+  return { speak, playTone, playAdvancedTone };
 };

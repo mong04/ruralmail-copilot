@@ -1,3 +1,4 @@
+// src/features/package-management/views/LoadTruck.tsx
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
@@ -29,8 +30,9 @@ export const LoadTruck: React.FC = () => {
 
   const brain = useMemo(() => new RouteBrain(route), [route]);
   
-  // Mic Control
-  const { transcript, isProcessing, reset, stop } = useVoiceInput(false); 
+  // 1. MIC CONTROLS
+  // FIX: We need 'start' to manually restart the engine after we stopped it
+  const { transcript, isProcessing, reset, stop, start } = useVoiceInput(false); 
   const { speak, playTone } = useSound();
 
   const [prediction, setPrediction] = useState<Prediction | null>(null);
@@ -39,7 +41,7 @@ export const LoadTruck: React.FC = () => {
   
   const safetyTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // --- LOGIC (Unchanged from previous robust version) ---
+  // --- LOGIC ---
 
   const savePackage = useCallback((pred: Prediction) => {
       if (!pred.stop) return;
@@ -67,19 +69,26 @@ export const LoadTruck: React.FC = () => {
       setTimeout(() => {
           setStatus('idle');
           setPrediction(null);
-          reset(); 
+          
+          // FIX: Explicitly restart the mic sequence
+          reset(); // Clear old text
+          start(); // Start listening again
       }, 800);
-  }, [dispatch, playTone, reset, route]);
+  }, [dispatch, playTone, reset, start, route]);
 
   const handleMatch = useCallback((result: Prediction) => {
     if (!result.stop) return;
+    
+    // 1. IMMEDIATE BLOCK: Stop processing new audio
     setStatus('matched');
-    stop(); // Cut mic
+    stop(); // Physically cut the mic so we don't hear the robot
 
     const stopSeq = route.findIndex(r => r.id === result.stop?.id) + 1;
     const phrase = `Stop ${stopSeq}. ${result.stop?.address_line1}`;
     
+    // 2. Speak the confirmation
     speak(phrase, () => {
+        // 3. CALLBACK: Only fires when robot SHUTS UP
         savePackage(result);
     });
   }, [route, speak, stop, savePackage]);
@@ -91,9 +100,11 @@ export const LoadTruck: React.FC = () => {
       setTimeout(() => {
           setStatus('idle');
           setPrediction(null);
+          // Restart mic here too, just in case
           reset();
+          start();
       }, 1500);
-  }, [playTone, reset]);
+  }, [playTone, reset, start]);
 
   const handleFinishLoad = useCallback(() => {
       dispatch(endLoadingSession());
@@ -103,20 +114,26 @@ export const LoadTruck: React.FC = () => {
 
   // --- EFFECTS ---
 
+  // Start Session
   useEffect(() => {
     if (!loadingSession.isActive) {
         dispatch(startLoadingSession());
         playTone('start');
+        // Initial Start
         reset(); 
+        start();
     }
-  }, [dispatch, loadingSession.isActive, playTone, reset]);
+  }, [dispatch, loadingSession.isActive, playTone, reset, start]);
 
+  // THE BRAIN LOOP
   useEffect(() => {
+    // CRITICAL: Guard Clause prevents feedback loops
     if (status !== 'idle') return;
 
     if (isProcessing && transcript) {
       const cleanText = transcript.toLowerCase().trim();
 
+      // Command Check
       if (['finish', 'done', 'stop load', 'complete'].some(cmd => cleanText.includes(cmd))) {
           handleFinishLoad();
           return;
@@ -128,11 +145,13 @@ export const LoadTruck: React.FC = () => {
       if (!result.stop || result.confidence < 0.4) {
           handleUnknown();
       } else {
+          // Lock it in immediately
           handleMatch(result);
       }
     }
   }, [isProcessing, transcript, brain, status, handleFinishLoad, handleUnknown, handleMatch]);
 
+  // Cleanup timers
   useEffect(() => {
       return () => {
           if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
@@ -162,7 +181,7 @@ export const LoadTruck: React.FC = () => {
         <div className="fixed inset-0 bg-background text-foreground flex flex-col font-mono overflow-hidden"
              style={{ bottom: 'var(--bottom-nav-height)' }}>
         
-        {/* GRID BACKGROUND: Uses --color-border, which is subtle grey in light mode, cyan in cyberpunk */}
+        {/* GRID BACKGROUND */}
         <div className="absolute inset-0 z-0 pointer-events-none opacity-10" 
              style={{ 
                 backgroundImage: 'linear-gradient(var(--color-border) 1px, transparent 1px), linear-gradient(90deg, var(--color-border) 1px, transparent 1px)', 
@@ -172,7 +191,6 @@ export const LoadTruck: React.FC = () => {
 
         {/* HEADER */}
         <header className="flex-none flex justify-between items-center p-4 z-20 border-b border-border bg-surface/90 backdrop-blur-md">
-            {/* Removed: uppercase tracking-widest (CSS handles this for Cyberpunk) */}
             <Button variant="ghost" onClick={() => navigate(-1)} className="text-xs font-bold text-muted-foreground hover:text-foreground">
                 <ArrowLeft className="mr-2 w-4 h-4" /> Exit Mode
             </Button>
@@ -199,9 +217,7 @@ export const LoadTruck: React.FC = () => {
                         className="flex flex-col items-center gap-10"
                     >
                         <div className="relative">
-                            {/* Pulse Effect */}
                             <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping duration-2000" />
-                            {/* Circle */}
                             <div className="relative bg-surface border-2 border-brand p-12 rounded-full shadow-xl">
                                 <Mic size={64} className="text-brand" />
                             </div>
@@ -224,7 +240,7 @@ export const LoadTruck: React.FC = () => {
                     >
                         <div className={`relative w-full aspect-square border-2 bg-surface/50 backdrop-blur-xl flex flex-col items-center justify-center ${stateColor} shadow-2xl ${glowColor}`}>
                             
-                            {/* Corners: These are purely decorative. In light mode they look like subtle border accents. */}
+                            {/* Corners */}
                             <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-current" />
                             <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-current" />
                             <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-current" />

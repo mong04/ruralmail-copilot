@@ -1,10 +1,9 @@
-// src/features/package-management/views/LoadTruck.tsx
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Mic, Activity, AlertTriangle, 
-  AlertCircle, CheckCircle2, PackagePlus // ✅ Added PackagePlus
+  AlertCircle, CheckCircle2, PackagePlus 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -41,7 +40,8 @@ export const LoadTruck: React.FC = () => {
   const brain = useMemo(() => new RouteBrain(route), [route]);
   
   // VOICE HOOK
-  const { transcript, isProcessing, reset, stop, start } = useVoiceInput(false); 
+  // Start with 'false' (off) - we manually start it in the useEffect once session is ready
+  const { transcript, isProcessing, isListening, reset, stop, start } = useVoiceInput(false); 
   const { speak, playTone } = useSound();
 
   // STATE MACHINE
@@ -56,17 +56,17 @@ export const LoadTruck: React.FC = () => {
   /**
    * COMMIT: Saves the package to Redux
    */
-  const commitPackage = useCallback((stop: Stop, extracted: Prediction['extracted']) => {
-      const stopNum = route.findIndex(r => r.id === stop.id);
+  const commitPackage = useCallback((stopItem: Stop, extracted: Prediction['extracted']) => {
+      const stopNum = route.findIndex(r => r.id === stopItem.id);
       
       const newPkg: Package = {
           id: crypto.randomUUID(),
           tracking: '',
           size: extracted.size, 
           notes: extracted.notes.join(', ') || 'Voice Load',
-          assignedStopId: stop.id,
+          assignedStopId: stopItem.id,
           assignedStopNumber: stopNum,
-          assignedAddress: stop.full_address
+          assignedAddress: stopItem.full_address
       };
 
       dispatch(addPackage(newPkg));
@@ -80,6 +80,7 @@ export const LoadTruck: React.FC = () => {
       setTimeout(() => {
           setStatus('idle');
           setPrediction(null);
+          // Restart Cycle
           reset(); 
           start(); 
       }, 800);
@@ -96,12 +97,13 @@ export const LoadTruck: React.FC = () => {
 
     const stopSeq = route.findIndex(r => r.id === pred.stop?.id) + 1;
     
-    // Short Confirmation
+    // Short Confirmation Phrase
     let phrase = `Stop ${stopSeq}.`;
     if (pred.extracted.size === 'large') phrase += " Large.";
     else phrase += ` ${pred.stop?.address_line1.split(' ')[0]}`; // Just house number
 
     speak(phrase, () => {
+        // Only commit after robot finishes speaking
         commitPackage(pred.stop!, pred.extracted);
     });
   }, [route, speak, stop, commitPackage]);
@@ -136,7 +138,6 @@ export const LoadTruck: React.FC = () => {
       brain.learn(prediction.originalTranscript, selectedStop.id);
 
       // 2. Lock it in (Directly commit since user manually selected)
-      // ✅ FIX: Removed unused 'updatedPrediction' variable
       commitPackage(selectedStop, prediction.extracted);
   }, [prediction, brain, commitPackage]);
 
@@ -155,12 +156,14 @@ export const LoadTruck: React.FC = () => {
     if (!loadingSession.isActive) {
         dispatch(startLoadingSession());
         playTone('start');
-        reset(); start();
+        reset(); 
+        start();
     }
   }, [dispatch, loadingSession.isActive, playTone, reset, start]);
 
   // MAIN LISTENER LOOP
   useEffect(() => {
+    // If we are locked/saved, ignore mic. 
     if (status === 'locked' || status === 'saved') return;
 
     if (isProcessing && transcript) {
@@ -189,7 +192,7 @@ export const LoadTruck: React.FC = () => {
              setStatus('idle');
              playTone('error');
              reset();
-             return;
+             return; // Don't fall through
           }
       }
 
@@ -225,8 +228,6 @@ export const LoadTruck: React.FC = () => {
   // Cleanup
   useEffect(() => {
       return () => {
-          // ✅ FIX: Use ref directly in cleanup (standard pattern for timeouts)
-          // We also suppress the exhaustive-deps warning because refs are mutable by design.
           if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
           window.speechSynthesis.cancel();
       };
@@ -278,13 +279,18 @@ export const LoadTruck: React.FC = () => {
                         className="flex flex-col items-center gap-8"
                     >
                         <div className="relative">
-                            <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping duration-2000" />
-                            <div className="relative bg-surface border-2 border-brand p-12 rounded-full shadow-lg">
-                                <Mic size={64} className="text-brand" />
+                            {/* Visual Feedback: Only pulse when physically listening */}
+                            {isListening && (
+                                <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping duration-2000" />
+                            )}
+                            <div className={`relative bg-surface border-2 ${isListening ? 'border-brand' : 'border-muted'} p-12 rounded-full shadow-lg transition-colors duration-300`}>
+                                <Mic size={64} className={isListening ? 'text-brand' : 'text-muted'} />
                             </div>
                         </div>
                         <div className="text-center">
-                            <h2 className="text-2xl font-bold text-foreground">AWAITING INPUT</h2>
+                            <h2 className="text-2xl font-bold text-foreground">
+                                {isListening ? "AWAITING INPUT" : "PROCESSING..."}
+                            </h2>
                             <p className="text-muted-foreground text-xs uppercase tracking-widest mt-2">
                                 "123 Main" &bull; "Stop 5" &bull; "Large"
                             </p>
@@ -318,7 +324,6 @@ export const LoadTruck: React.FC = () => {
                             </div>
 
                             <span className="text-sm font-bold uppercase tracking-[0.3em] mb-4 opacity-80 flex items-center gap-2">
-                                {/* ✅ FIX: Using CheckCircle2 to show 'Saved' state visually */}
                                 {status === 'saved' ? <CheckCircle2 size={16} /> : null}
                                 {status === 'saved' ? 'Confirmed' : 'Target Lock'}
                             </span>
@@ -412,7 +417,6 @@ export const LoadTruck: React.FC = () => {
                         initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
                         className="shrink-0 px-3 py-1 bg-surface-muted rounded border border-border flex items-center gap-2"
                     >
-                        {/* ✅ FIX: Added PackagePlus for log icon */}
                         <PackagePlus size={12} className="text-success" />
                         <span className="text-xs font-bold text-foreground">{item}</span>
                     </motion.div>

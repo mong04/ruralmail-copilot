@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// --- 1. TYPE DEFINITIONS ---
-// We manually define these here so you don't need to install @types/dom-speech-recognition
+// --- 1. STRICT TYPE DEFINITIONS ---
 
 interface SpeechRecognitionEvent extends Event {
   resultIndex: number;
@@ -36,17 +35,13 @@ interface SpeechRecognition extends EventTarget {
   onresult: ((event: SpeechRecognitionEvent) => void) | null;
   onend: (() => void) | null;
   onstart: (() => void) | null;
+  onerror: ((event: Event) => void) | null;
 }
 
-// Extend the global Window interface
 declare global {
   interface Window {
-    SpeechRecognition: {
-      new (): SpeechRecognition;
-    };
-    webkitSpeechRecognition: {
-      new (): SpeechRecognition;
-    };
+    SpeechRecognition: { new (): SpeechRecognition; };
+    webkitSpeechRecognition: { new (): SpeechRecognition; };
   }
 }
 
@@ -55,46 +50,45 @@ declare global {
 export const useVoiceInput = (isListeningProp: boolean) => {
   const [transcript, setTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   
-  // FIX 1: Strongly typed ref instead of 'any'
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const isPausedRef = useRef(false);
 
-  // 1. Wake Lock
+  // 1. Wake Lock Management
   useEffect(() => {
     const requestWakeLock = async () => {
       if ('wakeLock' in navigator && isListeningProp) {
         try {
           wakeLockRef.current = await navigator.wakeLock.request('screen');
         } catch {
-           // Ignore errors
+           // Ignore wake lock errors (feature might not be available)
         }
       }
     };
     if (isListeningProp) requestWakeLock();
     return () => {
-      wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current?.release().catch(() => {
+        // Ignore wake lock release errors
+      });
     };
   }, [isListeningProp]);
 
   // 2. Speech Recognition Setup
   useEffect(() => {
-    // FIX 2: Safely access the constructor without 'any'
     const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
     
     if (!SpeechRecognitionConstructor) {
-      console.warn("Speech Recognition not supported in this browser.");
+      console.warn("Speech Recognition not supported.");
       return;
     }
 
     const recognition = new SpeechRecognitionConstructor();
-    recognition.continuous = false; // We restart manually for better control
+    recognition.continuous = false; 
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
-    // FIX 3: Event is now strongly typed
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalTrans = '';
       let interimTrans = '';
@@ -110,68 +104,73 @@ export const useVoiceInput = (isListeningProp: boolean) => {
 
       if (finalTrans) {
         setTranscript(finalTrans);
-        setIsProcessing(true);
+        setIsProcessing(true); 
       } else {
         setTranscript(interimTrans);
       }
     };
 
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
     recognition.onend = () => {
+      setIsListening(false);
       if (isListeningProp && !isProcessing && !isPausedRef.current) {
         try {
           recognition.start();
         } catch { 
-          // Ignore
+          // Ignore auto-restart errors
         }
       }
     };
 
-    recognition.onstart = () => {
-      setIsProcessing(true);
+    recognition.onerror = () => {
+      setIsListening(false);
     };
 
-    // FIX 4: Assignment is now type-safe
     recognitionRef.current = recognition;
     
     // Initial Start
     if (isListeningProp) {
       isPausedRef.current = false;
-      try {
-        recognition.start();
+      try { 
+        recognition.start(); 
       } catch { 
-        // Ignore
+        // Ignore initial start errors
       }
     }
 
     return () => {
       isPausedRef.current = true;
       if (recognitionRef.current) {
-        try {
+        try { 
           recognitionRef.current.abort(); 
-          recognitionRef.current = null;
         } catch { 
-          // Ignore
+          // Ignore abort errors during cleanup
         }
       }
     };
   }, [isListeningProp, isProcessing]);
 
   // 3. Control Methods
+
   const start = useCallback(() => {
     isPausedRef.current = false;
-    try {
-      recognitionRef.current?.start();
+    setIsProcessing(false); 
+    try { 
+      recognitionRef.current?.start(); 
     } catch {
-      // Ignore
+      // Ignore start errors (e.g. already started)
     }
   }, []);
 
   const stop = useCallback(() => {
     isPausedRef.current = true;
-    try {
+    try { 
       recognitionRef.current?.abort(); 
     } catch { 
-      // Ignore
+      // Ignore stop errors
     }
   }, []);
 
@@ -184,6 +183,7 @@ export const useVoiceInput = (isListeningProp: boolean) => {
   return { 
     transcript, 
     isProcessing, 
+    isListening, 
     reset, 
     stop, 
     start 

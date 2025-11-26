@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Mic, Activity, PackagePlus, AlertTriangle, 
-  CheckCircle2, AlertCircle, XCircle, X 
+  CheckCircle2, X 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -14,7 +14,7 @@ import {
   startLoadingSession, 
   endLoadingSession, 
   incrementLoadCount,
-  removeLastPackage
+//   removeLastPackage
 } from '../store/packageSlice';
 
 import { useVoiceInput } from '../../../hooks/useVoiceInput';
@@ -24,6 +24,15 @@ import { type Package, type Stop } from '../../../db';
 import { Button } from '../../../components/ui/Button';
 
 type UIMode = 'booting' | 'listening' | 'processing' | 'speaking' | 'confirming' | 'suggestion' | 'saved' | 'paused' | 'error';
+
+// Helper to get the last transcript processed
+const useLastTranscript = () => {
+  const ref = useRef('');
+  return {
+    isNew: (transcript: string) => transcript !== ref.current,
+    update: (transcript: string) => { ref.current = transcript; },
+  };
+};
 
 const getSizeColor = (size: string) => {
   if (size === 'large') return 'text-warning border-warning bg-warning/10';
@@ -46,181 +55,139 @@ export const LoadTruck: React.FC = () => {
   const [mode, setMode] = useState<UIMode>('booting');
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [history, setHistory] = useState<string[]>([]);
-  
+  const [speechRequest, setSpeechRequest] = useState<{ text: string; onComplete: () => void; } | null>(null);
+
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
-  const isMountedRef = useRef(false);
+  const lastTranscript = useLastTranscript();
 
-  // --- CORE STATE MACHINE & SEQUENCER ---
+  // --- STATE-DRIVEN EFFECTS ---
 
-  const speakAndThen = useCallback((text: string, onComplete: () => void) => {
-    setMode('speaking');
-    stop(); // Explicitly stop mic before speaking
-    speak(text, onComplete);
-  }, [speak, stop]);
-
-  const listen = useCallback(() => {
-    setMode('listening');
-    reset();
-    start();
-  }, [reset, start]);
-  
-  // --- ON-MOUNT ---
+  // 1. Effect for SPEAKING
   useEffect(() => {
-    if (!isMountedRef.current) {
-      isMountedRef.current = true;
-      dispatch(startLoadingSession());
-      // Start the whole process
-      speakAndThen('Loading mode activated. Speak the address.', listen);
+    if (mode === 'speaking' && speechRequest) {
+      stop(); // Ensure mic is off
+      speak(speechRequest.text, speechRequest.onComplete);
     }
-     return () => {
-      if (countdownRef.current) clearTimeout(countdownRef.current);
-      dispatch(endLoadingSession());
-      stop(); // Final stop on unmount
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mode, speechRequest, speak, stop]);
 
-  // --- HANDLERS ---
-  const commitPackage = useCallback((stopItem: Stop, extracted: Prediction['extracted']) => {
-    const stopNum = route.findIndex(r => r.id === stopItem.id) + 1;
-    const newPkg: Package = {
-      id: crypto.randomUUID(),
-      tracking: '',
-      size: extracted.size, 
-      notes: extracted.notes.join(', ') || 'Voice Load',
-      assignedStopId: stopItem.id,
-      assignedStopNumber: stopNum,
-      assignedAddress: stopItem.full_address || ''
-    };
-    dispatch(addPackage(newPkg));
-    dispatch(incrementLoadCount());
-    
-    setMode('saved');
-    playTone('success');
-    setHistory(prev => [`#${stopNum} - ${stopItem.address_line1 || ''}`, ...prev.slice(0, 4)]);
-    
-    // Announce success and then restart listening
-    setTimeout(() => {
-      speakAndThen(`Package added to stop ${stopNum}.`, listen);
-    }, 1200);
-
-  }, [route, dispatch, playTone, speakAndThen, listen]);
-
-  const handleInterrupt = useCallback(() => {
-    if (countdownRef.current) clearTimeout(countdownRef.current);
-    setPrediction(null);
-    playTone('error');
-    speakAndThen('Cancelled. Ready for next address.', listen);
-  }, [playTone, speakAndThen, listen]);
-
-  // --- PRIMARY EFFECT: PROCESS TRANSCRIPT ---
+  // 2. Effect for LISTENING
   useEffect(() => {
-    if (!transcript || isListening) {
-      return;
+    if (mode === 'listening') {
+      reset();
+      start();
     }
-    
-    const clean = transcript.toLowerCase().trim();
-    if (!clean) return;
+  }, [mode, reset, start]);
 
-    // --- Voice Commands (Global) ---
-    if (clean.match(/^(pause|stop listening)$/)) {
-      stop();
-      setMode('paused');
-      speakAndThen('Paused. Say resume to continue.', () => setMode('paused'));
-      return;
-    }
-    if (mode === 'paused' && clean.match(/^(resume|start listening)$/)) {
-      speakAndThen('Resumed.', listen);
-      return;
-    }
-    if (clean.match(/^(undo|delete last|oops)$/)) {
-      if (history.length > 0) {
-        dispatch(removeLastPackage());
-        setHistory(prev => prev.slice(1));
-        playTone('error');
-        speakAndThen('Last package undone.', listen);
-      } else {
-        speakAndThen('Nothing to undo.', listen);
-      }
-      return;
-    }
-    if (clean.match(/^(end session|finish loading|done)$/)) {
-      speakAndThen(`Session complete. Loaded ${loadingSession.count} packages.`, () => navigate('/dashboard'));
-      return;
-    }
-    if (clean.match(/^(no|wrong|cancel)$/)) {
-      handleInterrupt();
-      return;
-    }
-    
-    // --- Context-Specific Commands & Prediction ---
-    if (mode === 'listening' || mode === 'suggestion' || mode === 'confirming') {
-      // Confirmation commands
-      if (prediction && (mode === 'suggestion' || mode === 'confirming')) {
-        if (clean.match(/^(yes|confirm|correct|ok|okay)$/)) {
-          if (prediction.stop) commitPackage(prediction.stop, prediction.extracted);
-          return;
-        }
-        if (mode === 'suggestion' && clean.match(/^(option (one|two|three)|first|second|third|[123])$/)) {
-          const idx = parseInt(clean.match(/one|1/) ? '1' : clean.match(/two|2/) ? '2' : '3') - 1;
-          if (prediction.candidates[idx]) {
-            const selectedStop = prediction.candidates[idx];
-            if (prediction.source === 'fuzzy') brain.learn(prediction.originalTranscript, selectedStop.id);
-            commitPackage(selectedStop, prediction.extracted);
-          }
-          return;
-        }
-      }
-
-      // --- Prediction ---
-      setMode('processing');
-      const pred = brain.predict(transcript);
-      setPrediction(pred);
-
-      if (pred.stop && pred.confidence > 0.85) {
-        setMode('confirming');
-        playTone('lock');
-        speakAndThen(`Found ${pred.stop.address_line1}. Confirm?`, () => {
-          countdownRef.current = setTimeout(() => {
-            if(pred.stop) commitPackage(pred.stop, pred.extracted);
-          }, 4000); 
-          listen(); 
-        });
-
-      } else if (pred.candidates.length > 0 && pred.confidence > 0.4) {
-        setMode('suggestion');
-        let suggestionText = 'Did you mean: ';
-        pred.candidates.slice(0, 3).forEach((cand, idx) => {
-          suggestionText += `Option ${idx + 1}: ${cand.address_line1}. `;
-        });
-        playTone('alert');
-        speakAndThen(suggestionText, listen);
-      
-      } else {
-        playTone('error');
-        speakAndThen('No match found. Please repeat the address.', listen);
-      }
-    }
-  }, [
-    transcript, isListening, mode, brain, listen, speakAndThen, commitPackage, playTone, prediction, 
-    handleInterrupt, history.length, dispatch, loadingSession.count, navigate, stop
-  ]);
-
-  // Effect to handle voice API errors
+  // 3. Effect for ERRORS
   useEffect(() => {
     if (voiceError && !voiceError.includes('aborted')) {
       toast.error(voiceError);
       setMode('error');
     }
   }, [voiceError]);
+
+  // --- SEQUENCERS (These functions set the state to trigger the effects above) ---
+  
+  const speakAndThen = useCallback((text: string, onComplete: () => void) => {
+    setSpeechRequest({ text, onComplete });
+    setMode('speaking');
+  }, []);
+
+  const listen = useCallback(() => {
+    setMode('listening');
+  }, []);
+
+  const commitPackage = useCallback((stopItem: Stop, extracted: Prediction['extracted']) => {
+    const stopNum = route.findIndex(r => r.id === stopItem.id) + 1;
+    const newPkg: Package = {
+      id: crypto.randomUUID(), tracking: '', size: extracted.size, 
+      notes: extracted.notes.join(', ') || 'Voice Load',
+      assignedStopId: stopItem.id, assignedStopNumber: stopNum,
+      assignedAddress: stopItem.full_address || ''
+    };
+    dispatch(addPackage(newPkg));
+    dispatch(incrementLoadCount());
+    setMode('saved');
+    playTone('success');
+    setHistory(prev => [`#${stopNum} - ${stopItem.address_line1 || ''}`, ...prev.slice(0, 4)]);
+    setTimeout(() => speakAndThen(`Package added to stop ${stopNum}.`, listen), 1200);
+  }, [route, dispatch, playTone, speakAndThen, listen]);
+  
+  // --- ON-MOUNT ---
+  useEffect(() => {
+    dispatch(startLoadingSession());
+    speakAndThen('Loading mode activated. Speak the address.', listen);
+    return () => {
+      if (countdownRef.current) clearTimeout(countdownRef.current);
+      dispatch(endLoadingSession());
+      stop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --- PRIMARY TRANSCRIPT PROCESSING ---
+  useEffect(() => {
+    if (!transcript || isListening || !lastTranscript.isNew(transcript)) {
+      return;
+    }
+    lastTranscript.update(transcript);
+    setMode('processing'); // Signal we are working on this transcript
+    
+    const clean = transcript.toLowerCase().trim();
+
+    // --- Command Handling ---
+    if (clean.match(/^(pause|stop listening)$/)) {
+      stop();
+      speakAndThen('Paused.', () => setMode('paused'));
+      return;
+    }
+    if (mode === 'paused' && clean.match(/^(resume|start listening)$/)) {
+      speakAndThen('Resumed.', listen);
+      return;
+    }
+    // Handle other commands...
+    if (clean.match(/^(no|wrong|cancel)$/)) {
+        if (countdownRef.current) clearTimeout(countdownRef.current);
+        setPrediction(null);
+        playTone('error');
+        speakAndThen('Cancelled.', listen);
+        return;
+    }
+     if (clean.match(/^(yes|confirm|correct|ok|okay)$/) && prediction?.stop) {
+        if (countdownRef.current) clearTimeout(countdownRef.current);
+        commitPackage(prediction.stop, prediction.extracted);
+        return;
+    }
+
+    // --- Prediction ---
+    const pred = brain.predict(transcript);
+    setPrediction(pred);
+
+    if (pred.stop && pred.confidence > 0.85) {
+      setMode('confirming');
+      playTone('lock');
+      speakAndThen(`Found ${pred.stop.address_line1}. Confirm?`, () => {
+        listen(); // Listen for "yes" or "no"
+        countdownRef.current = setTimeout(() => {
+          if (pred.stop) commitPackage(pred.stop, pred.extracted);
+        }, 4000); 
+      });
+    } else if (pred.candidates.length > 0 && pred.confidence > 0.4) {
+      setMode('suggestion');
+      let text = 'Did you mean: ';
+      pred.candidates.slice(0, 3).forEach((c, i) => { text += `Option ${i + 1}: ${c.address_line1}. `; });
+      playTone('alert');
+      speakAndThen(text, listen);
+    } else {
+      playTone('error');
+      speakAndThen('No match found. Please repeat.', listen);
+    }
+  }, [transcript, isListening, brain, listen, speakAndThen, playTone, mode, commitPackage, prediction, stop, lastTranscript]);
   
   return (
     <div className="fixed inset-0 flex flex-col bg-background text-foreground overflow-hidden">
-      {/* Header */}
       <header className="flex-none h-16 w-full border-b border-border bg-surface/90 backdrop-blur flex items-center px-4 gap-4 z-20">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft size={24} />
-        </Button>
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft size={24} /></Button>
         <div className="flex-1">
           <h1 className="text-xl font-bold uppercase tracking-widest">Load Truck</h1>
           <p className="text-xs text-muted-foreground">Voice Mode Active</p>
@@ -230,11 +197,8 @@ export const LoadTruck: React.FC = () => {
           <span className="text-sm font-bold">{loadingSession.count} Pkgs</span>
         </div>
       </header>
-
-      {/* Main Content */}
       <main className="flex-1 flex flex-col items-center justify-center p-6 gap-8 overflow-hidden relative">
         <AnimatePresence mode="wait">
-
           {(mode === 'listening' || mode === 'paused' || mode === 'booting') && (
             <motion.div key="listening" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center">
               <div className="relative mb-8">
@@ -245,7 +209,6 @@ export const LoadTruck: React.FC = () => {
               <h2 className="text-4xl font-bold text-brand uppercase">{mode === 'paused' ? 'Paused' : 'Listening...'}</h2>
             </motion.div>
           )}
-          
           {mode === 'error' && (
              <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center text-center">
               <div className="p-10 border-4 border-danger rounded-full bg-danger/10 animate-pulse mb-8"> <AlertTriangle size={80} className="text-danger" /> </div>
@@ -254,7 +217,6 @@ export const LoadTruck: React.FC = () => {
               <Button onClick={() => speakAndThen('Retrying.', listen)} className="mt-6">Retry</Button>
             </motion.div>
           )}
-
           {(mode === 'confirming' || mode === 'processing') && prediction?.stop && (
             <motion.div key="confirming" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-md">
               <div className="relative bg-surface border-4 border-brand rounded-xl shadow-2xl overflow-hidden p-6 text-center animate-pulse">
@@ -263,38 +225,24 @@ export const LoadTruck: React.FC = () => {
                 <div className="flex justify-center gap-4 mb-6">
                   <span className={`px-4 py-2 rounded-full font-bold text-sm ${getSizeColor(prediction.extracted.size)}`}> {prediction.extracted.size.toUpperCase()} </span>
                 </div>
-                <Button variant="ghost" onClick={handleInterrupt} className="text-danger mx-auto"> <XCircle size={20} className="mr-2" /> Cancel </Button>
               </div>
             </motion.div>
           )}
-
           {mode === 'saved' && (
             <motion.div key="saved" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center">
               <div className="p-10 border-4 border-success rounded-full bg-success/10 mb-8"> <CheckCircle2 size={80} className="text-success" /> </div>
               <h2 className="text-4xl font-bold text-success uppercase">Package Added</h2>
             </motion.div>
           )}
-
           {mode === 'suggestion' && prediction && (
             <motion.div key="suggestion" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md flex flex-col gap-4">
               <div className="text-center mb-4">
                 <h2 className="text-2xl font-bold text-warning uppercase">Did you mean...?</h2>
                 <p className="text-muted-foreground text-xs">Say "Option [number]" or "Cancel"</p>
               </div>
-              {prediction.candidates.slice(0, 3).map((cand, idx) => (
-                <Button key={cand.id} variant="surface" onClick={() => { if (prediction) commitPackage(cand, prediction.extracted) }} className="h-auto py-4 px-6 flex items-center justify-between border-border hover:border-brand group text-left transition-all">
-                  <div>
-                    <span className="text-xs text-muted-foreground uppercase tracking-widest block text-brand"> Option {idx + 1} </span>
-                    <span className="text-lg font-bold text-foreground group-hover:text-brand transition-colors"> {cand.address_line1} </span>
-                  </div>
-                  <div className="text-xl font-black text-muted-foreground/30 group-hover:text-brand"> #{route.findIndex(r => r.id === cand.id) + 1} </div>
-                </Button>
-              ))}
-              <Button variant="ghost" onClick={handleInterrupt} className="mt-4 text-muted-foreground hover:text-danger"> <AlertCircle size={16} className="mr-2" /> Cancel </Button>
             </motion.div>
           )}
         </AnimatePresence>
-
         <div className="absolute bottom-20 left-0 right-0 text-center pointer-events-none">
           <p className="text-muted-foreground text-xs font-bold tracking-widest uppercase mb-2">Live Transcript</p>
           <p className="text-2xl font-mono font-bold text-foreground wrap-break-word leading-tight px-4">
@@ -302,7 +250,6 @@ export const LoadTruck: React.FC = () => {
           </p>
         </div>
       </main>
-
       <footer className="flex-none h-16 w-full border-t border-border bg-surface/90 backdrop-blur flex items-center px-4 z-20">
         <div className="shrink-0 text-[10px] text-muted-foreground font-bold uppercase tracking-widest mr-4"> Log </div>
         <div className="flex-1 flex gap-2 overflow-hidden">

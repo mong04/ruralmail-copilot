@@ -21,7 +21,6 @@ import { RouteBrain, type Prediction } from '../utils/RouteBrain';
 import { type Package, type Stop } from '../../../db';
 import { Button } from '../../../components/ui/Button';
 
-// THEME-AWARE UTILS
 const getSizeColor = (size: string) => {
   if (size === 'large') return 'text-warning border-warning bg-warning/10';
   if (size === 'small') return 'text-brand border-brand bg-brand/10';
@@ -38,23 +37,21 @@ export const LoadTruck: React.FC = () => {
   };
 
   const brain = useMemo(() => new RouteBrain(route), [route]);
-  
-  // VOICE HOOK
   const { transcript, isProcessing, isListening, reset, stop, start } = useVoiceInput(false); 
   const { speak, playTone } = useSound();
 
-  // STATE MACHINE
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [status, setStatus] = useState<'idle' | 'suggestion' | 'locked' | 'saved' | 'unknown'>('idle');
   const [history, setHistory] = useState<string[]>([]); 
   
   const safetyTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // --- ACTIONS ---
+  // --- LOGIC ---
 
   const commitPackage = useCallback((stopItem: Stop, extracted: Prediction['extracted']) => {
+      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+
       const stopNum = route.findIndex(r => r.id === stopItem.id);
-      
       const newPkg: Package = {
           id: crypto.randomUUID(),
           tracking: '',
@@ -72,24 +69,29 @@ export const LoadTruck: React.FC = () => {
       setStatus('saved');
       setHistory(prev => [`#${stopNum + 1}`, ...prev.slice(0, 4)]);
 
-      // Reset Loop
       setTimeout(() => {
           setStatus('idle');
           setPrediction(null);
           reset(); 
-          start();
+          start(); 
       }, 800);
   }, [dispatch, playTone, reset, start, route]);
 
   const handleLock = useCallback((pred: Prediction) => {
     if (!pred.stop) return;
+    
     setStatus('locked');
-    stop(); // Cut mic
+    stop(); // Pause Mic
 
     const stopSeq = route.findIndex(r => r.id === pred.stop?.id) + 1;
     let phrase = `Stop ${stopSeq}.`;
     if (pred.extracted.size === 'large') phrase += " Large.";
     else phrase += ` ${pred.stop?.address_line1.split(' ')[0]}`;
+
+    // Failsafe: If speech fails, commit anyway after 2.5s
+    safetyTimerRef.current = setTimeout(() => {
+        commitPackage(pred.stop!, pred.extracted);
+    }, 2500);
 
     speak(phrase, () => {
         commitPackage(pred.stop!, pred.extracted);
@@ -98,17 +100,15 @@ export const LoadTruck: React.FC = () => {
 
   const handleSuggestion = useCallback((pred: Prediction) => {
       setStatus('suggestion');
-      stop(); // Cut mic
+      stop(); 
+      playTone('alert'); // Visual/Audio cue
 
       const opt1 = pred.candidates[0]?.address_line1.split(',')[0];
       const opt2 = pred.candidates[1]?.address_line1.split(',')[0];
 
-      // ✅ FIX: Play alert sound to indicate ambiguity
-      playTone('alert');
-
       speak(`Say One for ${opt1}. Or Two for ${opt2}.`, () => {
           playTone('start');
-          start(); // Listen for answer
+          start(); 
       });
   }, [speak, stop, start, playTone]);
 
@@ -118,12 +118,10 @@ export const LoadTruck: React.FC = () => {
       commitPackage(selectedStop, prediction.extracted);
   }, [prediction, brain, commitPackage]);
 
-  // ✅ CORRECT HANDLER: Ensures mic restarts after error
   const handleUnknown = useCallback(() => {
       setStatus('unknown');
       playTone('error');
-      
-      stop(); // Stop briefly
+      stop(); // Pause to avoid hearing error sound
 
       setTimeout(() => {
           setStatus('idle');
@@ -150,14 +148,13 @@ export const LoadTruck: React.FC = () => {
     }
   }, [dispatch, loadingSession.isActive, playTone, reset, start]);
 
-  // MAIN LISTENER LOOP
   useEffect(() => {
     if (status === 'locked' || status === 'saved') return;
 
     if (isProcessing && transcript) {
       const cleanText = transcript.toLowerCase().trim();
 
-      // 1. Suggestion Responses
+      // Suggestion Logic
       if (status === 'suggestion' && prediction) {
           if (['one', '1', 'first', 'yes'].some(w => cleanText.includes(w))) {
              handleSelectSuggestion(prediction.candidates[0]); return;
@@ -170,7 +167,7 @@ export const LoadTruck: React.FC = () => {
           }
       }
 
-      // 2. Global Commands
+      // Commands
       if (['finish', 'done', 'complete'].some(cmd => cleanText.includes(cmd))) {
           handleFinishLoad(); return;
       }
@@ -178,20 +175,18 @@ export const LoadTruck: React.FC = () => {
           setStatus('idle'); reset(); start(); return;
       }
 
-      // 3. Idle Prediction
+      // Prediction
       if (status === 'idle') {
           const result = brain.predict(transcript);
           setPrediction(result);
 
           if (!result.stop) {
-              // Filter out short noise (e.g. coughs, "uh")
               if (transcript.length > 4) {
-                 // ✅ FIX: Call the robust handler instead of inline logic
                  handleUnknown();
               } else {
-                 // ✅ FIX: Silent restart for noise
+                 // Ignore short noise, just reset loop
                  reset();
-                 start();
+                 start(); 
               }
           } 
           else if (result.confidence > 0.8 || result.source === 'alias' || result.source === 'stop_number') {
@@ -204,7 +199,6 @@ export const LoadTruck: React.FC = () => {
     }
   }, [isProcessing, transcript, brain, status, prediction, handleFinishLoad, handleLock, handleSuggestion, handleSelectSuggestion, handleUnknown, reset, start]);
 
-  // Cleanup
   useEffect(() => {
       return () => {
           if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
@@ -212,8 +206,7 @@ export const LoadTruck: React.FC = () => {
       };
   }, []);
 
-  // --- RENDER ---
-
+  // --- RENDER (Unchanged) ---
   const stopNumber = prediction?.stop 
     ? route.findIndex(r => r.id === prediction?.stop?.id) + 1 
     : '?';
@@ -232,7 +225,6 @@ export const LoadTruck: React.FC = () => {
         <div className="fixed inset-0 bg-background text-foreground flex flex-col font-mono overflow-hidden"
              style={{ bottom: 'var(--bottom-nav-height)' }}>
         
-        {/* GRID BACKGROUND */}
         <div className="absolute inset-0 z-0 pointer-events-none opacity-10" 
              style={{ 
                 backgroundImage: 'linear-gradient(var(--color-border) 1px, transparent 1px), linear-gradient(90deg, var(--color-border) 1px, transparent 1px)', 
@@ -240,7 +232,6 @@ export const LoadTruck: React.FC = () => {
              }} 
         />
 
-        {/* HEADER */}
         <header className="flex-none flex justify-between items-center p-4 z-20 border-b border-border bg-surface/90 backdrop-blur-md">
             <Button variant="ghost" onClick={() => navigate(-1)} className="text-xs font-bold text-muted-foreground hover:text-foreground uppercase tracking-widest">
                 <ArrowLeft className="mr-2 w-4 h-4" /> Exit
@@ -256,22 +247,19 @@ export const LoadTruck: React.FC = () => {
             </div>
         </header>
 
-        {/* MAIN HUD */}
         <main className="flex-1 flex flex-col items-center justify-center relative z-10 w-full p-6">
             <AnimatePresence mode='wait'>
-                
-                {/* IDLE */}
                 {status === 'idle' && (
                     <motion.div 
                         key="idle"
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="flex flex-col items-center gap-8"
+                        className="flex flex-col items-center gap-10"
                     >
                         <div className="relative">
                             {isListening && (
                                 <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping duration-2000" />
                             )}
-                            <div className={`relative bg-surface border-2 ${isListening ? 'border-brand' : 'border-muted'} p-12 rounded-full shadow-lg transition-colors duration-300`}>
+                            <div className={`relative bg-surface border-2 ${isListening ? 'border-brand' : 'border-muted'} p-12 rounded-full shadow-xl transition-colors duration-300`}>
                                 <Mic size={64} className={isListening ? 'text-brand' : 'text-muted'} />
                             </div>
                         </div>
@@ -279,14 +267,13 @@ export const LoadTruck: React.FC = () => {
                             <h2 className="text-2xl font-bold text-foreground">
                                 {isListening ? "LISTENING..." : "PROCESSING"}
                             </h2>
-                            <p className="text-muted-foreground text-xs uppercase tracking-widest mt-2">
+                            <p className="text-muted-foreground text-sm uppercase tracking-widest mt-2">
                                 "123 Main" &bull; "Stop 5" &bull; "Large"
                             </p>
                         </div>
                     </motion.div>
                 )}
 
-                {/* LOCKED / SAVED */}
                 {(status === 'locked' || status === 'saved') && prediction && (
                     <motion.div 
                         key="locked"
@@ -297,7 +284,6 @@ export const LoadTruck: React.FC = () => {
                     >
                         <div className={`relative w-full aspect-square border-2 bg-surface/80 backdrop-blur-xl flex flex-col items-center justify-center ${stateColor} shadow-2xl ${glowColor}`}>
                             
-                            {/* Metadata Badges */}
                             <div className="absolute top-4 right-4 flex flex-col gap-2 items-end">
                                 {prediction.extracted.size !== 'medium' && (
                                     <span className={`px-2 py-1 text-xs font-black uppercase border ${getSizeColor(prediction.extracted.size)}`}>
@@ -331,7 +317,6 @@ export const LoadTruck: React.FC = () => {
                     </motion.div>
                 )}
 
-                {/* SUGGESTION MODE */}
                 {status === 'suggestion' && prediction && (
                     <motion.div 
                         key="suggestion"
@@ -374,7 +359,6 @@ export const LoadTruck: React.FC = () => {
                     </motion.div>
                 )}
 
-                {/* UNKNOWN */}
                 {status === 'unknown' && (
                     <motion.div 
                         key="unknown"
@@ -392,7 +376,6 @@ export const LoadTruck: React.FC = () => {
             </AnimatePresence>
         </main>
 
-        {/* LOG */}
         <footer className="flex-none h-16 w-full border-t border-border bg-surface/90 backdrop-blur flex items-center px-4 z-20">
             <div className="shrink-0 text-[10px] text-muted-foreground font-bold uppercase tracking-widest mr-4">
                 Log
@@ -415,4 +398,4 @@ export const LoadTruck: React.FC = () => {
     </div>
   );
 };
-          
+                      

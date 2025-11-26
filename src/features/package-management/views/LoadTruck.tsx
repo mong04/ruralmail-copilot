@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Mic, Activity, PackagePlus, AlertTriangle, 
-  CheckCircle2, AlertCircle
+  CheckCircle2, AlertCircle, XCircle // Added XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -37,7 +37,10 @@ export const LoadTruck: React.FC = () => {
   };
 
   const brain = useMemo(() => new RouteBrain(route), [route]);
-  const { transcript, isProcessing, isListening, reset, stop, start } = useVoiceInput(false); 
+  
+  // VOICE HOOK
+  // ✅ Destructure voiceError to display it
+  const { transcript, isProcessing, isListening, voiceError, reset, stop, start } = useVoiceInput(false); 
   const { speak, playTone } = useSound();
 
   const [prediction, setPrediction] = useState<Prediction | null>(null);
@@ -46,12 +49,11 @@ export const LoadTruck: React.FC = () => {
   
   const safetyTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // --- LOGIC ---
+  // --- ACTIONS ---
 
   const commitPackage = useCallback((stopItem: Stop, extracted: Prediction['extracted']) => {
-      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
-
       const stopNum = route.findIndex(r => r.id === stopItem.id);
+      
       const newPkg: Package = {
           id: crypto.randomUUID(),
           tracking: '',
@@ -67,7 +69,7 @@ export const LoadTruck: React.FC = () => {
       
       playTone('success');
       setStatus('saved');
-      setHistory(prev => [`#${stopNum + 1}`, ...prev.slice(0, 4)]);
+      setHistory(prev => [`#${stopNum + 1} - ${stopItem.address_line1}`, ...prev.slice(0, 4)]);
 
       setTimeout(() => {
           setStatus('idle');
@@ -81,35 +83,42 @@ export const LoadTruck: React.FC = () => {
     if (!pred.stop) return;
     
     setStatus('locked');
-    stop(); // Pause Mic
+    stop(); 
 
     const stopSeq = route.findIndex(r => r.id === pred.stop?.id) + 1;
     let phrase = `Stop ${stopSeq}.`;
     if (pred.extracted.size === 'large') phrase += " Large.";
     else phrase += ` ${pred.stop?.address_line1.split(' ')[0]}`;
 
-    // Failsafe: If speech fails, commit anyway after 2.5s
+    if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
     safetyTimerRef.current = setTimeout(() => {
         commitPackage(pred.stop!, pred.extracted);
     }, 2500);
 
-    speak(phrase, () => {
-        commitPackage(pred.stop!, pred.extracted);
-    });
+    // Wait 50ms for mic release
+    setTimeout(() => {
+        speak(phrase, () => {
+            commitPackage(pred.stop!, pred.extracted);
+        });
+    }, 50);
+
   }, [route, speak, stop, commitPackage]);
 
   const handleSuggestion = useCallback((pred: Prediction) => {
       setStatus('suggestion');
       stop(); 
-      playTone('alert'); // Visual/Audio cue
-
+      
       const opt1 = pred.candidates[0]?.address_line1.split(',')[0];
       const opt2 = pred.candidates[1]?.address_line1.split(',')[0];
 
-      speak(`Say One for ${opt1}. Or Two for ${opt2}.`, () => {
-          playTone('start');
-          start(); 
-      });
+      playTone('alert');
+
+      setTimeout(() => {
+          speak(`Say One for ${opt1}. Or Two for ${opt2}.`, () => {
+              playTone('start');
+              start(); 
+          });
+      }, 50);
   }, [speak, stop, start, playTone]);
 
   const handleSelectSuggestion = useCallback((selectedStop: Stop) => {
@@ -121,13 +130,13 @@ export const LoadTruck: React.FC = () => {
   const handleUnknown = useCallback(() => {
       setStatus('unknown');
       playTone('error');
-      stop(); // Pause to avoid hearing error sound
+      stop(); 
 
       setTimeout(() => {
           setStatus('idle');
           setPrediction(null);
           reset();
-          start(); // Force restart
+          start(); 
       }, 1500);
   }, [playTone, stop, reset, start]);
 
@@ -154,7 +163,6 @@ export const LoadTruck: React.FC = () => {
     if (isProcessing && transcript) {
       const cleanText = transcript.toLowerCase().trim();
 
-      // Suggestion Logic
       if (status === 'suggestion' && prediction) {
           if (['one', '1', 'first', 'yes'].some(w => cleanText.includes(w))) {
              handleSelectSuggestion(prediction.candidates[0]); return;
@@ -167,7 +175,6 @@ export const LoadTruck: React.FC = () => {
           }
       }
 
-      // Commands
       if (['finish', 'done', 'complete'].some(cmd => cleanText.includes(cmd))) {
           handleFinishLoad(); return;
       }
@@ -175,7 +182,6 @@ export const LoadTruck: React.FC = () => {
           setStatus('idle'); reset(); start(); return;
       }
 
-      // Prediction
       if (status === 'idle') {
           const result = brain.predict(transcript);
           setPrediction(result);
@@ -184,7 +190,6 @@ export const LoadTruck: React.FC = () => {
               if (transcript.length > 4) {
                  handleUnknown();
               } else {
-                 // Ignore short noise, just reset loop
                  reset();
                  start(); 
               }
@@ -194,6 +199,9 @@ export const LoadTruck: React.FC = () => {
           } 
           else if (result.confidence > 0.45) {
               handleSuggestion(result);
+          }
+          else {
+              handleUnknown();
           }
       }
     }
@@ -206,7 +214,8 @@ export const LoadTruck: React.FC = () => {
       };
   }, []);
 
-  // --- RENDER (Unchanged) ---
+  // --- RENDER ---
+
   const stopNumber = prediction?.stop 
     ? route.findIndex(r => r.id === prediction?.stop?.id) + 1 
     : '?';
@@ -247,8 +256,27 @@ export const LoadTruck: React.FC = () => {
             </div>
         </header>
 
+        {/* ✅ NEW: ERROR HUD */}
+        <AnimatePresence>
+            {voiceError && (
+                <motion.div 
+                    initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }}
+                    className="absolute top-20 left-4 right-4 z-50 bg-danger/90 text-white p-4 rounded-md shadow-lg backdrop-blur-md flex items-center gap-3 border border-white/20"
+                >
+                    <XCircle className="shrink-0" />
+                    <div className="flex-1 text-sm font-bold font-mono">
+                        {voiceError}
+                    </div>
+                    <Button size="sm" variant="ghost" className="text-white hover:bg-white/20 h-8 w-8 p-0" onClick={() => { reset(); start(); }}>
+                        Run
+                    </Button>
+                </motion.div>
+            )}
+        </AnimatePresence>
+
         <main className="flex-1 flex flex-col items-center justify-center relative z-10 w-full p-6">
             <AnimatePresence mode='wait'>
+                
                 {status === 'idle' && (
                     <motion.div 
                         key="idle"
@@ -398,4 +426,3 @@ export const LoadTruck: React.FC = () => {
     </div>
   );
 };
-                      

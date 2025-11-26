@@ -40,7 +40,6 @@ export const LoadTruck: React.FC = () => {
   const brain = useMemo(() => new RouteBrain(route), [route]);
   
   // VOICE HOOK
-  // We use 'isListening' to drive the UI visuals (Pulse effect)
   const { transcript, isProcessing, isListening, reset, stop, start } = useVoiceInput(false); 
   const { speak, playTone } = useSound();
 
@@ -53,9 +52,6 @@ export const LoadTruck: React.FC = () => {
 
   // --- ACTIONS ---
 
-  /**
-   * COMMIT: Saves the package to Redux
-   */
   const commitPackage = useCallback((stopItem: Stop, extracted: Prediction['extracted']) => {
       const stopNum = route.findIndex(r => r.id === stopItem.id);
       
@@ -80,37 +76,27 @@ export const LoadTruck: React.FC = () => {
       setTimeout(() => {
           setStatus('idle');
           setPrediction(null);
-          // Restart Voice Engine
+          // RESTART CYCLE
           reset(); 
           start();
       }, 800);
   }, [dispatch, playTone, reset, start, route]);
 
-  /**
-   * LOCK: High Confidence -> Confirm -> Save
-   */
   const handleLock = useCallback((pred: Prediction) => {
     if (!pred.stop) return;
-    
     setStatus('locked');
-    stop(); // Cut mic so robot can speak
+    stop(); // Cut mic
 
     const stopSeq = route.findIndex(r => r.id === pred.stop?.id) + 1;
-    
-    // AI Feedback
     let phrase = `Stop ${stopSeq}.`;
     if (pred.extracted.size === 'large') phrase += " Large.";
     else phrase += ` ${pred.stop?.address_line1.split(' ')[0]}`;
 
     speak(phrase, () => {
-        // Only save after speaking finishes
         commitPackage(pred.stop!, pred.extracted);
     });
   }, [route, speak, stop, commitPackage]);
 
-  /**
-   * SUGGESTION: Medium Confidence -> Ask -> Listen
-   */
   const handleSuggestion = useCallback((pred: Prediction) => {
       setStatus('suggestion');
       stop(); // Cut mic
@@ -118,25 +104,36 @@ export const LoadTruck: React.FC = () => {
       const opt1 = pred.candidates[0]?.address_line1.split(',')[0];
       const opt2 = pred.candidates[1]?.address_line1.split(',')[0];
 
+      playTone('alert');
+
       speak(`Say One for ${opt1}. Or Two for ${opt2}.`, () => {
-          // Restart Mic for answer
           playTone('start');
-          start();
+          start(); // Listen for answer
       });
   }, [speak, stop, start, playTone]);
 
-  /**
-   * SELECTION: User chose an option (Voice or Click)
-   */
   const handleSelectSuggestion = useCallback((selectedStop: Stop) => {
       if (!prediction) return;
-      
-      // Learn the alias
       brain.learn(prediction.originalTranscript, selectedStop.id);
-      
-      // Save directly (Skip robot speech for speed)
       commitPackage(selectedStop, prediction.extracted);
   }, [prediction, brain, commitPackage]);
+
+  // ✅ FIX: Added robust unknown handler that restarts mic
+  const handleUnknown = useCallback(() => {
+      setStatus('unknown');
+      playTone('error');
+      
+      // Temporarily stop processing to avoid picking up the error tone or background noise
+      stop(); 
+
+      setTimeout(() => {
+          setStatus('idle');
+          setPrediction(null);
+          // RESTART CYCLE
+          reset();
+          start();
+      }, 1500);
+  }, [playTone, stop, reset, start]);
 
   const handleFinishLoad = useCallback(() => {
       dispatch(endLoadingSession());
@@ -146,7 +143,6 @@ export const LoadTruck: React.FC = () => {
 
   // --- EFFECTS ---
 
-  // Start Session
   useEffect(() => {
     if (!loadingSession.isActive) {
         dispatch(startLoadingSession());
@@ -158,7 +154,6 @@ export const LoadTruck: React.FC = () => {
 
   // MAIN LISTENER LOOP
   useEffect(() => {
-    // Guard: Don't process input if we are in a locked state
     if (status === 'locked' || status === 'saved') return;
 
     if (isProcessing && transcript) {
@@ -173,6 +168,7 @@ export const LoadTruck: React.FC = () => {
              if (prediction.candidates[1]) handleSelectSuggestion(prediction.candidates[1]); return;
           }
           if (['no', 'cancel', 'wrong'].some(w => cleanText.includes(w))) {
+             // ✅ FIX: Restart mic on cancel
              setStatus('idle'); reset(); start(); return;
           }
       }
@@ -182,7 +178,8 @@ export const LoadTruck: React.FC = () => {
           handleFinishLoad(); return;
       }
       if (['cancel', 'wrong', 'no'].some(cmd => cleanText.includes(cmd))) {
-          setStatus('idle'); reset(); return;
+          // ✅ FIX: Restart mic on cancel
+          setStatus('idle'); reset(); start(); return;
       }
 
       // 3. Idle Prediction
@@ -191,10 +188,10 @@ export const LoadTruck: React.FC = () => {
           setPrediction(result);
 
           if (!result.stop) {
+              // Only trigger unknown if they said enough words (prevent blip errors)
               if (transcript.length > 5) {
-                 setStatus('unknown');
-                 playTone('error');
-                 setTimeout(() => { setStatus('idle'); reset(); }, 1500);
+                 // ✅ FIX: Use the dedicated handler
+                 handleUnknown();
               }
           } 
           else if (result.confidence > 0.8 || result.source === 'alias' || result.source === 'stop_number') {
@@ -205,7 +202,7 @@ export const LoadTruck: React.FC = () => {
           }
       }
     }
-  }, [isProcessing, transcript, brain, status, prediction, handleFinishLoad, handleLock, handleSuggestion, handleSelectSuggestion, playTone, reset, start]);
+  }, [isProcessing, transcript, brain, status, prediction, handleFinishLoad, handleLock, handleSuggestion, handleSelectSuggestion, handleUnknown, reset, start]);
 
   useEffect(() => {
       return () => {
@@ -220,7 +217,17 @@ export const LoadTruck: React.FC = () => {
     ? route.findIndex(r => r.id === prediction?.stop?.id) + 1 
     : '?';
 
-  return (
+  const stateColor = 
+    status === 'locked' || status === 'saved' ? 'text-success border-success' : 
+    status === 'unknown' ? 'text-warning border-warning' : 
+    'text-border border-border';
+
+  const glowColor = 
+    status === 'locked' || status === 'saved' ? 'shadow-success/20' : 
+    status === 'unknown' ? 'shadow-warning/20' : 
+    'shadow-brand/20';
+
+    return (
         <div className="fixed inset-0 bg-background text-foreground flex flex-col font-mono overflow-hidden"
              style={{ bottom: 'var(--bottom-nav-height)' }}>
         
@@ -257,10 +264,9 @@ export const LoadTruck: React.FC = () => {
                     <motion.div 
                         key="idle"
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="flex flex-col items-center gap-8"
+                        className="flex flex-col items-center gap-10"
                     >
                         <div className="relative">
-                            {/* VISUAL PULSE: Only active when 'isListening' is true */}
                             {isListening && (
                                 <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping duration-2000" />
                             )}
@@ -272,7 +278,7 @@ export const LoadTruck: React.FC = () => {
                             <h2 className="text-2xl font-bold text-foreground">
                                 {isListening ? "LISTENING..." : "PROCESSING"}
                             </h2>
-                            <p className="text-muted-foreground text-xs uppercase tracking-widest mt-2">
+                            <p className="text-muted-foreground text-sm uppercase tracking-widest mt-2">
                                 "123 Main" &bull; "Stop 5" &bull; "Large"
                             </p>
                         </div>
@@ -288,7 +294,7 @@ export const LoadTruck: React.FC = () => {
                         exit={{ opacity: 0, scale: 1.1 }}
                         className="w-full max-w-lg"
                     >
-                        <div className={`relative w-full aspect-square border-2 bg-surface/80 backdrop-blur-xl flex flex-col items-center justify-center ${status === 'saved' ? 'border-success text-success' : 'border-brand text-brand'} shadow-2xl`}>
+                        <div className={`relative w-full aspect-square border-2 bg-surface/80 backdrop-blur-xl flex flex-col items-center justify-center ${stateColor} shadow-2xl ${glowColor}`}>
                             
                             {/* Metadata Badges */}
                             <div className="absolute top-4 right-4 flex flex-col gap-2 items-end">

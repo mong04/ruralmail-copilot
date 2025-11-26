@@ -8,7 +8,7 @@ export const useSound = () => {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
-  // Load Voices (Unchanged)
+  // Load Voices
   useEffect(() => {
     const loadVoices = () => {
       const available = window.speechSynthesis.getVoices();
@@ -39,7 +39,7 @@ export const useSound = () => {
     }
   }, []);
 
-  // 1. Text-to-Speech (Unchanged)
+  // Text-to-Speech
   const speak = useCallback((text: string, onEnd?: () => void) => {
     if (!('speechSynthesis' in window)) {
       if (onEnd) onEnd();
@@ -56,8 +56,9 @@ export const useSound = () => {
     window.speechSynthesis.speak(utterance);
   }, [getBestVoice]);
 
-  // 2. PREMIUM PROCEDURAL AUDIO (The Upgrade)
-  const playTone = useCallback((type: 'success' | 'error' | 'start' | 'lock') => {
+  // PROCEDURAL AUDIO
+  // ✅ Added 'alert' to the allowed types
+  const playTone = useCallback((type: 'success' | 'error' | 'start' | 'lock' | 'alert') => {
     initAudio(); 
     const ctx = audioCtxRef.current;
     if (!ctx) return;
@@ -67,41 +68,40 @@ export const useSound = () => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       
-      // Master volume connection
       osc.connect(gain);
       gain.connect(ctx.destination);
 
       if (type === 'success') {
-        // A "Major Third" Chord Arpeggio (C5 -> E5) -> Sounds "Resolved"
+        // "Resolved" (C5 -> E5)
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, t); // C5
-        osc.frequency.linearRampToValueAtTime(659.25, t + 0.1); // Slide to E5
+        osc.frequency.setValueAtTime(523.25, t); 
+        osc.frequency.linearRampToValueAtTime(659.25, t + 0.1); 
         
-        // Envelope: Soft Attack, Long Decay
         gain.gain.setValueAtTime(0, t);
-        gain.gain.linearRampToValueAtTime(0.15, t + 0.05); // Attack
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6); // Decay
+        gain.gain.linearRampToValueAtTime(0.15, t + 0.05); 
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6); 
         
         osc.start(t);
         osc.stop(t + 0.6);
       } 
       else if (type === 'error') {
-        // A "Discordant" Low Thud
-        osc.type = 'triangle'; // Grittier sound
+        // "Negative Operation" (Sawtooth drop)
+        // Switched to Sawtooth so it's louder/clearer on mobile speakers
+        osc.type = 'sawtooth'; 
         osc.frequency.setValueAtTime(150, t);
-        osc.frequency.linearRampToValueAtTime(100, t + 0.3); // Pitch drop
+        osc.frequency.exponentialRampToValueAtTime(50, t + 0.3); 
         
         gain.gain.setValueAtTime(0, t);
-        gain.gain.linearRampToValueAtTime(0.2, t + 0.05);
+        gain.gain.linearRampToValueAtTime(0.15, t + 0.05);
         gain.gain.linearRampToValueAtTime(0.001, t + 0.3);
         
         osc.start(t);
         osc.stop(t + 0.3);
       } 
       else if (type === 'start') {
-        // High Tech "Blip" (Ready)
+        // "Ready" Blip
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, t); // A5
+        osc.frequency.setValueAtTime(880, t); 
         
         gain.gain.setValueAtTime(0, t);
         gain.gain.linearRampToValueAtTime(0.05, t + 0.02);
@@ -111,7 +111,7 @@ export const useSound = () => {
         osc.stop(t + 0.15);
       }
       else if (type === 'lock') {
-        // NEW: The "I found it" sound (Crisp, short chirp)
+        // "Target Acquired" (Chirp)
         osc.type = 'sine';
         osc.frequency.setValueAtTime(1200, t); 
         osc.frequency.exponentialRampToValueAtTime(1800, t + 0.1);
@@ -122,6 +122,22 @@ export const useSound = () => {
         
         osc.start(t);
         osc.stop(t + 0.1);
+      }
+      else if (type === 'alert') {
+        // ✅ NEW: "Ambiguity" (Double Beep)
+        // Used when the AI is asking "Did you mean A or B?"
+        osc.type = 'square'; // Distinct, digital sound
+        osc.frequency.setValueAtTime(600, t);
+        
+        // Double envelope
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.05, t + 0.05);
+        gain.gain.setValueAtTime(0, t + 0.1); // Silence
+        gain.gain.setValueAtTime(0.05, t + 0.15); // Beep 2
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+
+        osc.start(t);
+        osc.stop(t + 0.3);
       }
 
     } catch { 

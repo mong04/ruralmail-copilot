@@ -23,8 +23,19 @@ interface SessionTelemetry {
   undoCount: number;
 }
 
+
 // --- STATE & REDUCER ---
-type Mode = 'booting' | 'listening' | 'processing' | 'speaking' | 'confirming' | 'suggestion' | 'saved' | 'paused' | 'error' | 'summary';
+type Mode =
+  | 'booting'
+  | 'listening'
+  | 'processing'
+  | 'speaking'
+  | 'confirming'
+  | 'suggestion'
+  | 'saved'
+  | 'paused'
+  | 'error'
+  | 'summary';
 
 interface State {
   mode: Mode;
@@ -33,6 +44,8 @@ interface State {
   history: string[];
   speechRequest: { text: string; onCompleteAction: Action } | null;
   error: string | null;
+  ariaTranscript: string;
+  ariaError: string;
   confidenceLevel: number; // 0-1 for visual feedback
   telemetry: SessionTelemetry;
 }
@@ -61,6 +74,8 @@ const initialState: State = {
   history: [],
   speechRequest: null,
   error: null,
+  ariaTranscript: '',
+  ariaError: '',
   confidenceLevel: 0,
   telemetry: {
     startTime: Date.now(),
@@ -102,7 +117,13 @@ const reducer = (state: State, action: Action): State => {
     case 'ADD_TO_HISTORY':
       return { ...state, history: [action.item, ...state.history.slice(0, 9)] };
     case 'SET_ERROR':
-      return { ...state, mode: 'error', error: action.error, telemetry: { ...state.telemetry, voiceErrors: state.telemetry.voiceErrors + 1 } };
+      return {
+        ...state,
+        mode: 'error',
+        error: action.error,
+        ariaError: action.error,
+        telemetry: { ...state.telemetry, voiceErrors: state.telemetry.voiceErrors + 1 },
+      };
     case 'PAUSE':
       return { ...state, mode: 'paused' };
     case 'RESUME':
@@ -155,12 +176,15 @@ export const LoadTruck: React.FC = () => {
     }
   }, [state.mode, state.speechRequest, speak, stop, reset, start]);
   
-  // 3. Process transcripts with confidence-aware routing
+  // 3. Process transcripts with confidence-aware routing and ARIA live region updates
   useEffect(() => {
     if (!transcript || isListening || transcript === lastTranscript.current) return;
-    
     lastTranscript.current = transcript;
     dispatch({ type: 'TRANSCRIPT_FINALIZED' });
+    dispatch({ type: 'SET_ERROR', error: '' }); // Clear error aria
+    dispatch({ type: 'SET_ERROR', error: '' }); // Clear error aria
+    // Update ARIA live region for transcript
+    dispatch({ type: 'ADD_TO_HISTORY', item: transcript }); // For ARIA, not actual history
 
     const clean = transcript.toLowerCase().trim();
 
@@ -245,7 +269,6 @@ export const LoadTruck: React.FC = () => {
       playTone('error');
       dispatch({ type: 'START_SPEAKING', text: 'No match. Try again.', onCompleteAction: { type: 'START_LISTENING' } });
     }
-
   }, [transcript, isListening, state.mode, state.prediction, state.candidates, state.history.length, brain, playTone, reduxDispatch]);
   
   // 4. Commit package to Redux when saved state is set
@@ -310,6 +333,14 @@ export const LoadTruck: React.FC = () => {
 
       {/* MAIN HUD: Full-screen state machine */}
       <main className="flex-1 flex flex-col items-center justify-center p-6 gap-8 overflow-hidden relative">
+        {/* ARIA live region for transcript */}
+        <div aria-live="polite" aria-atomic="true" className="sr-only" id="voice-transcript-live">
+          {transcript}
+        </div>
+        {/* ARIA live region for error */}
+        <div aria-live="assertive" aria-atomic="true" className="sr-only" id="voice-error-live">
+          {state.error}
+        </div>
         <AnimatePresence mode="wait">
           {/* STATE: Booting / Listening / Paused */}
           {(state.mode === 'listening' || state.mode === 'paused' || state.mode === 'booting') && (

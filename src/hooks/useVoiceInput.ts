@@ -166,7 +166,8 @@ export const useVoiceInput = () => {
 
     return () => {
       isPausedRef.current = true;
-      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+      const timer = restartTimerRef.current;
+      if (timer) clearTimeout(timer);
       try { 
         recognition.abort(); 
       } catch {

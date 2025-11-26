@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// --- STRICT TYPES ---
+// --- 1. STRICT TYPE DEFINITIONS ---
+
 interface SpeechRecognitionEvent extends Event {
   resultIndex: number;
   results: SpeechRecognitionResultList;
@@ -24,6 +25,12 @@ interface SpeechRecognitionAlternative {
   confidence: number;
 }
 
+// Extended Error Interface
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string; // e.g. 'not-allowed', 'no-speech'
+  message?: string;
+}
+
 interface SpeechRecognition extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
@@ -34,7 +41,7 @@ interface SpeechRecognition extends EventTarget {
   onresult: ((event: SpeechRecognitionEvent) => void) | null;
   onend: (() => void) | null;
   onstart: (() => void) | null;
-  onerror: ((event: Event) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
 }
 
 declare global {
@@ -44,31 +51,79 @@ declare global {
   }
 }
 
+// --- 2. THE HOOK ---
+
 export const useVoiceInput = (isListeningProp: boolean) => {
   const [transcript, setTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const isPausedRef = useRef(false);
   const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Helper to safely check if an error is a SpeechRecognitionErrorEvent
+  const isSpeechError = (err: unknown): err is SpeechRecognitionErrorEvent => {
+    return typeof err === 'object' && err !== null && 'error' in err;
+  };
+
+  // Helper to format errors for the UI
+  const handleError = useCallback((source: string, rawError: unknown) => {
+    let message = 'Unknown Error';
+    
+    if (typeof rawError === 'string') {
+      message = rawError;
+    } else if (rawError instanceof Error) {
+      message = rawError.message;
+    } else if (isSpeechError(rawError)) {
+      // FIX 1: Type-safe access without 'any'
+      const code = rawError.error;
+      switch (code) {
+        case 'not-allowed': message = 'Mic Permission Denied'; break;
+        case 'no-speech': message = 'No Speech Detected'; break;
+        case 'network': message = 'Network Error'; break;
+        case 'aborted': return; // Ignore normal aborts
+        default: message = `Speech Error: ${code}`;
+      }
+    }
+
+    // FIX 2: Removed unused 'prev'
+    setVoiceError(`${source}: ${message}`);
+    
+    // Auto-clear soft errors after a few seconds
+    if (message === 'No Speech Detected') {
+        setTimeout(() => setVoiceError(null), 2000);
+    }
+  }, []);
+
   // 1. Wake Lock
   useEffect(() => {
     const requestWakeLock = async () => {
       if ('wakeLock' in navigator && isListeningProp) {
-        try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch {}
+        try { 
+          wakeLockRef.current = await navigator.wakeLock.request('screen'); 
+        } catch (e) {
+           handleError('WakeLock', e);
+        }
       }
     };
     if (isListeningProp) requestWakeLock();
-    return () => { wakeLockRef.current?.release().catch(() => {}); };
-  }, [isListeningProp]);
+    return () => { 
+      wakeLockRef.current?.release().catch(() => {
+         // Ignore wake lock release errors
+      }); 
+    };
+  }, [isListeningProp, handleError]);
 
   // 2. Setup
   useEffect(() => {
     const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionConstructor) return;
+    if (!SpeechRecognitionConstructor) {
+      setVoiceError("Browser does not support Voice API");
+      return;
+    }
 
     const recognition = new SpeechRecognitionConstructor();
     recognition.continuous = false; 
@@ -76,6 +131,7 @@ export const useVoiceInput = (isListeningProp: boolean) => {
     recognition.lang = 'en-US';
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
+      setVoiceError(null); 
       let finalTrans = '';
       let interimTrans = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -91,66 +147,97 @@ export const useVoiceInput = (isListeningProp: boolean) => {
       }
     };
 
-    recognition.onstart = () => setIsListening(true);
+    recognition.onstart = () => {
+      setIsListening(true);
+      setVoiceError(null);
+    };
     
     recognition.onend = () => {
       setIsListening(false);
-      // Auto-restart if we are active, not processing, and not paused
+      // Auto-restart
       if (isListeningProp && !isProcessing && !isPausedRef.current) {
         restartTimerRef.current = setTimeout(() => {
-            try { recognition.start(); } catch {}
-        }, 150); // Small buffer
+            try { 
+              recognition.start(); 
+            } catch {
+              // FIX 3: Removed unused 'e'. 
+              // If auto-restart fails (e.g. already started), we silently ignore it 
+              // to prevent error spam.
+            }
+        }, 150); 
       }
     };
 
-    recognition.onerror = () => setIsListening(false);
+    recognition.onerror = (event) => {
+      setIsListening(false);
+      handleError('Recognition', event);
+    };
 
     recognitionRef.current = recognition;
     
     if (isListeningProp) {
       isPausedRef.current = false;
-      try { recognition.start(); } catch {}
+      try { 
+        recognition.start(); 
+      } catch (e) {
+        handleError('InitialStart', e);
+      }
     }
 
     return () => {
       isPausedRef.current = true;
       if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
-      try { recognitionRef.current?.abort(); } catch {}
+      try { 
+        recognition.abort(); 
+      } catch {
+        // FIX 4: Removed unused 'e' (cleanup aborts are safe to ignore)
+      }
     };
-  }, [isListeningProp, isProcessing]);
+  }, [isListeningProp, isProcessing, handleError]);
 
-  // 3. ROBUST CONTROLS
+  // 3. CONTROLS
 
   const start = useCallback(() => {
     isPausedRef.current = false;
     setIsProcessing(false);
     
-    // Hard Reset: Abort first to clear "Stopping" state, then wait, then start
-    try { recognitionRef.current?.abort(); } catch {}
+    // Hard Reset
+    try { recognitionRef.current?.abort(); } catch { /* Ignore */ }
     
     if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     
     restartTimerRef.current = setTimeout(() => {
-        try { recognitionRef.current?.start(); } catch {}
-    }, 200); // 200ms safety buffer
-  }, []);
+        try { 
+          recognitionRef.current?.start(); 
+        } catch (e) {
+          // FIX 5: Using 'e' here because manual start failure IS important
+          handleError('ManualStart', e);
+        }
+    }, 200); 
+  }, [handleError]);
 
   const stop = useCallback(() => {
     isPausedRef.current = true;
     if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
-    try { recognitionRef.current?.abort(); } catch {}
-  }, []);
+    try { 
+      recognitionRef.current?.abort(); 
+    } catch (e) {
+      handleError('Stop', e);
+    }
+  }, [handleError]);
 
   const reset = useCallback(() => {
     setTranscript('');
     setIsProcessing(false);
     isPausedRef.current = false;
+    setVoiceError(null); 
   }, []);
 
   return { 
     transcript, 
     isProcessing, 
     isListening, 
+    voiceError, 
     reset, 
     stop, 
     start 

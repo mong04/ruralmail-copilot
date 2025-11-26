@@ -415,3 +415,4 @@ export const LoadTruck: React.FC = () => {
     </div>
   );
 };
+          

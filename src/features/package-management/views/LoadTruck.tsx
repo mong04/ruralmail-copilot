@@ -76,7 +76,6 @@ export const LoadTruck: React.FC = () => {
       setTimeout(() => {
           setStatus('idle');
           setPrediction(null);
-          // RESTART CYCLE
           reset(); 
           start();
       }, 800);
@@ -104,6 +103,7 @@ export const LoadTruck: React.FC = () => {
       const opt1 = pred.candidates[0]?.address_line1.split(',')[0];
       const opt2 = pred.candidates[1]?.address_line1.split(',')[0];
 
+      // ✅ FIX: Play alert sound to indicate ambiguity
       playTone('alert');
 
       speak(`Say One for ${opt1}. Or Two for ${opt2}.`, () => {
@@ -118,20 +118,18 @@ export const LoadTruck: React.FC = () => {
       commitPackage(selectedStop, prediction.extracted);
   }, [prediction, brain, commitPackage]);
 
-  // ✅ FIX: Added robust unknown handler that restarts mic
+  // ✅ CORRECT HANDLER: Ensures mic restarts after error
   const handleUnknown = useCallback(() => {
       setStatus('unknown');
       playTone('error');
       
-      // Temporarily stop processing to avoid picking up the error tone or background noise
-      stop(); 
+      stop(); // Stop briefly
 
       setTimeout(() => {
           setStatus('idle');
           setPrediction(null);
-          // RESTART CYCLE
           reset();
-          start();
+          start(); // Force restart
       }, 1500);
   }, [playTone, stop, reset, start]);
 
@@ -168,7 +166,6 @@ export const LoadTruck: React.FC = () => {
              if (prediction.candidates[1]) handleSelectSuggestion(prediction.candidates[1]); return;
           }
           if (['no', 'cancel', 'wrong'].some(w => cleanText.includes(w))) {
-             // ✅ FIX: Restart mic on cancel
              setStatus('idle'); reset(); start(); return;
           }
       }
@@ -178,7 +175,6 @@ export const LoadTruck: React.FC = () => {
           handleFinishLoad(); return;
       }
       if (['cancel', 'wrong', 'no'].some(cmd => cleanText.includes(cmd))) {
-          // ✅ FIX: Restart mic on cancel
           setStatus('idle'); reset(); start(); return;
       }
 
@@ -188,10 +184,14 @@ export const LoadTruck: React.FC = () => {
           setPrediction(result);
 
           if (!result.stop) {
-              // Only trigger unknown if they said enough words (prevent blip errors)
-              if (transcript.length > 5) {
-                 // ✅ FIX: Use the dedicated handler
+              // Filter out short noise (e.g. coughs, "uh")
+              if (transcript.length > 4) {
+                 // ✅ FIX: Call the robust handler instead of inline logic
                  handleUnknown();
+              } else {
+                 // ✅ FIX: Silent restart for noise
+                 reset();
+                 start();
               }
           } 
           else if (result.confidence > 0.8 || result.source === 'alias' || result.source === 'stop_number') {
@@ -204,6 +204,7 @@ export const LoadTruck: React.FC = () => {
     }
   }, [isProcessing, transcript, brain, status, prediction, handleFinishLoad, handleLock, handleSuggestion, handleSelectSuggestion, handleUnknown, reset, start]);
 
+  // Cleanup
   useEffect(() => {
       return () => {
           if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
@@ -264,13 +265,13 @@ export const LoadTruck: React.FC = () => {
                     <motion.div 
                         key="idle"
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="flex flex-col items-center gap-10"
+                        className="flex flex-col items-center gap-8"
                     >
                         <div className="relative">
                             {isListening && (
                                 <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping duration-2000" />
                             )}
-                            <div className={`relative bg-surface border-2 ${isListening ? 'border-brand' : 'border-muted'} p-12 rounded-full shadow-xl transition-colors duration-300`}>
+                            <div className={`relative bg-surface border-2 ${isListening ? 'border-brand' : 'border-muted'} p-12 rounded-full shadow-lg transition-colors duration-300`}>
                                 <Mic size={64} className={isListening ? 'text-brand' : 'text-muted'} />
                             </div>
                         </div>
@@ -278,7 +279,7 @@ export const LoadTruck: React.FC = () => {
                             <h2 className="text-2xl font-bold text-foreground">
                                 {isListening ? "LISTENING..." : "PROCESSING"}
                             </h2>
-                            <p className="text-muted-foreground text-sm uppercase tracking-widest mt-2">
+                            <p className="text-muted-foreground text-xs uppercase tracking-widest mt-2">
                                 "123 Main" &bull; "Stop 5" &bull; "Large"
                             </p>
                         </div>

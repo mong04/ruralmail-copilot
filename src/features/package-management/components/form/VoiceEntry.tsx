@@ -25,7 +25,7 @@ export const VoiceEntry: React.FC<VoiceEntryProps> = ({
   // 2. Mic & Sound
   // We use 'stop' to physically cut the mic during the countdown
   // We removed 'speak' because this view is designed for rapid, silent confirmation
-  const { transcript, isProcessing, reset, stop } = useVoiceInput(true);
+  const { transcript, isProcessing, reset, stop } = useVoiceInput();
   const { playTone } = useSound(); 
   
   // 3. State

@@ -41,7 +41,7 @@ export const LoadTruck: React.FC = () => {
   
   const brain = useMemo(() => new RouteBrain(route), [route]);
   
-  const { transcript, isListening, voiceError, reset, stop, start } = useVoiceInput(true); 
+  const { transcript, isListening, voiceError, reset, stop, start } = useVoiceInput(); 
   const debouncedTranscript = useDebounce(transcript, 400);
   const { speak, playTone } = useSound();
 

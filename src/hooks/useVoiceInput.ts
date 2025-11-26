@@ -53,7 +53,7 @@ declare global {
 
 // --- 2. THE HOOK ---
 
-export const useVoiceInput = (isListeningProp: boolean) => {
+export const useVoiceInput = () => {
   const [transcript, setTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -96,10 +96,10 @@ export const useVoiceInput = (isListeningProp: boolean) => {
     }
   }, []);
 
-  // 1. Wake Lock
+  // 1. Wake Lock (now controlled by isListening state)
   useEffect(() => {
     const requestWakeLock = async () => {
-      if ('wakeLock' in navigator && isListeningProp) {
+      if ('wakeLock' in navigator) {
         try { 
           wakeLockRef.current = await navigator.wakeLock.request('screen'); 
         } catch (e) {
@@ -107,13 +107,16 @@ export const useVoiceInput = (isListeningProp: boolean) => {
         }
       }
     };
-    if (isListeningProp) requestWakeLock();
+    if (isListening) {
+      requestWakeLock();
+    } else {
+      wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current = null;
+    }
     return () => { 
-      wakeLockRef.current?.release().catch(() => {
-         // Ignore wake lock release errors
-      }); 
+      wakeLockRef.current?.release().catch(() => {}); 
     };
-  }, [isListeningProp, handleError]);
+  }, [isListening, handleError]);
 
   // 2. Setup
   useEffect(() => {
@@ -124,7 +127,7 @@ export const useVoiceInput = (isListeningProp: boolean) => {
     }
 
     const recognition = new SpeechRecognitionConstructor();
-    recognition.continuous = true; // Changed to true for continuous listening
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
@@ -152,7 +155,6 @@ export const useVoiceInput = (isListeningProp: boolean) => {
     
     recognition.onend = () => {
       setIsListening(false);
-      // No longer auto-restarts. Parent component is in control.
     };
 
     recognition.onerror = (event) => {
@@ -161,15 +163,6 @@ export const useVoiceInput = (isListeningProp: boolean) => {
     };
 
     recognitionRef.current = recognition;
-    
-    if (isListeningProp) {
-      isPausedRef.current = false;
-      try { 
-        recognition.start(); 
-      } catch (e) {
-        handleError('InitialStart', e);
-      }
-    }
 
     return () => {
       isPausedRef.current = true;
@@ -180,7 +173,7 @@ export const useVoiceInput = (isListeningProp: boolean) => {
         // Ignore
       }
     };
-  }, [isListeningProp, handleError]);
+  }, [handleError]);
 
   // 3. CONTROLS
 

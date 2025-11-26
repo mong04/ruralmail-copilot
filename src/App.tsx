@@ -4,7 +4,7 @@ import { RouterProvider } from 'react-router-dom';
 import { router } from '../src/AppRouter';
 import { useTheme } from '../src/hooks/useTheme';
 import ThemeController from './components/theme/ThemeController';
-import { useAppSelector } from './store';
+// import { useAppSelector } from './store';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);

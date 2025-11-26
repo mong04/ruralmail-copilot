@@ -4,7 +4,6 @@ import { RouterProvider } from 'react-router-dom';
 import { router } from '../src/AppRouter';
 import { useTheme } from '../src/hooks/useTheme';
 import ThemeController from './components/theme/ThemeController';
-import CyberpunkOverlay from './components/theme/cyberpunk/CyberpunkOverlay'; // ← NEW
 import { useAppSelector } from './store';
 
 const App: React.FC = () => {
@@ -12,10 +11,6 @@ const App: React.FC = () => {
 
   // Keeps <html> classes and data-theme in sync
   useTheme();
-
-  const theme = useAppSelector((state) => state.settings.theme);
-  const richEnabled = useAppSelector((state) => state.settings.richThemingEnabled ?? true);
-  const isCyberpunkActive = theme === 'cyberpunk' && richEnabled;
 
   useEffect(() => {
     const stored = localStorage.getItem('isLoggedIn');
@@ -53,11 +48,7 @@ const App: React.FC = () => {
 
   return (
     <ThemeController>
-      {/* 1. Your entire app (including BottomNavLayout) */}
       <RouterProvider router={router} />
-
-      {/* 2. THE ONE AND ONLY CYBERPUNK OVERLAY — mounted at true root */}
-      {isCyberpunkActive && <CyberpunkOverlay />}
     </ThemeController>
   );
 };

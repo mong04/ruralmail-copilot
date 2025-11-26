@@ -152,16 +152,7 @@ export const useVoiceInput = (isListeningProp: boolean) => {
     
     recognition.onend = () => {
       setIsListening(false);
-      // Auto-restart with delay for stability
-      if (isListeningProp && !isProcessing && !isPausedRef.current) {
-        restartTimerRef.current = setTimeout(() => {
-            try { 
-              recognition.start(); 
-            } catch {
-              // Silently ignore
-            }
-        }, 300); // Increased delay for Bluetooth
-      }
+      // No longer auto-restarts. Parent component is in control.
     };
 
     recognition.onerror = (event) => {
@@ -189,33 +180,24 @@ export const useVoiceInput = (isListeningProp: boolean) => {
         // Ignore
       }
     };
-  }, [isListeningProp, isProcessing, handleError]);
+  }, [isListeningProp, handleError]);
 
   // 3. CONTROLS
 
   const start = useCallback(() => {
-    isPausedRef.current = false;
-    setIsProcessing(false);
-    
-    if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
-    
-    // If recognition is already listening, don't try to start it again.
     if (isListening) {
-      return;
+      return; // Already listening, do nothing.
     }
-
-    restartTimerRef.current = setTimeout(() => {
-        try { 
-          recognitionRef.current?.start(); 
-        } catch (e) {
-           handleError('ManualStart', e);
-        }
-    }, 300); // Increased for stability
-  }, [handleError]);
+    try {
+      recognitionRef.current?.start();
+      isPausedRef.current = false;
+    } catch (e) {
+      handleError('ManualStart', e);
+    }
+  }, [handleError, isListening]);
 
   const stop = useCallback(() => {
     isPausedRef.current = true;
-    if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     try { 
       recognitionRef.current?.abort(); 
     } catch (e) {

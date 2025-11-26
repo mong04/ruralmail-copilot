@@ -21,7 +21,7 @@ import { RouteBrain, type Prediction } from '../utils/RouteBrain';
 import { type Package, type Stop } from '../../../db';
 import { Button } from '../../../components/ui/Button';
 
-// Utility for AI Badge Colors
+// THEME-AWARE UTILS
 const getSizeColor = (size: string) => {
   if (size === 'large') return 'text-warning border-warning bg-warning/10';
   if (size === 'small') return 'text-brand border-brand bg-brand/10';
@@ -39,8 +39,9 @@ export const LoadTruck: React.FC = () => {
 
   const brain = useMemo(() => new RouteBrain(route), [route]);
   
-  // VOICE HOOK (Initialized as false, started in Effect)
-  const { transcript, isProcessing, reset, stop, start } = useVoiceInput(false); 
+  // VOICE HOOK
+  // We use 'isListening' to drive the UI visuals (Pulse effect)
+  const { transcript, isProcessing, isListening, reset, stop, start } = useVoiceInput(false); 
   const { speak, playTone } = useSound();
 
   // STATE MACHINE
@@ -50,10 +51,10 @@ export const LoadTruck: React.FC = () => {
   
   const safetyTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // --- LOGIC ---
+  // --- ACTIONS ---
 
   /**
-   * COMMIT: Saves to Redux
+   * COMMIT: Saves the package to Redux
    */
   const commitPackage = useCallback((stopItem: Stop, extracted: Prediction['extracted']) => {
       const stopNum = route.findIndex(r => r.id === stopItem.id);
@@ -61,7 +62,7 @@ export const LoadTruck: React.FC = () => {
       const newPkg: Package = {
           id: crypto.randomUUID(),
           tracking: '',
-          size: extracted.size,
+          size: extracted.size, 
           notes: extracted.notes.join(', ') || 'Voice Load',
           assignedStopId: stopItem.id,
           assignedStopNumber: stopNum,
@@ -73,8 +74,7 @@ export const LoadTruck: React.FC = () => {
       
       playTone('success');
       setStatus('saved');
-      
-      setHistory(prev => [`#${stopNum + 1} - ${stopItem.address_line1}`, ...prev.slice(0, 4)]);
+      setHistory(prev => [`#${stopNum + 1}`, ...prev.slice(0, 4)]);
 
       // Reset Loop
       setTimeout(() => {
@@ -82,16 +82,18 @@ export const LoadTruck: React.FC = () => {
           setPrediction(null);
           // Restart Voice Engine
           reset(); 
+          start();
       }, 800);
-  }, [dispatch, playTone, reset, route]);
+  }, [dispatch, playTone, reset, start, route]);
 
   /**
    * LOCK: High Confidence -> Confirm -> Save
    */
   const handleLock = useCallback((pred: Prediction) => {
     if (!pred.stop) return;
+    
     setStatus('locked');
-    stop(); // Cut mic
+    stop(); // Cut mic so robot can speak
 
     const stopSeq = route.findIndex(r => r.id === pred.stop?.id) + 1;
     
@@ -144,13 +146,15 @@ export const LoadTruck: React.FC = () => {
 
   // --- EFFECTS ---
 
+  // Start Session
   useEffect(() => {
     if (!loadingSession.isActive) {
         dispatch(startLoadingSession());
         playTone('start');
         reset(); 
+        start();
     }
-  }, [dispatch, loadingSession.isActive, playTone, reset]);
+  }, [dispatch, loadingSession.isActive, playTone, reset, start]);
 
   // MAIN LISTENER LOOP
   useEffect(() => {
@@ -169,13 +173,16 @@ export const LoadTruck: React.FC = () => {
              if (prediction.candidates[1]) handleSelectSuggestion(prediction.candidates[1]); return;
           }
           if (['no', 'cancel', 'wrong'].some(w => cleanText.includes(w))) {
-             setStatus('idle'); reset(); return;
+             setStatus('idle'); reset(); start(); return;
           }
       }
 
       // 2. Global Commands
       if (['finish', 'done', 'complete'].some(cmd => cleanText.includes(cmd))) {
           handleFinishLoad(); return;
+      }
+      if (['cancel', 'wrong', 'no'].some(cmd => cleanText.includes(cmd))) {
+          setStatus('idle'); reset(); return;
       }
 
       // 3. Idle Prediction
@@ -198,7 +205,7 @@ export const LoadTruck: React.FC = () => {
           }
       }
     }
-  }, [isProcessing, transcript, brain, status, prediction, handleFinishLoad, handleLock, handleSuggestion, handleSelectSuggestion, playTone, reset]);
+  }, [isProcessing, transcript, brain, status, prediction, handleFinishLoad, handleLock, handleSuggestion, handleSelectSuggestion, playTone, reset, start]);
 
   useEffect(() => {
       return () => {
@@ -213,17 +220,7 @@ export const LoadTruck: React.FC = () => {
     ? route.findIndex(r => r.id === prediction?.stop?.id) + 1 
     : '?';
 
-  const stateColor = 
-    status === 'locked' || status === 'saved' ? 'text-success border-success' : 
-    status === 'unknown' ? 'text-warning border-warning' : 
-    'text-border border-border';
-
-  const glowColor = 
-    status === 'locked' || status === 'saved' ? 'shadow-success/20' : 
-    status === 'unknown' ? 'shadow-warning/20' : 
-    'shadow-brand/20';
-
-    return (
+  return (
         <div className="fixed inset-0 bg-background text-foreground flex flex-col font-mono overflow-hidden"
              style={{ bottom: 'var(--bottom-nav-height)' }}>
         
@@ -238,11 +235,11 @@ export const LoadTruck: React.FC = () => {
         {/* HEADER */}
         <header className="flex-none flex justify-between items-center p-4 z-20 border-b border-border bg-surface/90 backdrop-blur-md">
             <Button variant="ghost" onClick={() => navigate(-1)} className="text-xs font-bold text-muted-foreground hover:text-foreground uppercase tracking-widest">
-                <ArrowLeft className="mr-2 w-4 h-4" /> Exit Mode
+                <ArrowLeft className="mr-2 w-4 h-4" /> Exit
             </Button>
             <div className="flex items-center gap-4">
                 <div className="flex flex-col items-end">
-                    <span className="text-[10px] text-muted-foreground">Session Load</span>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Session</span>
                     <span className="text-xl font-bold text-brand tabular-nums leading-none">
                         {loadingSession.count.toString().padStart(3, '0')}
                     </span>
@@ -260,67 +257,66 @@ export const LoadTruck: React.FC = () => {
                     <motion.div 
                         key="idle"
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="flex flex-col items-center gap-10"
+                        className="flex flex-col items-center gap-8"
                     >
                         <div className="relative">
-                            <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping duration-2000" />
-                            <div className="relative bg-surface border-2 border-brand p-12 rounded-full shadow-xl">
-                                <Mic size={64} className="text-brand" />
+                            {/* VISUAL PULSE: Only active when 'isListening' is true */}
+                            {isListening && (
+                                <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping duration-2000" />
+                            )}
+                            <div className={`relative bg-surface border-2 ${isListening ? 'border-brand' : 'border-muted'} p-12 rounded-full shadow-xl transition-colors duration-300`}>
+                                <Mic size={64} className={isListening ? 'text-brand' : 'text-muted'} />
                             </div>
                         </div>
                         <div className="text-center">
-                            <h2 className="text-3xl font-bold text-foreground">Listening...</h2>
-                            <p className="text-muted-foreground text-sm mt-2">Say address or "Stop 4"</p>
+                            <h2 className="text-2xl font-bold text-foreground">
+                                {isListening ? "LISTENING..." : "PROCESSING"}
+                            </h2>
+                            <p className="text-muted-foreground text-xs uppercase tracking-widest mt-2">
+                                "123 Main" &bull; "Stop 5" &bull; "Large"
+                            </p>
                         </div>
                     </motion.div>
                 )}
 
-                {/* MATCHED / SAVED */}
-                {(status === 'locked' || status === 'saved') && (
+                {/* LOCKED / SAVED */}
+                {(status === 'locked' || status === 'saved') && prediction && (
                     <motion.div 
-                        key="matched"
+                        key="locked"
                         initial={{ opacity: 0, scale: 0.9 }} 
                         animate={{ opacity: 1, scale: 1 }} 
                         exit={{ opacity: 0, scale: 1.1 }}
                         className="w-full max-w-lg"
                     >
-                        <div className={`relative w-full aspect-square border-2 bg-surface/50 backdrop-blur-xl flex flex-col items-center justify-center ${stateColor} shadow-2xl ${glowColor}`}>
+                        <div className={`relative w-full aspect-square border-2 bg-surface/80 backdrop-blur-xl flex flex-col items-center justify-center ${status === 'saved' ? 'border-success text-success' : 'border-brand text-brand'} shadow-2xl`}>
                             
                             {/* Metadata Badges */}
-                            {prediction && prediction.extracted && (
-                                <div className="absolute top-4 right-4 flex flex-col gap-2 items-end">
-                                    {prediction.extracted.size !== 'medium' && (
-                                        <span className={`px-2 py-1 text-xs font-black uppercase border ${getSizeColor(prediction.extracted.size)}`}>
-                                            {prediction.extracted.size}
-                                        </span>
-                                    )}
-                                    {prediction.extracted.priority && (
-                                        <span className="px-2 py-1 text-xs font-black uppercase border text-danger border-danger bg-danger/10">
-                                            PRIORITY
-                                        </span>
-                                    )}
-                                </div>
-                            )}
+                            <div className="absolute top-4 right-4 flex flex-col gap-2 items-end">
+                                {prediction.extracted.size !== 'medium' && (
+                                    <span className={`px-2 py-1 text-xs font-black uppercase border ${getSizeColor(prediction.extracted.size)}`}>
+                                        {prediction.extracted.size}
+                                    </span>
+                                )}
+                                {prediction.extracted.priority && (
+                                    <span className="px-2 py-1 text-xs font-black uppercase border text-danger border-danger bg-danger/10">
+                                        PRIORITY
+                                    </span>
+                                )}
+                            </div>
 
-                            {/* Corners */}
-                            <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-current" />
-                            <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-current" />
-                            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-current" />
-                            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-current" />
-
-                            <span className="text-sm font-bold mb-4 opacity-80 flex items-center gap-2">
-                                {status === 'saved' && <CheckCircle2 size={16} />}
-                                {status === 'saved' ? 'Loaded' : 'Target Found'}
+                            <span className="text-sm font-bold uppercase tracking-[0.3em] mb-4 opacity-80 flex items-center gap-2">
+                                {status === 'saved' ? <CheckCircle2 size={16} /> : null}
+                                {status === 'saved' ? 'Confirmed' : 'Target Lock'}
                             </span>
                             
-                            <h1 className="text-[12rem] font-black leading-none tracking-tighter drop-shadow-lg">
+                            <h1 className="text-[10rem] font-black leading-none tracking-tighter drop-shadow-lg">
                                 {stopNumber}
                             </h1>
                             
                             <div className="absolute bottom-8 px-6 w-full text-center">
                                 <div className="bg-surface p-4 border border-border/50 shadow-lg rounded-md">
-                                    <span className="text-xl md:text-2xl font-bold text-foreground block truncate">
-                                        {prediction?.stop?.address_line1}
+                                    <span className="text-xl font-bold text-foreground block truncate">
+                                        {prediction.stop?.address_line1}
                                     </span>
                                 </div>
                             </div>
@@ -328,30 +324,16 @@ export const LoadTruck: React.FC = () => {
                     </motion.div>
                 )}
 
-                {/* UNKNOWN */}
-                {status === 'unknown' && (
-                    <motion.div 
-                        key="unknown"
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="flex flex-col items-center"
-                    >
-                        <div className="p-10 border-4 border-warning rounded-full bg-warning/10 animate-pulse mb-8">
-                            <AlertTriangle size={80} className="text-warning" />
-                        </div>
-                        <h2 className="text-4xl font-bold text-warning">NO MATCH</h2>
-                    </motion.div>
-                )}
-
-                {/* SUGGESTION MODE UI */}
+                {/* SUGGESTION MODE */}
                 {status === 'suggestion' && prediction && (
                     <motion.div 
                         key="suggestion"
                         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                        className="w-full max-w-md flex flex-col gap-4 bg-surface/90 backdrop-blur-xl p-6 border border-brand rounded-xl shadow-2xl"
+                        className="w-full max-w-md flex flex-col gap-4"
                     >
                         <div className="text-center mb-4">
-                            <h2 className="text-xl font-bold text-brand uppercase tracking-widest">Confirm Target</h2>
-                            <p className="text-muted-foreground text-xs mt-1">Say "One" or "Two"</p>
+                            <h2 className="text-2xl font-bold text-warning uppercase">Confirm Target</h2>
+                            <p className="text-muted-foreground text-xs">Say "One", "Two", or "No"</p>
                         </div>
 
                         {prediction.candidates.map((cand, idx) => (
@@ -362,8 +344,8 @@ export const LoadTruck: React.FC = () => {
                                 className="h-auto py-4 px-6 flex items-center justify-between border-border hover:border-brand group text-left transition-all"
                             >
                                 <div>
-                                    <span className="text-xs text-brand font-bold uppercase tracking-widest block mb-1">
-                                        Option {idx + 1}
+                                    <span className="text-xs text-muted-foreground uppercase tracking-widest block text-brand">
+                                        Say "Option {idx + 1}"
                                     </span>
                                     <span className="text-lg font-bold text-foreground group-hover:text-brand transition-colors">
                                         {cand.address_line1}
@@ -378,20 +360,35 @@ export const LoadTruck: React.FC = () => {
                         <Button 
                             variant="ghost" 
                             onClick={() => { setStatus('idle'); reset(); start(); }}
-                            className="mt-4 text-muted-foreground hover:text-danger w-full"
+                            className="mt-4 text-muted-foreground hover:text-danger"
                         >
                            <AlertCircle size={16} className="mr-2" /> Wrong / Retry
                         </Button>
                     </motion.div>
                 )}
 
+                {/* UNKNOWN */}
+                {status === 'unknown' && (
+                    <motion.div 
+                        key="unknown"
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="flex flex-col items-center"
+                    >
+                        <div className="p-10 border-4 border-warning rounded-full bg-warning/10 animate-pulse mb-8">
+                            <AlertTriangle size={80} className="text-warning" />
+                        </div>
+                        <h2 className="text-4xl font-bold text-warning">NO MATCH</h2>
+                        <p className="mt-4 text-muted-foreground font-mono">"{transcript}"</p>
+                    </motion.div>
+                )}
+
             </AnimatePresence>
         </main>
 
-        {/* FOOTER */}
+        {/* LOG */}
         <footer className="flex-none h-16 w-full border-t border-border bg-surface/90 backdrop-blur flex items-center px-4 z-20">
-            <div className="shrink-0 text-[10px] text-muted-foreground font-bold mr-4">
-                RECENT LOG
+            <div className="shrink-0 text-[10px] text-muted-foreground font-bold uppercase tracking-widest mr-4">
+                Log
             </div>
             <div className="flex-1 flex gap-2 overflow-hidden">
                 <AnimatePresence initial={false}>

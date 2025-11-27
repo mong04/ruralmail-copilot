@@ -19,6 +19,9 @@ export const VoiceLoadHUD: React.FC = () => {
   const dispatchRedux = useAppDispatch();
   const fuzzyMatch = React.useMemo(() => createFuzzyMatcher(route), [route]);
   const analyticsRef = React.useRef(new VoiceSessionAnalytics());
+  // For debugging: show last matches/confidence
+  const [debugMatches, setDebugMatches] = React.useState<any[]>([]);
+  const [debugTranscript, setDebugTranscript] = React.useState<string>('');
 
   // Voice engine integration
   const { start, stop, speak, playTone } = useVoiceEngine({
@@ -94,6 +97,8 @@ export const VoiceLoadHUD: React.FC = () => {
       }
       // Replace the fake match effect with real fuzzy matching
       const matches = fuzzyMatch(state.transcript);
+      setDebugMatches(matches);
+      setDebugTranscript(state.transcript);
       if (matches.length === 1 && matches[0].confidence > 0.85) {
         dispatch({ type: 'MATCH', match: matches[0], confidence: matches[0].confidence });
       } else if (matches.length > 1) {
@@ -183,6 +188,25 @@ export const VoiceLoadHUD: React.FC = () => {
             </div>
           </div>
         )}
+        {state.mode === 'suggesting' && (
+          <div className="flex flex-col items-center gap-4 animate-fade-in">
+            <div className="rounded-full border-4 border-brand p-10 mb-4 animate-pulse">
+              <span className="text-5xl">🤔</span>
+            </div>
+            <div className="text-center">
+              <h2 className="text-2xl font-black text-brand">Multiple Matches</h2>
+              <p className="text-lg text-muted-foreground">Please say the number or clarify:</p>
+              <ul className="mt-4 space-y-2">
+                {state.candidates.map((c, i) => (
+                  <li key={c.stopId} className="bg-muted rounded px-4 py-2 flex items-center justify-between">
+                    <span className="font-mono">{i + 1}. {c.address}</span>
+                    <span className="text-xs text-brand">{Math.round(c.confidence * 100)}%</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
         {state.mode === 'error' && (
           <div className="flex flex-col items-center gap-4">
             <div className="rounded-full border-4 border-danger p-10 mb-4">
@@ -199,6 +223,11 @@ export const VoiceLoadHUD: React.FC = () => {
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {state.mode === 'listening' && (interimRef.current || 'Say an address...')}
         {state.mode === 'error' && state.error}
+      </div>
+      {/* Debug output for devs */}
+      <div className="fixed bottom-2 left-2 bg-black bg-opacity-80 text-green-300 text-xs p-2 rounded max-w-xs z-50" style={{pointerEvents:'none'}}>
+        <div>Transcript: {debugTranscript}</div>
+        <div>Matches: {debugMatches.map((m,i) => `${i+1}: ${m.address} (${Math.round(m.confidence*100)}%)`).join(' | ')}</div>
       </div>
     </div>
   );

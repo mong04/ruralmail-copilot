@@ -20,7 +20,13 @@ export const VoiceLoadHUD: React.FC = () => {
   const fuzzyMatch = React.useMemo(() => createFuzzyMatcher(route), [route]);
   const analyticsRef = React.useRef(new VoiceSessionAnalytics());
   // For debugging: show last matches/confidence
-  const [debugMatches, setDebugMatches] = React.useState<any[]>([]);
+  type MatchCandidate = {
+    stopId: string;
+    address: string;
+    confidence: number;
+    notes?: string[];
+  };
+  const [debugMatches, setDebugMatches] = React.useState<MatchCandidate[]>([]);
   const [debugTranscript, setDebugTranscript] = React.useState<string>('');
 
   // Voice engine integration
@@ -99,17 +105,33 @@ export const VoiceLoadHUD: React.FC = () => {
       const matches = fuzzyMatch(state.transcript);
       setDebugMatches(matches);
       setDebugTranscript(state.transcript);
-      if (matches.length === 1 && matches[0].confidence > 0.85) {
-        dispatch({ type: 'MATCH', match: matches[0], confidence: matches[0].confidence });
-      } else if (matches.length > 1) {
-        speak('Multiple matches found. Please say the number or clarify.');
-        playTone('alert');
-        dispatch({ type: 'CANDIDATES', candidates: matches });
-      } else {
+      if (matches.length === 0) {
         speak('No address match found. Please try again or say help.');
         playTone('error');
         dispatch({ type: 'ERROR', error: 'No address match found.' });
+        return;
       }
+      // If top match is strong and next best is much lower, auto-confirm
+      if (matches[0].confidence > 0.85 && (matches.length === 1 || (matches[0].confidence - matches[1].confidence > 0.10))) {
+        dispatch({ type: 'MATCH', match: matches[0], confidence: matches[0].confidence });
+        return;
+      }
+      // If top two matches are both high/confidence is close, show candidates
+      if (matches.length > 1 && matches[1].confidence > 0.7 && (matches[0].confidence - matches[1].confidence <= 0.10)) {
+        speak('Multiple matches found. Please say the number or clarify.');
+        playTone('alert');
+        dispatch({ type: 'CANDIDATES', candidates: matches });
+        return;
+      }
+      // Otherwise, treat as a single match if top is high enough
+      if (matches[0].confidence > 0.8) {
+        dispatch({ type: 'MATCH', match: matches[0], confidence: matches[0].confidence });
+        return;
+      }
+      // Otherwise, error
+      speak('No address match found. Please try again or say help.');
+      playTone('error');
+      dispatch({ type: 'ERROR', error: 'No address match found.' });
     }
   }, [state, fuzzyMatch, speak, playTone, dispatchRedux, route.length]);
 

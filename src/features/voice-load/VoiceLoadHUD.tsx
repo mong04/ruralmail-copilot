@@ -1,4 +1,4 @@
-import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useReducer, useEffect, useRef, useMemo, useCallback, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { voiceLoadReducer, type MatchResult } from './VoiceLoadMachine';
 import { useVoiceEngine } from './useVoiceEngine';
@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 
 const initial = { mode: 'booting' } as const;
 
+// ... UI_TEXT ... (Same as before)
 const UI_TEXT = {
   default: {
     header: "Voice Loading",
@@ -53,6 +54,12 @@ export const VoiceLoadHUD: React.FC = () => {
   const shouldRestart = useRef(false);
   const confirmTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // DEBUG STATE
+  const [logs, setLogs] = useState<string[]>([]);
+  const addLog = useCallback((msg: string) => {
+      setLogs(prev => [...prev.slice(-4), msg]); // Keep last 5
+  }, []);
+
   useWakeLock();
   
   const brain = useMemo(() => new RouteBrain(route), [route]);
@@ -72,6 +79,7 @@ export const VoiceLoadHUD: React.FC = () => {
   }, [richThemingEnabled]);
 
   const { start, stop, cancelAll, speak, playTone, unlockAudio } = useVoiceEngine({
+    onDebug: addLog, // Hook up logger
     onTranscript: (final, interim) => {
       if (final) {
         analyticsRef.current.log('transcript', { transcript: final });
@@ -95,10 +103,14 @@ export const VoiceLoadHUD: React.FC = () => {
       if (err !== 'no-speech') {
         analyticsRef.current.log('error', { error: err });
         if (typeof err === 'string' && err.includes('aborted')) return; 
+        
+        // Explicitly toast errors on mobile to debug
+        toast.error(`Mic Error: ${err}`);
         dispatch({ type: 'ERROR', error: typeof err === 'string' ? err : 'Signal Lost' });
       }
     },
     onStart: () => {
+        // Only start the confirmation timer if the HARDWARE actually started
         if (state.mode === 'confirming') {
             if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
             confirmTimerRef.current = setTimeout(() => {
@@ -176,7 +188,6 @@ export const VoiceLoadHUD: React.FC = () => {
 
   // Confirmation & Success Loop
   useEffect(() => {
-    // A. CONFIRMATION
     if (state.mode === 'confirming') {
       const { address, extractedDetails } = state.match;
       const shortAddress = getShortAddress(address);
@@ -187,14 +198,13 @@ export const VoiceLoadHUD: React.FC = () => {
       stop(); 
 
       speak(text, () => {
-          // TTS Complete.
           if (shouldRestart.current) {
-              // FIX: Ensure Audio Context is warm
-              unlockAudio();
+              // Ensure audio context is ready before mic request
+              unlockAudio(); 
               
-              // FIX: Add 200ms delay to allow OS audio layer to switch from Output -> Input
+              // 200ms delay for Audio Layer handoff (Output -> Input)
               setTimeout(() => {
-                 if (shouldRestart.current) { // Check again in case user cancelled during delay
+                 if (shouldRestart.current) {
                     start();
                  }
               }, 200);
@@ -206,7 +216,6 @@ export const VoiceLoadHUD: React.FC = () => {
       };
     }
     
-    // B. SUCCESS
     if (state.mode === 'success' && 'match' in state) {
       const { match } = state;
       const targetStop = route.find(s => s.id === match.stopId);
@@ -346,6 +355,12 @@ export const VoiceLoadHUD: React.FC = () => {
              </button>
         </div>
       </div>
+      
+      {/* DEBUG TERMINAL OVERLAY */}
+      <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[10px] text-green-400 p-2 font-mono h-24 overflow-y-auto pointer-events-none z-100">
+        {logs.map((l, i) => <div key={i}>{l}</div>)}
+      </div>
+
     </div>
   );
 };

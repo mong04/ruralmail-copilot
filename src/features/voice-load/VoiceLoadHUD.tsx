@@ -12,7 +12,7 @@ import { NeuralCore } from './components/NeuralCore';
 
 const initial = { mode: 'booting' } as const;
 
-// --- Theme Text Configuration ---
+// ... UI_TEXT constant (unchanged) ...
 const UI_TEXT = {
   default: {
     header: "Voice Loading",
@@ -50,9 +50,6 @@ export const VoiceLoadHUD: React.FC = () => {
   
   const dispatchRedux = useAppDispatch();
   const analyticsRef = useRef(new VoiceSessionAnalytics());
-  
-  // 1. CIRCUIT BREAKER REF
-  // Prevents the "onEnd" handler from restarting the mic if we explicitly clicked Stop.
   const shouldRestart = useRef(false);
 
   useWakeLock();
@@ -81,9 +78,7 @@ export const VoiceLoadHUD: React.FC = () => {
       else if (interim.length > 0) dispatch({ type: 'TRANSCRIPT', transcript: '', interim });
     },
     onError: (err) => {
-      // If we intentionally stopped, ignore errors
       if (!shouldRestart.current) return;
-
       if (err !== 'no-speech') {
         analyticsRef.current.log('error', { error: err });
         dispatch({ type: 'ERROR', error: typeof err === 'string' ? err : 'Signal Lost' });
@@ -91,8 +86,9 @@ export const VoiceLoadHUD: React.FC = () => {
     },
     onStart: () => {},
     onEnd: () => {
-       // 2. CHECK CIRCUIT BREAKER
-       // Only restart if we intend to be running AND we are in a valid state.
+       // Only auto-restart if we aren't handling it manually (e.g. during TTS)
+       // useVoiceEngine's internal isSpeakingRef handles the heavy lifting, 
+       // but we double check our intent here.
        if (shouldRestart.current && (state.mode === 'listening' || state.mode === 'processing')) {
          start();
        }
@@ -100,7 +96,7 @@ export const VoiceLoadHUD: React.FC = () => {
   });
 
   const handleSystemStart = () => {
-    shouldRestart.current = true; // Enable loop
+    shouldRestart.current = true;
     start();
     unlockAudio().then(() => {
         playTone('start');
@@ -109,9 +105,9 @@ export const VoiceLoadHUD: React.FC = () => {
   };
 
   const handleManualStop = () => {
-    shouldRestart.current = false; // Break loop synchronously
-    stop();                        // Kill engine
-    dispatch({ type: 'PAUSE' });   // Update UI
+    shouldRestart.current = false;
+    stop();
+    dispatch({ type: 'PAUSE' });
   };
 
   // Processing Loop
@@ -123,7 +119,9 @@ export const VoiceLoadHUD: React.FC = () => {
         if (/^(undo|delete|revert)/.test(t)) {
           dispatchRedux(removeLastPackage());
           playTone('error');
-          speak('Unit removed.');
+          speak('Unit removed.', () => {
+             // Optional: restart mic here if needed, but state reset handles it
+          });
           triggerGlobalFx('error');
           analyticsRef.current.log('undo');
           dispatch({ type: 'RESET' });
@@ -146,56 +144,96 @@ export const VoiceLoadHUD: React.FC = () => {
         } else {
            playTone('error');
            triggerGlobalFx('error');
-           speak('No target identified.');
+           speak('No target identified.', () => {
+               // Resume listening after error message
+               if (shouldRestart.current) start();
+           });
            analyticsRef.current.log('fail_match', { transcript: state.transcript });
            dispatch({ type: 'ERROR', error: 'TARGET_UNKNOWN' });
         }
       }
     };
     process();
-  }, [state, brain, dispatchRedux, playTone, speak, triggerGlobalFx]); 
+  }, [state, brain, dispatchRedux, playTone, speak, triggerGlobalFx, start]); 
 
   // Confirm & Execute
   useEffect(() => {
     let timer: NodeJS.Timeout;
+    
+    // 1. CONFIRMATION PHASE (Stop Mic -> Speak -> Wait -> Next State)
     if (state.mode === 'confirming') {
       const { address, extractedDetails } = state.match;
       const text = `${extractedDetails.size !== 'medium' ? extractedDetails.size : ''} ${extractedDetails.priority ? 'priority' : ''} for ${address}`;
-      speak(text);
       
-      timer = setTimeout(() => {
-         dispatch({ type: 'CONFIRM' });
-      }, 2000);
+      // A. Stop mic to prevent feedback loop
+      stop(); 
+
+      // B. Speak text, then start timer for auto-confirm
+      speak(text, () => {
+          // Callback fires when TTS ends. 
+          // We do NOT restart the mic here immediately because we want to give the user 
+          // a brief moment of silence or visual feedback before auto-confirming.
+          // OR: We could restart mic here to listen for "UNDO".
+          // For now, let's keep it simple: Auto-confirm after delay.
+          
+          timer = setTimeout(() => {
+             dispatch({ type: 'CONFIRM' });
+          }, 1500); // 1.5s delay after speaking finishes
+      });
+      
+      return () => clearTimeout(timer);
     }
     
+    // 2. SUCCESS PHASE (Data Dispatch)
     if (state.mode === 'success' && 'match' in state) {
       const { match } = state;
-      dispatchRedux(addPackage({
-        id: crypto.randomUUID(),
-        size: match.extractedDetails.size,
-        notes: match.combinedNotes.join(', '),
-        assignedStopId: match.stopId,
-        assignedStopNumber: route.findIndex(s => s.id === match.stopId) + 1,
-        assignedAddress: match.address,
-        delivered: false,
-      }));
-      dispatchRedux(incrementLoadCount());
-      playTone('success');
-      triggerGlobalFx('package-delivered');
-      analyticsRef.current.log('confirm', { address: match.address });
-      setTimeout(() => dispatch({ type: 'RESET' }), 1200);
-    }
 
-    return () => clearTimeout(timer);
-  }, [state, route, dispatchRedux, speak, playTone, triggerGlobalFx]);
+      // DATA FIX: Re-verify the stop exists in the current route to get precise Index
+      const stopIndex = route.findIndex(s => s.id === match.stopId);
+      const stopData = route[stopIndex];
+
+      if (stopIndex !== -1 && stopData) {
+        dispatchRedux(addPackage({
+          id: crypto.randomUUID(),
+          size: match.extractedDetails.size,
+          notes: match.combinedNotes.join(', '),
+          assignedStopId: stopData.id, // Use ID from fresh lookup
+          assignedStopNumber: stopIndex + 1, // Ensure 1-based index
+          assignedAddress: stopData.full_address || stopData.address_line1,
+          delivered: false,
+        }));
+        
+        dispatchRedux(incrementLoadCount());
+        playTone('success');
+        triggerGlobalFx('package-delivered');
+        analyticsRef.current.log('confirm', { address: match.address });
+      } else {
+         // Fallback if route data is stale (prevents "Unknown" ghost packages)
+         console.error('Stop matched by Brain but not found in Route state', match.stopId);
+         playTone('error');
+      }
+
+      // Reset loop
+      const resetTimer = setTimeout(() => {
+          dispatch({ type: 'RESET' });
+          // Explicitly restart mic if we are supposed to be running
+          if (shouldRestart.current) start();
+      }, 1200);
+      
+      return () => clearTimeout(resetTimer);
+    }
+  }, [state, route, dispatchRedux, speak, playTone, triggerGlobalFx, start, stop]);
 
   // Auto-Reset Error
   useEffect(() => {
     if (state.mode === 'error') {
-        const t = setTimeout(() => dispatch({ type: 'RESET' }), 2000);
+        const t = setTimeout(() => {
+            dispatch({ type: 'RESET' });
+            if (shouldRestart.current) start();
+        }, 2000);
         return () => clearTimeout(t);
     }
-  }, [state.mode]);
+  }, [state.mode, start]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm touch-none overflow-hidden">
@@ -262,6 +300,16 @@ export const VoiceLoadHUD: React.FC = () => {
                              </div>
                         </motion.div>
                     )}
+                    {/* Added Success Message for Visual Feedback */}
+                    {state.mode === 'success' && (
+                        <motion.div
+                            key="success"
+                            initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1.1 }}
+                            className="text-center font-bold text-success text-2xl uppercase tracking-widest"
+                        >
+                            LOADED
+                        </motion.div>
+                    )}
                 </AnimatePresence>
             </div>
         </div>
@@ -274,7 +322,6 @@ export const VoiceLoadHUD: React.FC = () => {
              >
                 {ui.undo}
              </button>
-             {/* 3. UPDATE STOP BUTTON LOGIC */}
              <button 
                 onClick={() => state.mode === 'listening' ? handleManualStop() : handleSystemStart()}
                 className={`py-4 border transition-colors uppercase font-bold tracking-widest text-sm ${isCyberpunk ? (state.mode === 'listening' ? 'border-brand text-brand hover:bg-brand hover:text-black' : 'border-muted text-muted') : (state.mode === 'listening' ? 'bg-brand text-brand-foreground border-transparent rounded-lg' : 'bg-muted text-muted-foreground border-transparent rounded-lg')}`}

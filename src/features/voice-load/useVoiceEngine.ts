@@ -33,7 +33,6 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const callbacksRef = useRef(config);
   
-  // Track if we are intentionally speaking via TTS to prevent auto-restart loops
   const isSpeakingRef = useRef(false);
 
   useEffect(() => { callbacksRef.current = config; }, [config]);
@@ -56,7 +55,6 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     rec.maxAlternatives = 1;
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
-      // Block input if we are currently speaking (Double safety)
       if (isSpeakingRef.current) return;
 
       let final = '', interim = '';
@@ -68,14 +66,12 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     };
 
     rec.onerror = (e: SpeechRecognitionErrorEvent) => {
-        // Ignore errors if we are speaking
         if (isSpeakingRef.current) return;
         callbacksRef.current.onError?.(e.error || 'Unknown error');
     };
     
     rec.onstart = () => callbacksRef.current.onStart?.();
     rec.onend = () => {
-        // Only trigger onEnd if we aren't handling the restart logic ourselves via speak()
         if (!isSpeakingRef.current) {
             callbacksRef.current.onEnd?.();
         }
@@ -100,7 +96,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   }, []);
 
   const start = useCallback(() => {
-     if (isSpeakingRef.current) return; // Don't start if speaking
+     if (isSpeakingRef.current) return;
      try { 
         if (audioCtxRef.current?.state === 'suspended') {
             audioCtxRef.current.resume();
@@ -116,20 +112,31 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       }
   }, []);
 
-  // UPDATED: Now accepts onComplete callback
+  // NEW: Hard kill switch
+  const cancelAll = useCallback(() => {
+      // 1. Kill Mic
+      recognitionRef.current?.abort();
+      // 2. Kill Speech
+      if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+      }
+      isSpeakingRef.current = false; // Reset flag
+      // 3. Suspend Audio
+      if (audioCtxRef.current?.state === 'running') {
+          audioCtxRef.current.suspend();
+      }
+  }, []);
+
   const speak = useCallback((text: string, onComplete?: () => void) => {
     if (!('speechSynthesis' in window)) {
         onComplete?.();
         return;
     }
 
-    // 1. Set Flag
     isSpeakingRef.current = true;
-
-    // 2. Kill Mic immediately
     recognitionRef.current?.abort();
-
     window.speechSynthesis.cancel();
+    
     const utter = new window.SpeechSynthesisUtterance(text);
     utter.rate = 1.1;
     
@@ -156,6 +163,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     
     o.type = type === 'error' ? 'sawtooth' : 'sine';
     
+    // ... (Tone logic unchanged)
     switch (type) {
       case 'success': 
         o.frequency.setValueAtTime(880, ctx.currentTime);
@@ -182,5 +190,5 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     o.stop(ctx.currentTime + 0.5);
   }, []);
 
-  return { start, stop, speak, playTone, unlockAudio };
+  return { start, stop, cancelAll, speak, playTone, unlockAudio };
 }

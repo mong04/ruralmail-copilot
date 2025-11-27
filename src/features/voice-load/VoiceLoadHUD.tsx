@@ -9,10 +9,11 @@ import { RouteBrain } from '../package-management/utils/RouteBrain';
 import type { Stop } from '../../db';
 import { VoiceSessionAnalytics } from './VoiceSessionAnalytics';
 import { NeuralCore } from './components/NeuralCore';
+import { toast } from 'sonner';
 
 const initial = { mode: 'booting' } as const;
 
-// ... UI_TEXT constant (unchanged) ...
+// ... UI_TEXT ... (Same as before)
 const UI_TEXT = {
   default: {
     header: "Voice Loading",
@@ -51,6 +52,7 @@ export const VoiceLoadHUD: React.FC = () => {
   const dispatchRedux = useAppDispatch();
   const analyticsRef = useRef(new VoiceSessionAnalytics());
   const shouldRestart = useRef(false);
+  const confirmTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useWakeLock();
   
@@ -59,6 +61,9 @@ export const VoiceLoadHUD: React.FC = () => {
   const isCyberpunk = theme === 'cyberpunk' && richThemingEnabled;
   const ui = isCyberpunk ? UI_TEXT.cyberpunk : UI_TEXT.default;
   const variant = isCyberpunk ? 'cyberpunk' : 'professional';
+
+  // Helper to determine if the system is currently "active"
+  const isSystemActive = ['listening', 'processing', 'confirming', 'success'].includes(state.mode);
 
   const triggerGlobalFx = useCallback((type: 'package-delivered' | 'error', rect?: DOMRect) => {
     if (richThemingEnabled) {
@@ -69,10 +74,22 @@ export const VoiceLoadHUD: React.FC = () => {
     }
   }, [richThemingEnabled]);
 
-  const { start, stop, speak, playTone, unlockAudio } = useVoiceEngine({
+  const { start, stop, cancelAll, speak, playTone, unlockAudio } = useVoiceEngine({
     onTranscript: (final, interim) => {
       if (final) {
         analyticsRef.current.log('transcript', { transcript: final });
+        
+        // Hijack confirming state for voice commands
+        if (state.mode === 'confirming') {
+             const cmd = final.toLowerCase().trim();
+             if (/^(stop|no|wrong|wait|cancel)/.test(cmd)) {
+                 if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+                 playTone('error');
+                 speak('Cancelled.');
+                 dispatch({ type: 'RESET' });
+                 return;
+             }
+        }
         dispatch({ type: 'TRANSCRIPT', transcript: final, interim: '' });
       }
       else if (interim.length > 0) dispatch({ type: 'TRANSCRIPT', transcript: '', interim });
@@ -81,14 +98,12 @@ export const VoiceLoadHUD: React.FC = () => {
       if (!shouldRestart.current) return;
       if (err !== 'no-speech') {
         analyticsRef.current.log('error', { error: err });
+        if (typeof err === 'string' && err.includes('aborted')) return; 
         dispatch({ type: 'ERROR', error: typeof err === 'string' ? err : 'Signal Lost' });
       }
     },
     onStart: () => {},
     onEnd: () => {
-       // Only auto-restart if we aren't handling it manually (e.g. during TTS)
-       // useVoiceEngine's internal isSpeakingRef handles the heavy lifting, 
-       // but we double check our intent here.
        if (shouldRestart.current && (state.mode === 'listening' || state.mode === 'processing')) {
          start();
        }
@@ -106,9 +121,12 @@ export const VoiceLoadHUD: React.FC = () => {
 
   const handleManualStop = () => {
     shouldRestart.current = false;
-    stop();
+    cancelAll(); // Kills Mic AND Speech Synthesis immediately
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
     dispatch({ type: 'PAUSE' });
   };
+
+  const getShortAddress = (fullAddress: string) => fullAddress.split(',')[0].trim();
 
   // Processing Loop
   useEffect(() => {
@@ -119,9 +137,7 @@ export const VoiceLoadHUD: React.FC = () => {
         if (/^(undo|delete|revert)/.test(t)) {
           dispatchRedux(removeLastPackage());
           playTone('error');
-          speak('Unit removed.', () => {
-             // Optional: restart mic here if needed, but state reset handles it
-          });
+          speak('Removed.');
           triggerGlobalFx('error');
           analyticsRef.current.log('undo');
           dispatch({ type: 'RESET' });
@@ -142,64 +158,60 @@ export const VoiceLoadHUD: React.FC = () => {
            analyticsRef.current.log('match', { match });
            dispatch({ type: 'MATCH', match });
         } else {
-           playTone('error');
-           triggerGlobalFx('error');
-           speak('No target identified.', () => {
-               // Resume listening after error message
-               if (shouldRestart.current) start();
-           });
+           if (t.length > 4) {
+               playTone('error');
+               triggerGlobalFx('error');
+               speak('No match.');
+           }
            analyticsRef.current.log('fail_match', { transcript: state.transcript });
-           dispatch({ type: 'ERROR', error: 'TARGET_UNKNOWN' });
+           dispatch({ type: 'ERROR', error: 'UNKNOWN' });
         }
       }
     };
     process();
-  }, [state, brain, dispatchRedux, playTone, speak, triggerGlobalFx, start]); 
+  }, [state, brain, dispatchRedux, playTone, speak, triggerGlobalFx]); 
 
-  // Confirm & Execute
+  // Confirmation & Success Loop
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    
-    // 1. CONFIRMATION PHASE (Stop Mic -> Speak -> Wait -> Next State)
+    // CONFIRMING
     if (state.mode === 'confirming') {
       const { address, extractedDetails } = state.match;
-      const text = `${extractedDetails.size !== 'medium' ? extractedDetails.size : ''} ${extractedDetails.priority ? 'priority' : ''} for ${address}`;
+      const shortAddress = getShortAddress(address);
+      const sizeText = extractedDetails.size !== 'medium' ? extractedDetails.size : '';
+      const priorityText = extractedDetails.priority ? 'priority' : '';
+      const text = `${sizeText} ${priorityText} ${shortAddress}`.trim();
       
-      // A. Stop mic to prevent feedback loop
-      stop(); 
+      stop(); // Stop listening while speaking
 
-      // B. Speak text, then start timer for auto-confirm
       speak(text, () => {
-          // Callback fires when TTS ends. 
-          // We do NOT restart the mic here immediately because we want to give the user 
-          // a brief moment of silence or visual feedback before auto-confirming.
-          // OR: We could restart mic here to listen for "UNDO".
-          // For now, let's keep it simple: Auto-confirm after delay.
-          
-          timer = setTimeout(() => {
-             dispatch({ type: 'CONFIRM' });
-          }, 1500); // 1.5s delay after speaking finishes
+          // Only resume if user hasn't cancelled/stopped in the meantime
+          if (shouldRestart.current) {
+              start();
+              confirmTimerRef.current = setTimeout(() => {
+                 dispatch({ type: 'CONFIRM' });
+              }, 1500); 
+          }
       });
       
-      return () => clearTimeout(timer);
+      return () => {
+          if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+      };
     }
     
-    // 2. SUCCESS PHASE (Data Dispatch)
+    // SUCCESS
     if (state.mode === 'success' && 'match' in state) {
       const { match } = state;
+      const targetStop = route.find(s => s.id === match.stopId);
+      const targetIndex = route.findIndex(s => s.id === match.stopId);
 
-      // DATA FIX: Re-verify the stop exists in the current route to get precise Index
-      const stopIndex = route.findIndex(s => s.id === match.stopId);
-      const stopData = route[stopIndex];
-
-      if (stopIndex !== -1 && stopData) {
+      if (targetStop && targetIndex !== -1) {
         dispatchRedux(addPackage({
           id: crypto.randomUUID(),
           size: match.extractedDetails.size,
           notes: match.combinedNotes.join(', '),
-          assignedStopId: stopData.id, // Use ID from fresh lookup
-          assignedStopNumber: stopIndex + 1, // Ensure 1-based index
-          assignedAddress: stopData.full_address || stopData.address_line1,
+          assignedStopId: targetStop.id, 
+          assignedStopNumber: targetIndex + 1, 
+          assignedAddress: targetStop.full_address || targetStop.address_line1,
           delivered: false,
         }));
         
@@ -208,29 +220,26 @@ export const VoiceLoadHUD: React.FC = () => {
         triggerGlobalFx('package-delivered');
         analyticsRef.current.log('confirm', { address: match.address });
       } else {
-         // Fallback if route data is stale (prevents "Unknown" ghost packages)
-         console.error('Stop matched by Brain but not found in Route state', match.stopId);
+         console.error('Stop matched but not found in Route', match.stopId);
+         toast.error("Stop not found in route.");
          playTone('error');
       }
 
-      // Reset loop
       const resetTimer = setTimeout(() => {
           dispatch({ type: 'RESET' });
-          // Explicitly restart mic if we are supposed to be running
-          if (shouldRestart.current) start();
       }, 1200);
       
       return () => clearTimeout(resetTimer);
     }
   }, [state, route, dispatchRedux, speak, playTone, triggerGlobalFx, start, stop]);
 
-  // Auto-Reset Error
+  // Error Loop
   useEffect(() => {
     if (state.mode === 'error') {
         const t = setTimeout(() => {
             dispatch({ type: 'RESET' });
             if (shouldRestart.current) start();
-        }, 2000);
+        }, 1500);
         return () => clearTimeout(t);
     }
   }, [state.mode, start]);
@@ -239,7 +248,7 @@ export const VoiceLoadHUD: React.FC = () => {
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm touch-none overflow-hidden">
       
       <div className="absolute top-0 left-0 w-full p-4 border-b border-border bg-surface/80 flex justify-between items-center">
-        <h2 className={`text-xl m-0 p-0 mb-0! border-0! ${isCyberpunk ? '' : 'font-sans font-bold normal-case tracking-normal'}`} data-text={ui.header}>
+        <h2 className={`text-xl m-0 p-0 !mb-0 !border-0 ${isCyberpunk ? '' : 'font-sans font-bold normal-case tracking-normal'}`} data-text={ui.header}>
             {ui.header}
         </h2>
         
@@ -252,7 +261,6 @@ export const VoiceLoadHUD: React.FC = () => {
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center w-full max-w-lg p-6 relative">
-        
         <div className={`w-full flex flex-col items-center py-12 mb-8 relative overflow-hidden transition-all duration-300 ${isCyberpunk ? 'cyber-card border-brand/30 hover:border-brand' : 'bg-surface border border-border rounded-2xl shadow-xl'}`}>
             <NeuralCore mode={state.mode} variant={variant} />
             
@@ -296,11 +304,10 @@ export const VoiceLoadHUD: React.FC = () => {
                         >
                              <div className="text-xs text-brand tracking-[0.2em] mb-1">{ui.targetLock}</div>
                              <div className={`text-xl font-bold text-foreground px-4 py-2 border inline-block ${isCyberpunk ? 'bg-surface/50 border-brand/50' : 'bg-surface border-border rounded'}`}>
-                                {state.match.address}
+                                {getShortAddress(state.match.address)}
                              </div>
                         </motion.div>
                     )}
-                    {/* Added Success Message for Visual Feedback */}
                     {state.mode === 'success' && (
                         <motion.div
                             key="success"
@@ -322,12 +329,16 @@ export const VoiceLoadHUD: React.FC = () => {
              >
                 {ui.undo}
              </button>
+             {/* BUTTON LOGIC FIX:
+                 If system is active (listening, confirming, success, processing), show STOP and call handleManualStop.
+                 Otherwise show RECONNECT.
+             */}
              <button 
-                onClick={() => state.mode === 'listening' ? handleManualStop() : handleSystemStart()}
-                className={`py-4 border transition-colors uppercase font-bold tracking-widest text-sm ${isCyberpunk ? (state.mode === 'listening' ? 'border-brand text-brand hover:bg-brand hover:text-black' : 'border-muted text-muted') : (state.mode === 'listening' ? 'bg-brand text-brand-foreground border-transparent rounded-lg' : 'bg-muted text-muted-foreground border-transparent rounded-lg')}`}
-                data-text={state.mode === 'listening' ? ui.stop : ui.reconnect}
+                onClick={() => isSystemActive ? handleManualStop() : handleSystemStart()}
+                className={`py-4 border transition-colors uppercase font-bold tracking-widest text-sm ${isCyberpunk ? (isSystemActive ? 'border-brand text-brand hover:bg-brand hover:text-black' : 'border-muted text-muted') : (isSystemActive ? 'bg-brand text-brand-foreground border-transparent rounded-lg' : 'bg-muted text-muted-foreground border-transparent rounded-lg')}`}
+                data-text={isSystemActive ? ui.stop : ui.reconnect}
              >
-                {state.mode === 'listening' ? ui.stop : ui.reconnect}
+                {isSystemActive ? ui.stop : ui.reconnect}
              </button>
         </div>
       </div>

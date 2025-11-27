@@ -26,14 +26,13 @@ export interface VoiceEngineConfig {
   onError?: (err: string) => void;
   onStart?: () => void;
   onEnd?: () => void;
-  onDebug?: (msg: string) => void; // NEW: Debug channel
+  onDebug?: (msg: string) => void; 
 }
 
 export function useVoiceEngine(config: VoiceEngineConfig) {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   
-  // GC PREVENTION: Keep reference to active utterance so it isn't collected
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const watchdogTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -42,8 +41,8 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
 
   useEffect(() => { callbacksRef.current = config; }, [config]);
 
+  // Helper to log immediately
   const log = useCallback((msg: string) => {
-      console.log(`[VoiceEngine] ${msg}`);
       callbacksRef.current.onDebug?.(msg);
   }, []);
 
@@ -53,8 +52,8 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     const SpeechRecognitionCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
     if (!SpeechRecognitionCtor) {
-      callbacksRef.current.onError?.('Voice support missing');
       log('Error: No SpeechRecognition found');
+      callbacksRef.current.onError?.('Voice support missing');
       return;
     }
 
@@ -66,24 +65,28 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     rec.maxAlternatives = 1;
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
-      if (isSpeakingRef.current) {
-          log('Ignored result while speaking');
-          return;
-      }
+      if (isSpeakingRef.current) return;
 
       let final = '', interim = '';
       for (let i = e.resultIndex; i < e.results.length; ++i) {
         if (e.results[i].isFinal) final += e.results[i][0].transcript;
         else interim += e.results[i][0].transcript;
       }
+      
+      // LOGGING UPDATE: Only log FINAL transcripts to reduce spam
+      if (final) {
+          // Log handled in parent or here if preferred, keeping it quiet here
+      }
+      
       callbacksRef.current.onTranscript?.(final, interim);
     };
 
     rec.onerror = (e: SpeechRecognitionErrorEvent) => {
         if (isSpeakingRef.current) return;
-        // Don't log "no-speech" or "aborted" as errors, just info
+        
+        // Filter out noise logs completely
         if (e.error === 'no-speech' || e.error === 'aborted') {
-            // log(`Mic status: ${e.error}`); 
+             // Silently ignore
         } else {
             log(`Mic Error: ${e.error}`);
             callbacksRef.current.onError?.(e.error || 'Unknown error');
@@ -91,13 +94,13 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     };
     
     rec.onstart = () => {
-        log('Mic Started (Hardware Active)');
+        log('Mic Hardware: Active');
         callbacksRef.current.onStart?.();
     };
     
     rec.onend = () => {
         if (!isSpeakingRef.current) {
-            log('Mic Ended (Hardware Idle)');
+            // log('Mic Hardware: Idle'); // Optional: Comment out to reduce noise further
             callbacksRef.current.onEnd?.();
         }
     };
@@ -116,34 +119,29 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         audioCtxRef.current = new window.AudioContext();
     }
     if (audioCtxRef.current.state === 'suspended') {
-      log('Unlocking AudioContext...');
+      // log('AudioCtx: Resuming...'); // Too verbose
       await audioCtxRef.current.resume();
-      log('AudioContext Resumed');
     }
-  }, [log]);
+  }, []); // Removed log dep to prevent spam
 
   const start = useCallback(() => {
-     if (isSpeakingRef.current) {
-         log('Start ignored: Currently Speaking');
-         return;
-     }
+     if (isSpeakingRef.current) return;
      try { 
         if (audioCtxRef.current?.state === 'suspended') {
             audioCtxRef.current.resume();
         }
-        log('Requesting Mic Start...');
+        // log('Mic: Requesting Start...'); // Too verbose
         recognitionRef.current?.start(); 
     } catch (e: unknown) { 
-        // ignore already started errors, but log others
         const err = e instanceof Error ? e.message : String(e);
         if (!err.includes('already started')) {
-            log(`Start Failed: ${err}`);
+            log(`Mic Start Failed: ${err}`);
         }
     }
   }, [log]);
   
   const stop = useCallback(() => {
-      log('Stopping Mic...');
+      log('Mic: Stop Command');
       recognitionRef.current?.abort();
       if (audioCtxRef.current?.state === 'running') {
           audioCtxRef.current.suspend();
@@ -151,14 +149,18 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   }, [log]);
 
   const cancelAll = useCallback(() => {
-      log('CANCEL ALL triggered');
+      log('System: CANCEL ALL');
+      
       recognitionRef.current?.abort();
+      
       if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
       }
+      
       if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
       activeUtteranceRef.current = null;
       isSpeakingRef.current = false;
+      
       if (audioCtxRef.current?.state === 'running') {
           audioCtxRef.current.suspend();
       }
@@ -166,22 +168,21 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
 
   const speak = useCallback((text: string, onComplete?: () => void) => {
     if (!('speechSynthesis' in window)) {
-        log('TTS missing, skipping');
         onComplete?.();
         return;
     }
 
-    log(`Speaking: "${text}"`);
+    log(`TTS: "${text}"`);
     isSpeakingRef.current = true;
+    
     recognitionRef.current?.abort();
     window.speechSynthesis.cancel();
     
     if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
 
     const utter = new window.SpeechSynthesisUtterance(text);
-    utter.rate = 1.1;
+    utter.rate = 1.1; 
     
-    // ANCHOR: Prevent GC
     activeUtteranceRef.current = utter;
 
     const cleanup = () => {
@@ -191,7 +192,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     };
 
     utter.onend = () => {
-        log('TTS Ended (Event)');
+        // log('TTS: Finished'); // Too verbose
         cleanup();
         onComplete?.();
     };
@@ -202,12 +203,10 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         onComplete?.();
     };
 
-    // WATCHDOG: If TTS hangs (common on Android/iOS), force completion
-    // Estimate: 100ms per character + 1s buffer
-    const timeout = (text.length * 100) + 2000;
+    const timeout = (text.length * 100) + 1000;
     watchdogTimerRef.current = setTimeout(() => {
         if (isSpeakingRef.current) {
-            log('TTS Watchdog Timeout - Forcing continue');
+            log('TTS: Watchdog Timeout');
             window.speechSynthesis.cancel();
             cleanup();
             onComplete?.();
@@ -220,6 +219,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const playTone = useCallback((type: 'success' | 'error' | 'start' | 'alert') => {
     if (!audioCtxRef.current) return;
     const ctx = audioCtxRef.current;
+    
     if (ctx.state === 'suspended') ctx.resume();
 
     const o = ctx.createOscillator();

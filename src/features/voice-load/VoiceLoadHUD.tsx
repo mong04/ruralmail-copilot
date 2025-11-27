@@ -1,4 +1,4 @@
-import React, { useReducer, useEffect, useRef, useMemo, useCallback, useState } from 'react';
+import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { voiceLoadReducer, type MatchResult } from './VoiceLoadMachine';
 import { useVoiceEngine } from './useVoiceEngine';
@@ -9,11 +9,12 @@ import { RouteBrain } from '../package-management/utils/RouteBrain';
 import type { Stop } from '../../db';
 import { VoiceSessionAnalytics } from './VoiceSessionAnalytics';
 import { NeuralCore } from './components/NeuralCore';
+import { CyberpunkTerminal } from './components/CyberpunkTerminal';
 import { toast } from 'sonner';
 
 const initial = { mode: 'booting' } as const;
 
-// ... UI_TEXT ... (Same as before)
+// ... UI_TEXT (same) ...
 const UI_TEXT = {
   default: {
     header: "Voice Loading",
@@ -52,12 +53,20 @@ export const VoiceLoadHUD: React.FC = () => {
   const dispatchRedux = useAppDispatch();
   const analyticsRef = useRef(new VoiceSessionAnalytics());
   const shouldRestart = useRef(false);
+  
+  // Timeout Refs (Critical for Stop Logic)
   const confirmTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const resumeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // DEBUG STATE
-  const [logs, setLogs] = useState<string[]>([]);
+  // LOGGING
+  const logsRef = useRef<string[]>([]);
   const addLog = useCallback((msg: string) => {
-      setLogs(prev => [...prev.slice(-4), msg]); // Keep last 5
+      // Dedup: Don't add if identical to last log (prevents spam)
+      const last = logsRef.current[logsRef.current.length - 1];
+      if (last === msg) return;
+      
+      logsRef.current.push(msg);
+      if (logsRef.current.length > 50) logsRef.current.shift();
   }, []);
 
   useWakeLock();
@@ -79,10 +88,10 @@ export const VoiceLoadHUD: React.FC = () => {
   }, [richThemingEnabled]);
 
   const { start, stop, cancelAll, speak, playTone, unlockAudio } = useVoiceEngine({
-    onDebug: addLog, // Hook up logger
+    onDebug: addLog, 
     onTranscript: (final, interim) => {
       if (final) {
-        analyticsRef.current.log('transcript', { transcript: final });
+        addLog(`>> ${final}`); // Only log final transcripts
         
         if (state.mode === 'confirming') {
              const cmd = final.toLowerCase().trim();
@@ -103,15 +112,12 @@ export const VoiceLoadHUD: React.FC = () => {
       if (err !== 'no-speech') {
         analyticsRef.current.log('error', { error: err });
         if (typeof err === 'string' && err.includes('aborted')) return; 
-        
-        // Explicitly toast errors on mobile to debug
-        toast.error(`Mic Error: ${err}`);
         dispatch({ type: 'ERROR', error: typeof err === 'string' ? err : 'Signal Lost' });
       }
     },
     onStart: () => {
-        // Only start the confirmation timer if the HARDWARE actually started
         if (state.mode === 'confirming') {
+            addLog('Confirm: Mic Active. Timer Started.');
             if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
             confirmTimerRef.current = setTimeout(() => {
                 dispatch({ type: 'CONFIRM' });
@@ -135,9 +141,18 @@ export const VoiceLoadHUD: React.FC = () => {
   };
 
   const handleManualStop = () => {
+    addLog('MANUAL STOP TRIGGERED');
     shouldRestart.current = false;
-    cancelAll(); 
+    
+    // 1. Clear any pending restarts
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
+    
+    // 2. Clear confirmation timer
     if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    
+    // 3. Kill everything
+    cancelAll();
+    
     dispatch({ type: 'PAUSE' });
   };
 
@@ -199,20 +214,21 @@ export const VoiceLoadHUD: React.FC = () => {
 
       speak(text, () => {
           if (shouldRestart.current) {
-              // Ensure audio context is ready before mic request
               unlockAudio(); 
               
-              // 200ms delay for Audio Layer handoff (Output -> Input)
-              setTimeout(() => {
+              // 300ms Buffer (Stored in Ref so we can kill it on Stop)
+              resumeTimeoutRef.current = setTimeout(() => {
                  if (shouldRestart.current) {
+                    addLog('Buffer Done -> Start Mic');
                     start();
                  }
-              }, 200);
+              }, 300);
           }
       });
       
       return () => {
           if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+          if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
       };
     }
     
@@ -235,9 +251,10 @@ export const VoiceLoadHUD: React.FC = () => {
         dispatchRedux(incrementLoadCount());
         playTone('success');
         triggerGlobalFx('package-delivered');
+        addLog(`SUCCESS: ${match.address}`);
         analyticsRef.current.log('confirm', { address: match.address });
       } else {
-         console.error('[CRITICAL] Brain ID mismatch.', match.stopId);
+         addLog(`CRITICAL: Stop ID ${match.stopId} not found`);
          toast.error("Error: Matched stop is no longer in the route.");
          playTone('error');
       }
@@ -248,7 +265,7 @@ export const VoiceLoadHUD: React.FC = () => {
       
       return () => clearTimeout(resetTimer);
     }
-  }, [state, route, dispatchRedux, speak, playTone, triggerGlobalFx, start, stop, unlockAudio]);
+  }, [state, route, dispatchRedux, speak, playTone, triggerGlobalFx, start, stop, unlockAudio, addLog]);
 
   // Error Loop
   useEffect(() => {
@@ -356,10 +373,7 @@ export const VoiceLoadHUD: React.FC = () => {
         </div>
       </div>
       
-      {/* DEBUG TERMINAL OVERLAY */}
-      <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[10px] text-green-400 p-2 font-mono h-24 overflow-y-auto pointer-events-none z-100">
-        {logs.map((l, i) => <div key={i}>{l}</div>)}
-      </div>
+      {isCyberpunk && <CyberpunkTerminal logsRef={logsRef} onClear={() => logsRef.current = []} />}
 
     </div>
   );

@@ -3,7 +3,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useAppSelector } from "../../../store";
 import { useEffect, useState } from "react";
 
-import { Scanlines } from "./effects/Scanlines";
+// import { Scanlines } from "./effects/Scanlines";
 // import { ChromaticAberration } from "./effects/ChromaticAberration";
 import { NeonGrid } from "./effects/NeonGrid";
 import { GlobalGlow } from "./effects/GlobalGlow";
@@ -108,7 +108,7 @@ export default function CyberpunkOverlay() {
         // background: "rgba(10, 0, 30, 0.92)",
       }}
     >
-      <Scanlines intensity={intensity} />
+      {/* <Scanlines intensity={intensity} /> */}
       {/* <ChromaticAberration intensity={intensity} /> */}
       <NeonGrid  />
       <GlobalGlow  />

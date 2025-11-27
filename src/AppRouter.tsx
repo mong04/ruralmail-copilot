@@ -6,7 +6,7 @@ import Settings from './features/settings/Settings';
 import Packages from './features/package-management/views/Packages';
 import Delivery from './features/delivery-hud/Delivery';
 import BottomNavLayout from './components/layout/BottomNavLayout';
-import { LoadTruck } from './features/package-management/views/LoadTruck';
+import LoadTruck  from './features/package-management/views/LoadTruck';
 
 export const router = createHashRouter([
   {

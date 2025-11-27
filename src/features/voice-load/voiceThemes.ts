@@ -1,0 +1,36 @@
+// voiceThemes.ts
+// Theme tokens for voice/motion/audio feedback
+export const voiceThemes = {
+  default: {
+    brand: 'var(--brand)',
+    background: 'var(--background)',
+    foreground: 'var(--foreground)',
+    success: 'var(--success)',
+    danger: 'var(--danger)',
+    border: 'var(--border)',
+    font: 'var(--font-sans)',
+    ring: 'var(--ring)',
+    shadow: 'var(--shadow-xl)',
+    mic: '🎤',
+    box: '📦',
+    check: '✅',
+    error: '⚠️',
+    loading: '⏳',
+  },
+  cyberpunk: {
+    brand: '#00ffe7',
+    background: '#0f0c29',
+    foreground: '#fff',
+    success: '#00ff99',
+    danger: '#ff0055',
+    border: '#00ffe7',
+    font: 'Orbitron, sans-serif',
+    ring: '0 0 0 4px #00ffe7',
+    shadow: '0 0 32px #00ffe7',
+    mic: '🎤',
+    box: '📦',
+    check: '✅',
+    error: '⚠️',
+    loading: '⏳',
+  },
+};

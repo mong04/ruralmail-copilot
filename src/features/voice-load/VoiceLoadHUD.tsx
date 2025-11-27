@@ -44,7 +44,6 @@ const UI_TEXT = {
 
 export const VoiceLoadHUD: React.FC = () => {
   const [state, dispatch] = useReducer(voiceLoadReducer, initial);
-  // Get latest route from Redux (Live Source of Truth)
   const route = useAppSelector((s) => s.route.route as Stop[]);
   const theme = useAppSelector((s) => s.settings.theme);
   const richThemingEnabled = useAppSelector((s) => s.settings.richThemingEnabled);
@@ -56,7 +55,6 @@ export const VoiceLoadHUD: React.FC = () => {
 
   useWakeLock();
   
-  // RouteBrain needs to be rebuilt if route changes to ensure IDs are fresh
   const brain = useMemo(() => new RouteBrain(route), [route]);
   
   const isCyberpunk = theme === 'cyberpunk' && richThemingEnabled;
@@ -78,7 +76,6 @@ export const VoiceLoadHUD: React.FC = () => {
       if (final) {
         analyticsRef.current.log('transcript', { transcript: final });
         
-        // HIJACK: Check for Stop commands during confirmation
         if (state.mode === 'confirming') {
              const cmd = final.toLowerCase().trim();
              if (/^(stop|no|wrong|wait|cancel)/.test(cmd)) {
@@ -101,13 +98,9 @@ export const VoiceLoadHUD: React.FC = () => {
         dispatch({ type: 'ERROR', error: typeof err === 'string' ? err : 'Signal Lost' });
       }
     },
-    // CRITICAL: This is where we start the timer. 
-    // We ONLY count down once the hardware is actually listening.
     onStart: () => {
         if (state.mode === 'confirming') {
-            // Check if timer is already running to avoid dupes
             if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
-            
             confirmTimerRef.current = setTimeout(() => {
                 dispatch({ type: 'CONFIRM' });
             }, 1500);
@@ -191,14 +184,20 @@ export const VoiceLoadHUD: React.FC = () => {
       const priorityText = extractedDetails.priority ? 'priority' : '';
       const text = `${sizeText} ${priorityText} ${shortAddress}`.trim();
       
-      stop(); // Stop listening explicitly
+      stop(); 
 
       speak(text, () => {
           // TTS Complete.
-          // Restart Mic if we are still live.
-          // Note: We do NOT start timer here. Timer starts in onStart() callback.
           if (shouldRestart.current) {
-              start();
+              // FIX: Ensure Audio Context is warm
+              unlockAudio();
+              
+              // FIX: Add 200ms delay to allow OS audio layer to switch from Output -> Input
+              setTimeout(() => {
+                 if (shouldRestart.current) { // Check again in case user cancelled during delay
+                    start();
+                 }
+              }, 200);
           }
       });
       
@@ -207,31 +206,19 @@ export const VoiceLoadHUD: React.FC = () => {
       };
     }
     
-    // B. SUCCESS (Add Package)
+    // B. SUCCESS
     if (state.mode === 'success' && 'match' in state) {
       const { match } = state;
-
-      // STRICT DATA LOOKUP
-      // 1. Find the exact object in the Live Route that matches the Brain's Stop ID
       const targetStop = route.find(s => s.id === match.stopId);
       
       if (targetStop) {
-        // 2. Re-calculate index based on the LIVE route array
-        // This ensures if route was shuffled, we get the current valid index
         const currentStopNumber = route.findIndex(s => s.id === targetStop.id) + 1;
-
         dispatchRedux(addPackage({
           id: crypto.randomUUID(),
           size: match.extractedDetails.size,
           notes: match.combinedNotes.join(', '),
-          
-          // STRICT ID ASSIGNMENT
           assignedStopId: targetStop.id, 
-          
-          // Live Index
           assignedStopNumber: currentStopNumber,
-          
-          // Data Copy
           assignedAddress: targetStop.full_address || targetStop.address_line1,
           delivered: false,
         }));
@@ -241,7 +228,7 @@ export const VoiceLoadHUD: React.FC = () => {
         triggerGlobalFx('package-delivered');
         analyticsRef.current.log('confirm', { address: match.address });
       } else {
-         console.error('[CRITICAL] Brain ID mismatch. Stop ID from Brain not found in current Route:', match.stopId);
+         console.error('[CRITICAL] Brain ID mismatch.', match.stopId);
          toast.error("Error: Matched stop is no longer in the route.");
          playTone('error');
       }
@@ -252,7 +239,7 @@ export const VoiceLoadHUD: React.FC = () => {
       
       return () => clearTimeout(resetTimer);
     }
-  }, [state, route, dispatchRedux, speak, playTone, triggerGlobalFx, start, stop]);
+  }, [state, route, dispatchRedux, speak, playTone, triggerGlobalFx, start, stop, unlockAudio]);
 
   // Error Loop
   useEffect(() => {

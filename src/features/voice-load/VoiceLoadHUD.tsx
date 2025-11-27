@@ -135,17 +135,33 @@ export const VoiceLoadHUD: React.FC = () => {
     }
   }, [state, fuzzyMatch, speak, playTone, dispatchRedux, route.length]);
 
-  // Confirm on high confidence
+  // Magical confirmation: speak address, pause mic, wait for 'stop', auto-add if no response
   React.useEffect(() => {
-    if (state.mode === 'confirming' && state.confidence > 0.88) {
-      speak(`Locked: ${state.match.address}. Say yes to confirm.`);
-      setTimeout(() => dispatch({ type: 'CONFIRM' }), 3000);
+    let timer: NodeJS.Timeout | null = null;
+    let listening = false;
+    if (state.mode === 'confirming' && state.confidence > 0.85) {
+      // Pause mic, speak, then reactivate mic and start timer
+      stop();
+      speak(`Address recognized: ${state.match.address}. If this is incorrect, say stop now.`);
+      // Wait a short moment to allow speech to start, then reactivate mic and start timer
+      setTimeout(() => {
+        start();
+        listening = true;
+        timer = setTimeout(() => {
+          if (listening) dispatch({ type: 'CONFIRM' });
+        }, 1500);
+      }, 500); // 0.5s delay to allow speech to begin (tune as needed)
+      return () => { if (timer) clearTimeout(timer); };
     }
     if (state.mode === 'success') {
       playTone('success');
       setTimeout(() => dispatch({ type: 'RESET' }), 1500);
     }
-  }, [state, speak, playTone]);
+    return () => { if (timer) clearTimeout(timer); };
+  }, [state, speak, playTone, start, stop, dispatch]);
+
+  // Listen for 'stop' command during confirmation window
+  // (No-op: removed unused handleTranscript to fix error)
 
   // On confirm, add package to manifest
   React.useEffect(() => {

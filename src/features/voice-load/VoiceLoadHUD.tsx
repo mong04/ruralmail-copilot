@@ -12,23 +12,65 @@ import { NeuralCore } from './components/NeuralCore';
 
 const initial = { mode: 'booting' } as const;
 
+// --- Theme Text Configuration ---
+const UI_TEXT = {
+  default: {
+    header: "Voice Loading",
+    subHeader: "Route 8 • Active",
+    live: "LIVE",
+    offline: "Ready",
+    init: "Start Listening",
+    listening: "Listening...",
+    awaiting: "Ready...",
+    targetLock: "Package Matched",
+    undo: "Undo",
+    stop: "Stop",
+    reconnect: "Resume"
+  },
+  cyberpunk: {
+    header: "VOICE_UPLINK // V2.0",
+    subHeader: "ROUTE_ID: 08",
+    live: "LIVE",
+    offline: "OFFLINE",
+    init: "Initialize System",
+    listening: "AWAITING INPUT...",
+    awaiting: "AWAITING INPUT...",
+    targetLock: "TARGET LOCK",
+    undo: "UNDO_LAST",
+    stop: "STOP_LINK",
+    reconnect: "RECONNECT"
+  }
+};
+
 export const VoiceLoadHUD: React.FC = () => {
   const [state, dispatch] = useReducer(voiceLoadReducer, initial);
   const route = useAppSelector((s) => s.route.route as Stop[]);
-  // Removed unused 'theme' selector
+  const theme = useAppSelector((s) => s.settings.theme);
+  const richThemingEnabled = useAppSelector((s) => s.settings.richThemingEnabled);
+  
   const dispatchRedux = useAppDispatch();
   const analyticsRef = useRef(new VoiceSessionAnalytics());
   
+  // 1. CIRCUIT BREAKER REF
+  // Prevents the "onEnd" handler from restarting the mic if we explicitly clicked Stop.
+  const shouldRestart = useRef(false);
+
   useWakeLock();
   
   const brain = useMemo(() => new RouteBrain(route), [route]);
   
+  const isCyberpunk = theme === 'cyberpunk' && richThemingEnabled;
+  const ui = isCyberpunk ? UI_TEXT.cyberpunk : UI_TEXT.default;
+  const variant = isCyberpunk ? 'cyberpunk' : 'professional';
+
   const triggerGlobalFx = useCallback((type: 'package-delivered' | 'error', rect?: DOMRect) => {
-    const event = new CustomEvent('ruralmail-fx', {
-      detail: { type, rect: rect || { left: window.innerWidth/2, top: window.innerHeight/2, width: 0, height: 0 } }
-    });
-    window.dispatchEvent(event);
-  }, []);
+    if (richThemingEnabled) {
+      const event = new CustomEvent('ruralmail-fx', {
+        detail: { type, rect: rect || { left: window.innerWidth/2, top: window.innerHeight/2, width: 0, height: 0 } }
+      });
+      window.dispatchEvent(event);
+    }
+  }, [richThemingEnabled]);
 
   const { start, stop, speak, playTone, unlockAudio } = useVoiceEngine({
     onTranscript: (final, interim) => {
@@ -39,6 +81,9 @@ export const VoiceLoadHUD: React.FC = () => {
       else if (interim.length > 0) dispatch({ type: 'TRANSCRIPT', transcript: '', interim });
     },
     onError: (err) => {
+      // If we intentionally stopped, ignore errors
+      if (!shouldRestart.current) return;
+
       if (err !== 'no-speech') {
         analyticsRef.current.log('error', { error: err });
         dispatch({ type: 'ERROR', error: typeof err === 'string' ? err : 'Signal Lost' });
@@ -46,21 +91,32 @@ export const VoiceLoadHUD: React.FC = () => {
     },
     onStart: () => {},
     onEnd: () => {
-       if (state.mode === 'listening' || state.mode === 'processing') start();
+       // 2. CHECK CIRCUIT BREAKER
+       // Only restart if we intend to be running AND we are in a valid state.
+       if (shouldRestart.current && (state.mode === 'listening' || state.mode === 'processing')) {
+         start();
+       }
     },
   });
 
-  const handleSystemStart = async () => {
-    await unlockAudio();
-    playTone('start');
+  const handleSystemStart = () => {
+    shouldRestart.current = true; // Enable loop
     start();
+    unlockAudio().then(() => {
+        playTone('start');
+    });
     dispatch({ type: 'BOOT' });
+  };
+
+  const handleManualStop = () => {
+    shouldRestart.current = false; // Break loop synchronously
+    stop();                        // Kill engine
+    dispatch({ type: 'PAUSE' });   // Update UI
   };
 
   // Processing Loop
   useEffect(() => {
     const process = async () => {
-      // TS Narrowing Fix: Check mode first, then access transcript
       if (state.mode === 'processing') {
         const t = state.transcript.toLowerCase().trim();
         
@@ -122,7 +178,6 @@ export const VoiceLoadHUD: React.FC = () => {
         assignedStopNumber: route.findIndex(s => s.id === match.stopId) + 1,
         assignedAddress: match.address,
         delivered: false,
-        // Removed 'isPriority'. Priority status is now handled purely via notes/tags in DB.
       }));
       dispatchRedux(incrementLoadCount());
       playTone('success');
@@ -146,19 +201,22 @@ export const VoiceLoadHUD: React.FC = () => {
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm touch-none overflow-hidden">
       
       <div className="absolute top-0 left-0 w-full p-4 border-b border-border bg-surface/80 flex justify-between items-center">
-        <h2 className="text-xl m-0 p-0 mb-0! border-0!" data-text="VOICE_UPLINK">VOICE_UPLINK // V2.0</h2>
+        <h2 className={`text-xl m-0 p-0 mb-0! border-0! ${isCyberpunk ? '' : 'font-sans font-bold normal-case tracking-normal'}`} data-text={ui.header}>
+            {ui.header}
+        </h2>
+        
         <div className="flex gap-2">
-            <span className="text-xs font-mono text-muted-foreground">ROUTE_ID: 08</span>
+            <span className="text-xs font-mono text-muted-foreground hidden sm:inline">{ui.subHeader}</span>
             <span className={`text-xs font-mono ${state.mode === 'listening' ? 'text-success animate-pulse' : 'text-danger'}`}>
-                {state.mode === 'listening' ? 'LIVE' : 'OFFLINE'}
+                {state.mode === 'listening' ? ui.live : ui.offline}
             </span>
         </div>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center w-full max-w-lg p-6 relative">
         
-        <div className="cyber-card w-full flex flex-col items-center py-12 mb-8 relative overflow-hidden transition-all duration-300 border-brand/30 hover:border-brand">
-            <NeuralCore mode={state.mode} />
+        <div className={`w-full flex flex-col items-center py-12 mb-8 relative overflow-hidden transition-all duration-300 ${isCyberpunk ? 'cyber-card border-brand/30 hover:border-brand' : 'bg-surface border border-border rounded-2xl shadow-xl'}`}>
+            <NeuralCore mode={state.mode} variant={variant} />
             
             <div className="h-16 mt-6 w-full text-center flex items-center justify-center">
                 <AnimatePresence mode="wait">
@@ -166,9 +224,18 @@ export const VoiceLoadHUD: React.FC = () => {
                         <motion.button
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                             onClick={handleSystemStart}
-                            className="bg-brand text-black px-8 py-4 font-bold tracking-widest uppercase clip-path-polygon hover:scale-105 active:scale-95 transition-transform"
+                            className={`px-8 py-4 font-bold tracking-widest uppercase transition-transform hover:scale-105 active:scale-95 ${isCyberpunk ? 'bg-brand text-black clip-path-polygon' : 'bg-brand text-brand-foreground rounded-lg shadow-lg'}`}
                         >
-                            Initialize System
+                            {ui.init}
+                        </motion.button>
+                    )}
+                    {state.mode === 'paused' && (
+                         <motion.button
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                            onClick={handleSystemStart}
+                            className={`px-8 py-4 font-bold tracking-widest uppercase transition-transform hover:scale-105 active:scale-95 ${isCyberpunk ? 'bg-muted text-brand clip-path-polygon border border-brand' : 'bg-surface text-foreground border border-border rounded-lg shadow-sm'}`}
+                        >
+                            {ui.reconnect}
                         </motion.button>
                     )}
                     {state.mode === 'listening' && (
@@ -177,7 +244,10 @@ export const VoiceLoadHUD: React.FC = () => {
                             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
                             className="text-2xl font-mono text-muted-foreground"
                         >
-                            {('interim' in state && state.interim) ? <span className="text-foreground glitch-text">{state.interim}</span> : "AWAITING INPUT..."}
+                            {('interim' in state && state.interim) ? 
+                                <span className={`text-foreground ${isCyberpunk ? 'glitch-text' : ''}`}>{state.interim}</span> 
+                                : ui.listening
+                            }
                         </motion.p>
                     )}
                     {state.mode === 'confirming' && 'match' in state && (
@@ -186,8 +256,8 @@ export const VoiceLoadHUD: React.FC = () => {
                             initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                             className="text-center"
                         >
-                             <div className="text-xs text-brand tracking-[0.2em] mb-1">TARGET LOCK</div>
-                             <div className="text-xl font-bold text-foreground bg-surface/50 px-4 py-2 border border-brand/50 inline-block">
+                             <div className="text-xs text-brand tracking-[0.2em] mb-1">{ui.targetLock}</div>
+                             <div className={`text-xl font-bold text-foreground px-4 py-2 border inline-block ${isCyberpunk ? 'bg-surface/50 border-brand/50' : 'bg-surface border-border rounded'}`}>
                                 {state.match.address}
                              </div>
                         </motion.div>
@@ -199,17 +269,18 @@ export const VoiceLoadHUD: React.FC = () => {
         <div className="w-full grid grid-cols-2 gap-4">
              <button 
                 onClick={() => dispatchRedux(removeLastPackage())}
-                className="py-4 border border-danger/50 text-danger hover:bg-danger hover:text-white transition-colors uppercase font-bold tracking-widest text-sm"
-                data-text="UNDO_LAST"
+                className={`py-4 border transition-colors uppercase font-bold tracking-widest text-sm ${isCyberpunk ? 'border-danger/50 text-danger hover:bg-danger hover:text-white' : 'border-border bg-background text-danger hover:bg-danger/10 rounded-lg'}`}
+                data-text={ui.undo}
              >
-                UNDO_LAST
+                {ui.undo}
              </button>
+             {/* 3. UPDATE STOP BUTTON LOGIC */}
              <button 
-                onClick={() => state.mode === 'listening' ? stop() : handleSystemStart()}
-                className={`py-4 border transition-colors uppercase font-bold tracking-widest text-sm ${state.mode === 'listening' ? 'border-brand text-brand hover:bg-brand hover:text-black' : 'border-muted text-muted'}`}
-                data-text={state.mode === 'listening' ? "STOP_LINK" : "RECONNECT"}
+                onClick={() => state.mode === 'listening' ? handleManualStop() : handleSystemStart()}
+                className={`py-4 border transition-colors uppercase font-bold tracking-widest text-sm ${isCyberpunk ? (state.mode === 'listening' ? 'border-brand text-brand hover:bg-brand hover:text-black' : 'border-muted text-muted') : (state.mode === 'listening' ? 'bg-brand text-brand-foreground border-transparent rounded-lg' : 'bg-muted text-muted-foreground border-transparent rounded-lg')}`}
+                data-text={state.mode === 'listening' ? ui.stop : ui.reconnect}
              >
-                {state.mode === 'listening' ? "STOP_LINK" : "RECONNECT"}
+                {state.mode === 'listening' ? ui.stop : ui.reconnect}
              </button>
         </div>
       </div>

@@ -23,6 +23,8 @@ export function createFuzzyMatcher(stops: Stop[]) {
       address: item.address_line1,
       confidence: 1 - (score ?? 1),
       notes: item.notes ? [item.notes] : [],
+      combinedNotes: item.notes ? [item.notes] : [],
+      extractedDetails: { size: 'small', notes: [], priority: false },
     }));
   };
 }

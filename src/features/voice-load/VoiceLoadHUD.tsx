@@ -1,271 +1,217 @@
-// VoiceLoadHUD.tsx
-// Main UI for magical, hands-free package loading
-import React, { useReducer, useRef } from 'react';
-import { voiceLoadReducer } from './VoiceLoadMachine';
-import type { VoiceLoadState } from './VoiceLoadMachine';
+import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { voiceLoadReducer, type MatchResult } from './VoiceLoadMachine';
 import { useVoiceEngine } from './useVoiceEngine';
+import { useWakeLock } from '../../hooks/useWakeLock';
 import { useAppSelector, useAppDispatch } from '../../store';
 import { addPackage, incrementLoadCount, removeLastPackage } from '../package-management/store/packageSlice';
-import { createFuzzyMatcher } from './fuzzyMatch';
-import type { Stop, Package } from '../../db';
+import { RouteBrain } from '../package-management/utils/RouteBrain';
+import type { Stop } from '../../db';
 import { VoiceSessionAnalytics } from './VoiceSessionAnalytics';
+import { NeuralCore } from './components/NeuralCore';
 
-const initial: VoiceLoadState = { mode: 'booting' };
+const initial = { mode: 'booting' } as const;
 
 export const VoiceLoadHUD: React.FC = () => {
   const [state, dispatch] = useReducer(voiceLoadReducer, initial);
-  const interimRef = useRef('');
   const route = useAppSelector((s) => s.route.route as Stop[]);
+  // Removed unused 'theme' selector
   const dispatchRedux = useAppDispatch();
-  const fuzzyMatch = React.useMemo(() => createFuzzyMatcher(route), [route]);
-  const analyticsRef = React.useRef(new VoiceSessionAnalytics());
-  // For debugging: show last matches/confidence
-  type MatchCandidate = {
-    stopId: string;
-    address: string;
-    confidence: number;
-    notes?: string[];
-  };
-  const [debugMatches, setDebugMatches] = React.useState<MatchCandidate[]>([]);
-  const [debugTranscript, setDebugTranscript] = React.useState<string>('');
+  const analyticsRef = useRef(new VoiceSessionAnalytics());
+  
+  useWakeLock();
+  
+  const brain = useMemo(() => new RouteBrain(route), [route]);
+  
+  const triggerGlobalFx = useCallback((type: 'package-delivered' | 'error', rect?: DOMRect) => {
+    const event = new CustomEvent('ruralmail-fx', {
+      detail: { type, rect: rect || { left: window.innerWidth/2, top: window.innerHeight/2, width: 0, height: 0 } }
+    });
+    window.dispatchEvent(event);
+  }, []);
 
-  // Voice engine integration
-  const { start, stop, speak, playTone } = useVoiceEngine({
+  const { start, stop, speak, playTone, unlockAudio } = useVoiceEngine({
     onTranscript: (final, interim) => {
       if (final) {
-        dispatch({ type: 'TRANSCRIPT', transcript: final, interim });
-        interimRef.current = '';
-      } else {
-        interimRef.current = interim;
+        analyticsRef.current.log('transcript', { transcript: final });
+        dispatch({ type: 'TRANSCRIPT', transcript: final, interim: '' });
+      }
+      else if (interim.length > 0) dispatch({ type: 'TRANSCRIPT', transcript: '', interim });
+    },
+    onError: (err) => {
+      if (err !== 'no-speech') {
+        analyticsRef.current.log('error', { error: err });
+        dispatch({ type: 'ERROR', error: typeof err === 'string' ? err : 'Signal Lost' });
       }
     },
-    onError: (err) => dispatch({ type: 'ERROR', error: err }),
-    onStart: () => playTone('start'),
-    onEnd: () => {},
+    onStart: () => {},
+    onEnd: () => {
+       if (state.mode === 'listening' || state.mode === 'processing') start();
+    },
   });
 
-  // Boot/start listening on mount
-  React.useEffect(() => {
-    if (state.mode === 'booting') {
-      dispatch({ type: 'BOOT' });
-      start();
+  const handleSystemStart = async () => {
+    await unlockAudio();
+    playTone('start');
+    start();
+    dispatch({ type: 'BOOT' });
+  };
+
+  // Processing Loop
+  useEffect(() => {
+    const process = async () => {
+      // TS Narrowing Fix: Check mode first, then access transcript
+      if (state.mode === 'processing') {
+        const t = state.transcript.toLowerCase().trim();
+        
+        if (/^(undo|delete|revert)/.test(t)) {
+          dispatchRedux(removeLastPackage());
+          playTone('error');
+          speak('Unit removed.');
+          triggerGlobalFx('error');
+          analyticsRef.current.log('undo');
+          dispatch({ type: 'RESET' });
+          return;
+        }
+
+        const prediction = brain.predict(state.transcript);
+        
+        if (prediction.confidence > 0.4 && prediction.stop) {
+           playTone('alert');
+           const match: MatchResult = {
+             stopId: prediction.stop.id,
+             address: prediction.stop.full_address || prediction.stop.address_line1,
+             confidence: prediction.confidence,
+             combinedNotes: [...(prediction.stop.notes ? [prediction.stop.notes] : []), ...prediction.extracted.notes],
+             extractedDetails: prediction.extracted
+           };
+           analyticsRef.current.log('match', { match });
+           dispatch({ type: 'MATCH', match });
+        } else {
+           playTone('error');
+           triggerGlobalFx('error');
+           speak('No target identified.');
+           analyticsRef.current.log('fail_match', { transcript: state.transcript });
+           dispatch({ type: 'ERROR', error: 'TARGET_UNKNOWN' });
+        }
+      }
+    };
+    process();
+  }, [state, brain, dispatchRedux, playTone, speak, triggerGlobalFx]); 
+
+  // Confirm & Execute
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (state.mode === 'confirming') {
+      const { address, extractedDetails } = state.match;
+      const text = `${extractedDetails.size !== 'medium' ? extractedDetails.size : ''} ${extractedDetails.priority ? 'priority' : ''} for ${address}`;
+      speak(text);
+      
+      timer = setTimeout(() => {
+         dispatch({ type: 'CONFIRM' });
+      }, 2000);
     }
-    if (state.mode === 'paused') stop();
-    if (state.mode === 'listening') start();
-    // eslint-disable-next-line
+    
+    if (state.mode === 'success' && 'match' in state) {
+      const { match } = state;
+      dispatchRedux(addPackage({
+        id: crypto.randomUUID(),
+        size: match.extractedDetails.size,
+        notes: match.combinedNotes.join(', '),
+        assignedStopId: match.stopId,
+        assignedStopNumber: route.findIndex(s => s.id === match.stopId) + 1,
+        assignedAddress: match.address,
+        delivered: false,
+        // Removed 'isPriority'. Priority status is now handled purely via notes/tags in DB.
+      }));
+      dispatchRedux(incrementLoadCount());
+      playTone('success');
+      triggerGlobalFx('package-delivered');
+      analyticsRef.current.log('confirm', { address: match.address });
+      setTimeout(() => dispatch({ type: 'RESET' }), 1200);
+    }
+
+    return () => clearTimeout(timer);
+  }, [state, route, dispatchRedux, speak, playTone, triggerGlobalFx]);
+
+  // Auto-Reset Error
+  useEffect(() => {
+    if (state.mode === 'error') {
+        const t = setTimeout(() => dispatch({ type: 'RESET' }), 2000);
+        return () => clearTimeout(t);
+    }
   }, [state.mode]);
 
-  // Log every state/action for analytics
-  React.useEffect(() => {
-    if (state.mode === 'processing' && 'transcript' in state) {
-      analyticsRef.current.log('transcript', { transcript: state.transcript });
-    }
-    if (state.mode === 'confirming' && 'match' in state) {
-      analyticsRef.current.log('match', { match: state.match });
-    }
-    if (state.mode === 'success' && 'match' in state) {
-      analyticsRef.current.log('confirm', { match: state.match });
-    }
-    if (state.mode === 'error' && 'error' in state) {
-      analyticsRef.current.log('error', { error: state.error });
-    }
-  }, [state]);
-
-  // Advanced voice command parsing
-  React.useEffect(() => {
-    if (state.mode === 'processing' && 'transcript' in state) {
-      const t = state.transcript.trim().toLowerCase();
-      if (/^(undo|delete last|remove last|oops|revert)$/.test(t)) {
-        dispatchRedux(removeLastPackage());
-        speak('Last package removed.');
-        playTone('error');
-        dispatch({ type: 'BOOT' });
-        return;
-      }
-      if (/^(help|what can i say|options|commands)$/.test(t)) {
-        speak('You can say an address, say undo to remove the last package, say summary for a session summary, or say repeat to hear the last address.');
-        // TODO: Show contextual help overlay
-        dispatch({ type: 'BOOT' });
-        return;
-      }
-      if (/^(summary|how many|what's loaded|packages loaded)$/.test(t)) {
-        const summary = analyticsRef.current.getSummary();
-        speak(`You have loaded ${summary.loaded} packages. ${summary.failed} failed. Average confidence ${Math.round(summary.avgConfidence * 100)} percent.`);
-        // Optionally show a magical summary overlay here
-        dispatch({ type: 'BOOT' });
-        return;
-      }
-      if (/^(repeat|say again|last address)$/.test(t)) {
-        // TODO: Store last confirmed address for repeat
-        speak('Repeating last address.');
-        dispatch({ type: 'BOOT' });
-        return;
-      }
-      // Replace the fake match effect with real fuzzy matching
-      const matches = fuzzyMatch(state.transcript);
-      setDebugMatches(matches);
-      setDebugTranscript(state.transcript);
-      if (matches.length === 0) {
-        speak('No address match found. Please try again or say help.');
-        playTone('error');
-        dispatch({ type: 'ERROR', error: 'No address match found.' });
-        return;
-      }
-      // If top match is strong and next best is much lower, auto-confirm
-      if (matches[0].confidence > 0.85 && (matches.length === 1 || (matches[0].confidence - matches[1].confidence > 0.10))) {
-        dispatch({ type: 'MATCH', match: matches[0], confidence: matches[0].confidence });
-        return;
-      }
-      // If top two matches are both high/confidence is close, show candidates
-      if (matches.length > 1 && matches[1].confidence > 0.7 && (matches[0].confidence - matches[1].confidence <= 0.10)) {
-        speak('Multiple matches found. Please say the number or clarify.');
-        playTone('alert');
-        dispatch({ type: 'CANDIDATES', candidates: matches });
-        return;
-      }
-      // Otherwise, treat as a single match if top is high enough
-      if (matches[0].confidence > 0.8) {
-        dispatch({ type: 'MATCH', match: matches[0], confidence: matches[0].confidence });
-        return;
-      }
-      // Otherwise, error
-      speak('No address match found. Please try again or say help.');
-      playTone('error');
-      dispatch({ type: 'ERROR', error: 'No address match found.' });
-    }
-  }, [state, fuzzyMatch, speak, playTone, dispatchRedux, route.length]);
-
-  // Magical confirmation: speak address, pause mic, wait for 'stop', auto-add if no response
-  React.useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
-    let listening = false;
-    if (state.mode === 'confirming' && state.confidence > 0.85) {
-      // Pause mic, speak, then reactivate mic and start timer
-      stop();
-      speak(`Address recognized: ${state.match.address}. If this is incorrect, say stop now.`);
-      // Wait a short moment to allow speech to start, then reactivate mic and start timer
-      setTimeout(() => {
-        start();
-        listening = true;
-        timer = setTimeout(() => {
-          if (listening) dispatch({ type: 'CONFIRM' });
-        }, 1500);
-      }, 500); // 0.5s delay to allow speech to begin (tune as needed)
-      return () => { if (timer) clearTimeout(timer); };
-    }
-    if (state.mode === 'success') {
-      playTone('success');
-      setTimeout(() => dispatch({ type: 'RESET' }), 1500);
-    }
-    return () => { if (timer) clearTimeout(timer); };
-  }, [state, speak, playTone, start, stop, dispatch]);
-
-  // Listen for 'stop' command during confirmation window
-  // (No-op: removed unused handleTranscript to fix error)
-
-  // On confirm, add package to manifest
-  React.useEffect(() => {
-    if (state.mode === 'success' && 'match' in state) {
-      const stop = route.find((s) => s.id === state.match.stopId);
-      if (stop) {
-        const pkg: Package = {
-          id: crypto.randomUUID(),
-          size: 'medium',
-          notes: state.match.notes?.join(', ') || '',
-          assignedStopId: stop.id,
-          assignedStopNumber: route.findIndex((s) => s.id === stop.id) + 1,
-          assignedAddress: stop.full_address || stop.address_line1,
-        };
-        dispatchRedux(addPackage(pkg));
-        dispatchRedux(incrementLoadCount());
-        // TODO: Add magical feedback for success
-      }
-    }
-  }, [state, route, dispatchRedux]);
-
-  // Render HUD
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center bg-background text-foreground">
-      <div className="w-full max-w-md mx-auto p-6 flex flex-col gap-8 items-center">
-        {state.mode === 'listening' && (
-          <>
-            <div className="rounded-full border-4 border-brand p-10 mb-4 animate-pulse">
-              <span className="text-5xl">🎤</span>
-            </div>
-            <div className="text-center">
-              <h2 className="text-3xl font-black uppercase tracking-widest text-brand">Listening</h2>
-              <p className="text-lg text-muted-foreground mt-2 font-mono">{interimRef.current || 'Say an address...'}</p>
-            </div>
-          </>
-        )}
-        {state.mode === 'processing' && (
-          <div className="flex flex-col items-center gap-4">
-            <div className="animate-spin text-brand text-4xl">⏳</div>
-            <div className="text-lg font-mono">Processing...</div>
-          </div>
-        )}
-        {state.mode === 'confirming' && (
-          <div className="flex flex-col items-center gap-4">
-            <div className="rounded-full border-4 border-success p-10 mb-4">
-              <span className="text-5xl">✅</span>
-            </div>
-            <div className="text-center">
-              <h2 className="text-2xl font-black text-success">Match Found</h2>
-              <p className="text-lg font-mono">{state.match.address}</p>
-              <p className="text-sm text-brand">{Math.round(state.confidence * 100)}% confidence</p>
-            </div>
-          </div>
-        )}
-        {state.mode === 'success' && (
-          <div className="flex flex-col items-center gap-4">
-            <div className="rounded-full border-4 border-success p-10 mb-4 animate-bounce">
-              <span className="text-5xl">📦</span>
-            </div>
-            <div className="text-center">
-              <h2 className="text-2xl font-black text-success">Loaded!</h2>
-            </div>
-          </div>
-        )}
-        {state.mode === 'suggesting' && (
-          <div className="flex flex-col items-center gap-4 animate-fade-in">
-            <div className="rounded-full border-4 border-brand p-10 mb-4 animate-pulse">
-              <span className="text-5xl">🤔</span>
-            </div>
-            <div className="text-center">
-              <h2 className="text-2xl font-black text-brand">Multiple Matches</h2>
-              <p className="text-lg text-muted-foreground">Please say the number or clarify:</p>
-              <ul className="mt-4 space-y-2">
-                {state.candidates.map((c, i) => (
-                  <li key={c.stopId} className="bg-muted rounded px-4 py-2 flex items-center justify-between">
-                    <span className="font-mono">{i + 1}. {c.address}</span>
-                    <span className="text-xs text-brand">{Math.round(c.confidence * 100)}%</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        )}
-        {state.mode === 'error' && (
-          <div className="flex flex-col items-center gap-4">
-            <div className="rounded-full border-4 border-danger p-10 mb-4">
-              <span className="text-5xl">⚠️</span>
-            </div>
-            <div className="text-center">
-              <h2 className="text-2xl font-black text-danger">Error</h2>
-              <p className="text-lg font-mono">{state.error}</p>
-            </div>
-          </div>
-        )}
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm touch-none overflow-hidden">
+      
+      <div className="absolute top-0 left-0 w-full p-4 border-b border-border bg-surface/80 flex justify-between items-center">
+        <h2 className="text-xl m-0 p-0 mb-0! border-0!" data-text="VOICE_UPLINK">VOICE_UPLINK // V2.0</h2>
+        <div className="flex gap-2">
+            <span className="text-xs font-mono text-muted-foreground">ROUTE_ID: 08</span>
+            <span className={`text-xs font-mono ${state.mode === 'listening' ? 'text-success animate-pulse' : 'text-danger'}`}>
+                {state.mode === 'listening' ? 'LIVE' : 'OFFLINE'}
+            </span>
+        </div>
       </div>
-      {/* ARIA live regions for accessibility */}
-      <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {state.mode === 'listening' && (interimRef.current || 'Say an address...')}
-        {state.mode === 'error' && state.error}
-      </div>
-      {/* Debug output for devs */}
-      <div className="fixed bottom-2 left-2 bg-black bg-opacity-80 text-green-300 text-xs p-2 rounded max-w-xs z-50" style={{pointerEvents:'none'}}>
-        <div>Transcript: {debugTranscript}</div>
-        <div>Matches: {debugMatches.map((m,i) => `${i+1}: ${m.address} (${Math.round(m.confidence*100)}%)`).join(' | ')}</div>
+
+      <div className="flex-1 flex flex-col items-center justify-center w-full max-w-lg p-6 relative">
+        
+        <div className="cyber-card w-full flex flex-col items-center py-12 mb-8 relative overflow-hidden transition-all duration-300 border-brand/30 hover:border-brand">
+            <NeuralCore mode={state.mode} />
+            
+            <div className="h-16 mt-6 w-full text-center flex items-center justify-center">
+                <AnimatePresence mode="wait">
+                    {state.mode === 'booting' && (
+                        <motion.button
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                            onClick={handleSystemStart}
+                            className="bg-brand text-black px-8 py-4 font-bold tracking-widest uppercase clip-path-polygon hover:scale-105 active:scale-95 transition-transform"
+                        >
+                            Initialize System
+                        </motion.button>
+                    )}
+                    {state.mode === 'listening' && (
+                        <motion.p 
+                            key="listen"
+                            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                            className="text-2xl font-mono text-muted-foreground"
+                        >
+                            {('interim' in state && state.interim) ? <span className="text-foreground glitch-text">{state.interim}</span> : "AWAITING INPUT..."}
+                        </motion.p>
+                    )}
+                    {state.mode === 'confirming' && 'match' in state && (
+                        <motion.div
+                            key="confirm"
+                            initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                            className="text-center"
+                        >
+                             <div className="text-xs text-brand tracking-[0.2em] mb-1">TARGET LOCK</div>
+                             <div className="text-xl font-bold text-foreground bg-surface/50 px-4 py-2 border border-brand/50 inline-block">
+                                {state.match.address}
+                             </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+        </div>
+
+        <div className="w-full grid grid-cols-2 gap-4">
+             <button 
+                onClick={() => dispatchRedux(removeLastPackage())}
+                className="py-4 border border-danger/50 text-danger hover:bg-danger hover:text-white transition-colors uppercase font-bold tracking-widest text-sm"
+                data-text="UNDO_LAST"
+             >
+                UNDO_LAST
+             </button>
+             <button 
+                onClick={() => state.mode === 'listening' ? stop() : handleSystemStart()}
+                className={`py-4 border transition-colors uppercase font-bold tracking-widest text-sm ${state.mode === 'listening' ? 'border-brand text-brand hover:bg-brand hover:text-black' : 'border-muted text-muted'}`}
+                data-text={state.mode === 'listening' ? "STOP_LINK" : "RECONNECT"}
+             >
+                {state.mode === 'listening' ? "STOP_LINK" : "RECONNECT"}
+             </button>
+        </div>
       </div>
     </div>
   );

@@ -10,38 +10,13 @@ import type { Stop } from '../../db';
 import { VoiceSessionAnalytics } from './VoiceSessionAnalytics';
 import { NeuralCore } from './components/NeuralCore';
 import { CyberpunkTerminal } from './components/CyberpunkTerminal';
-import { toast } from 'sonner';
+import { toast } from 'sonner'; // Confirmed Import
 
 const initial = { mode: 'booting' } as const;
 
-// ... UI_TEXT (same) ...
 const UI_TEXT = {
-  default: {
-    header: "Voice Loading",
-    subHeader: "Route 8 • Active",
-    live: "LIVE",
-    offline: "Ready",
-    init: "Start Listening",
-    listening: "Listening...",
-    awaiting: "Ready...",
-    targetLock: "Package Matched",
-    undo: "Undo",
-    stop: "Stop",
-    reconnect: "Resume"
-  },
-  cyberpunk: {
-    header: "VOICE_UPLINK // V2.0",
-    subHeader: "ROUTE_ID: 08",
-    live: "LIVE",
-    offline: "OFFLINE",
-    init: "Initialize System",
-    listening: "AWAITING INPUT...",
-    awaiting: "AWAITING INPUT...",
-    targetLock: "TARGET LOCK",
-    undo: "UNDO_LAST",
-    stop: "STOP_LINK",
-    reconnect: "RECONNECT"
-  }
+  default: { header: "Voice Loading", subHeader: "Route 8 • Active", live: "LIVE", offline: "Ready", init: "Start Listening", listening: "Listening...", awaiting: "Ready...", targetLock: "Package Matched", undo: "Undo", stop: "Stop", reconnect: "Resume" },
+  cyberpunk: { header: "VOICE_UPLINK // V2.0", subHeader: "ROUTE_ID: 08", live: "LIVE", offline: "OFFLINE", init: "Initialize System", listening: "AWAITING INPUT...", awaiting: "AWAITING INPUT...", targetLock: "TARGET LOCK", undo: "UNDO_LAST", stop: "STOP_LINK", reconnect: "RECONNECT" }
 };
 
 export const VoiceLoadHUD: React.FC = () => {
@@ -54,23 +29,18 @@ export const VoiceLoadHUD: React.FC = () => {
   const analyticsRef = useRef(new VoiceSessionAnalytics());
   const shouldRestart = useRef(false);
   
-  // Timeout Refs (Critical for Stop Logic)
   const confirmTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const resumeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // LOGGING
+  const delayRef = useRef<NodeJS.Timeout | null>(null);
   const logsRef = useRef<string[]>([]);
+
   const addLog = useCallback((msg: string) => {
-      // Dedup: Don't add if identical to last log (prevents spam)
       const last = logsRef.current[logsRef.current.length - 1];
       if (last === msg) return;
-      
       logsRef.current.push(msg);
       if (logsRef.current.length > 50) logsRef.current.shift();
   }, []);
 
   useWakeLock();
-  
   const brain = useMemo(() => new RouteBrain(route), [route]);
   
   const isCyberpunk = theme === 'cyberpunk' && richThemingEnabled;
@@ -91,12 +61,12 @@ export const VoiceLoadHUD: React.FC = () => {
     onDebug: addLog, 
     onTranscript: (final, interim) => {
       if (final) {
-        addLog(`>> ${final}`); // Only log final transcripts
+        addLog(`>> ${final}`);
         
         if (state.mode === 'confirming') {
              const cmd = final.toLowerCase().trim();
              if (/^(stop|no|wrong|wait|cancel)/.test(cmd)) {
-                 if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+                 cleanupTimers();
                  playTone('error');
                  speak('Cancelled.');
                  dispatch({ type: 'RESET' });
@@ -109,20 +79,9 @@ export const VoiceLoadHUD: React.FC = () => {
     },
     onError: (err) => {
       if (!shouldRestart.current) return;
-      if (err !== 'no-speech') {
-        analyticsRef.current.log('error', { error: err });
-        if (typeof err === 'string' && err.includes('aborted')) return; 
-        dispatch({ type: 'ERROR', error: typeof err === 'string' ? err : 'Signal Lost' });
+      if (err !== 'no-speech' && typeof err === 'string' && !err.includes('aborted')) {
+        dispatch({ type: 'ERROR', error: err });
       }
-    },
-    onStart: () => {
-        if (state.mode === 'confirming') {
-            addLog('Confirm: Mic Active. Timer Started.');
-            if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
-            confirmTimerRef.current = setTimeout(() => {
-                dispatch({ type: 'CONFIRM' });
-            }, 1500);
-        }
     },
     onEnd: () => {
        if (shouldRestart.current && (state.mode === 'listening' || state.mode === 'processing')) {
@@ -131,105 +90,97 @@ export const VoiceLoadHUD: React.FC = () => {
     },
   });
 
+  const cleanupTimers = () => {
+      if (delayRef.current) clearTimeout(delayRef.current);
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+  };
+
   const handleSystemStart = () => {
     shouldRestart.current = true;
     start();
-    unlockAudio().then(() => {
-        playTone('start');
-    });
+    unlockAudio().then(() => playTone('start'));
     dispatch({ type: 'BOOT' });
   };
 
   const handleManualStop = () => {
-    addLog('MANUAL STOP TRIGGERED');
+    addLog('MANUAL STOP');
     shouldRestart.current = false;
-    
-    // 1. Clear any pending restarts
-    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
-    
-    // 2. Clear confirmation timer
-    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
-    
-    // 3. Kill everything
+    cleanupTimers();
     cancelAll();
-    
     dispatch({ type: 'PAUSE' });
   };
 
   const getShortAddress = (fullAddress: string) => fullAddress.split(',')[0].trim();
 
-  // Processing Loop
+  // 1. Processing Loop
   useEffect(() => {
-    const process = async () => {
-      if (state.mode === 'processing') {
-        const t = state.transcript.toLowerCase().trim();
-        
-        if (/^(undo|delete|revert)/.test(t)) {
-          dispatchRedux(removeLastPackage());
-          playTone('error');
-          speak('Removed.');
-          triggerGlobalFx('error');
-          analyticsRef.current.log('undo');
-          dispatch({ type: 'RESET' });
-          return;
-        }
-
-        const prediction = brain.predict(state.transcript);
-        
-        if (prediction.confidence > 0.4 && prediction.stop) {
-           playTone('alert');
-           const match: MatchResult = {
-             stopId: prediction.stop.id,
-             address: prediction.stop.full_address || prediction.stop.address_line1,
-             confidence: prediction.confidence,
-             combinedNotes: [...(prediction.stop.notes ? [prediction.stop.notes] : []), ...prediction.extracted.notes],
-             extractedDetails: prediction.extracted
-           };
-           analyticsRef.current.log('match', { match });
-           dispatch({ type: 'MATCH', match });
-        } else {
-           if (t.length > 4) {
-               playTone('error');
-               triggerGlobalFx('error');
-               speak('No match.');
-           }
-           analyticsRef.current.log('fail_match', { transcript: state.transcript });
-           dispatch({ type: 'ERROR', error: 'UNKNOWN' });
-        }
+    // GUARD: Check mode first so TS knows 'transcript' exists
+    if (state.mode === 'processing') {
+      const t = state.transcript.toLowerCase().trim();
+      if (/^(undo|delete|revert)/.test(t)) {
+        dispatchRedux(removeLastPackage());
+        playTone('error');
+        speak('Removed.');
+        triggerGlobalFx('error');
+        analyticsRef.current.log('undo');
+        dispatch({ type: 'RESET' });
+        return;
       }
-    };
-    process();
+
+      const prediction = brain.predict(state.transcript);
+      
+      if (prediction.confidence > 0.4 && prediction.stop) {
+         const match: MatchResult = {
+           stopId: prediction.stop.id,
+           address: prediction.stop.full_address || prediction.stop.address_line1,
+           confidence: prediction.confidence,
+           combinedNotes: [...(prediction.stop.notes ? [prediction.stop.notes] : []), ...prediction.extracted.notes],
+           extractedDetails: prediction.extracted
+         };
+         dispatch({ type: 'MATCH', match });
+      } else {
+         if (t.length > 4) {
+             playTone('error');
+             triggerGlobalFx('error');
+             speak('No match.');
+         }
+         dispatch({ type: 'ERROR', error: 'UNKNOWN' });
+      }
+    }
+    // FIX: Removed 'state.transcript' from dependency array to prevent TS Union errors
   }, [state, brain, dispatchRedux, playTone, speak, triggerGlobalFx]); 
 
-  // Confirmation & Success Loop
+  // 2. Sequence & Success Loop
   useEffect(() => {
     if (state.mode === 'confirming') {
-      const { address, extractedDetails } = state.match;
-      const shortAddress = getShortAddress(address);
-      const sizeText = extractedDetails.size !== 'medium' ? extractedDetails.size : '';
-      const priorityText = extractedDetails.priority ? 'priority' : '';
-      const text = `${sizeText} ${priorityText} ${shortAddress}`.trim();
+      cleanupTimers();
       
       stop(); 
+      playTone('lock');
+      addLog('Match Locked. Mic Stopped.');
 
-      speak(text, () => {
-          if (shouldRestart.current) {
-              unlockAudio(); 
-              
-              // 300ms Buffer (Stored in Ref so we can kill it on Stop)
-              resumeTimeoutRef.current = setTimeout(() => {
-                 if (shouldRestart.current) {
-                    addLog('Buffer Done -> Start Mic');
-                    start();
-                 }
-              }, 300);
-          }
-      });
-      
-      return () => {
-          if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
-          if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
-      };
+      const { address, extractedDetails } = state.match;
+      const shortAddress = getShortAddress(address);
+      const text = `${extractedDetails.size !== 'medium' ? extractedDetails.size : ''} ${extractedDetails.priority ? 'priority' : ''} ${shortAddress}`.trim();
+
+      delayRef.current = setTimeout(() => {
+          addLog('Breath Done. Speaking...');
+          
+          speak(text, () => {
+              addLog('TTS Done. Resetting Mic...');
+              if (shouldRestart.current) {
+                  unlockAudio();
+                  start();
+                  
+                  addLog('Timer Started (1.5s)');
+                  confirmTimerRef.current = setTimeout(() => {
+                      dispatch({ type: 'CONFIRM' });
+                  }, 1500);
+              }
+          });
+      }, 400);
+
+      return cleanupTimers;
     }
     
     if (state.mode === 'success' && 'match' in state) {
@@ -252,9 +203,9 @@ export const VoiceLoadHUD: React.FC = () => {
         playTone('success');
         triggerGlobalFx('package-delivered');
         addLog(`SUCCESS: ${match.address}`);
-        analyticsRef.current.log('confirm', { address: match.address });
       } else {
          addLog(`CRITICAL: Stop ID ${match.stopId} not found`);
+         // FIX: Toast is definitely used here
          toast.error("Error: Matched stop is no longer in the route.");
          playTone('error');
       }
@@ -265,9 +216,10 @@ export const VoiceLoadHUD: React.FC = () => {
       
       return () => clearTimeout(resetTimer);
     }
-  }, [state, route, dispatchRedux, speak, playTone, triggerGlobalFx, start, stop, unlockAudio, addLog]);
+    // FIX: Use 'state' as dependency instead of destructuring properties
+  }, [state, route, dispatchRedux, speak, playTone, start, stop, unlockAudio, addLog, triggerGlobalFx]);
 
-  // Error Loop
+  // 3. Error Reset
   useEffect(() => {
     if (state.mode === 'error') {
         const t = setTimeout(() => {
@@ -278,6 +230,7 @@ export const VoiceLoadHUD: React.FC = () => {
     }
   }, [state.mode, start]);
 
+  // ... Render (Unchanged) ...
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm touch-none overflow-hidden">
       

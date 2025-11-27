@@ -13,7 +13,6 @@ import { toast } from 'sonner';
 
 const initial = { mode: 'booting' } as const;
 
-// ... UI_TEXT ... (Same as before)
 const UI_TEXT = {
   default: {
     header: "Voice Loading",
@@ -45,6 +44,7 @@ const UI_TEXT = {
 
 export const VoiceLoadHUD: React.FC = () => {
   const [state, dispatch] = useReducer(voiceLoadReducer, initial);
+  // Get latest route from Redux (Live Source of Truth)
   const route = useAppSelector((s) => s.route.route as Stop[]);
   const theme = useAppSelector((s) => s.settings.theme);
   const richThemingEnabled = useAppSelector((s) => s.settings.richThemingEnabled);
@@ -56,13 +56,12 @@ export const VoiceLoadHUD: React.FC = () => {
 
   useWakeLock();
   
+  // RouteBrain needs to be rebuilt if route changes to ensure IDs are fresh
   const brain = useMemo(() => new RouteBrain(route), [route]);
   
   const isCyberpunk = theme === 'cyberpunk' && richThemingEnabled;
   const ui = isCyberpunk ? UI_TEXT.cyberpunk : UI_TEXT.default;
   const variant = isCyberpunk ? 'cyberpunk' : 'professional';
-
-  // Helper to determine if the system is currently "active"
   const isSystemActive = ['listening', 'processing', 'confirming', 'success'].includes(state.mode);
 
   const triggerGlobalFx = useCallback((type: 'package-delivered' | 'error', rect?: DOMRect) => {
@@ -79,7 +78,7 @@ export const VoiceLoadHUD: React.FC = () => {
       if (final) {
         analyticsRef.current.log('transcript', { transcript: final });
         
-        // Hijack confirming state for voice commands
+        // HIJACK: Check for Stop commands during confirmation
         if (state.mode === 'confirming') {
              const cmd = final.toLowerCase().trim();
              if (/^(stop|no|wrong|wait|cancel)/.test(cmd)) {
@@ -102,7 +101,18 @@ export const VoiceLoadHUD: React.FC = () => {
         dispatch({ type: 'ERROR', error: typeof err === 'string' ? err : 'Signal Lost' });
       }
     },
-    onStart: () => {},
+    // CRITICAL: This is where we start the timer. 
+    // We ONLY count down once the hardware is actually listening.
+    onStart: () => {
+        if (state.mode === 'confirming') {
+            // Check if timer is already running to avoid dupes
+            if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+            
+            confirmTimerRef.current = setTimeout(() => {
+                dispatch({ type: 'CONFIRM' });
+            }, 1500);
+        }
+    },
     onEnd: () => {
        if (shouldRestart.current && (state.mode === 'listening' || state.mode === 'processing')) {
          start();
@@ -121,7 +131,7 @@ export const VoiceLoadHUD: React.FC = () => {
 
   const handleManualStop = () => {
     shouldRestart.current = false;
-    cancelAll(); // Kills Mic AND Speech Synthesis immediately
+    cancelAll(); 
     if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
     dispatch({ type: 'PAUSE' });
   };
@@ -173,7 +183,7 @@ export const VoiceLoadHUD: React.FC = () => {
 
   // Confirmation & Success Loop
   useEffect(() => {
-    // CONFIRMING
+    // A. CONFIRMATION
     if (state.mode === 'confirming') {
       const { address, extractedDetails } = state.match;
       const shortAddress = getShortAddress(address);
@@ -181,15 +191,14 @@ export const VoiceLoadHUD: React.FC = () => {
       const priorityText = extractedDetails.priority ? 'priority' : '';
       const text = `${sizeText} ${priorityText} ${shortAddress}`.trim();
       
-      stop(); // Stop listening while speaking
+      stop(); // Stop listening explicitly
 
       speak(text, () => {
-          // Only resume if user hasn't cancelled/stopped in the meantime
+          // TTS Complete.
+          // Restart Mic if we are still live.
+          // Note: We do NOT start timer here. Timer starts in onStart() callback.
           if (shouldRestart.current) {
               start();
-              confirmTimerRef.current = setTimeout(() => {
-                 dispatch({ type: 'CONFIRM' });
-              }, 1500); 
           }
       });
       
@@ -198,19 +207,31 @@ export const VoiceLoadHUD: React.FC = () => {
       };
     }
     
-    // SUCCESS
+    // B. SUCCESS (Add Package)
     if (state.mode === 'success' && 'match' in state) {
       const { match } = state;
-      const targetStop = route.find(s => s.id === match.stopId);
-      const targetIndex = route.findIndex(s => s.id === match.stopId);
 
-      if (targetStop && targetIndex !== -1) {
+      // STRICT DATA LOOKUP
+      // 1. Find the exact object in the Live Route that matches the Brain's Stop ID
+      const targetStop = route.find(s => s.id === match.stopId);
+      
+      if (targetStop) {
+        // 2. Re-calculate index based on the LIVE route array
+        // This ensures if route was shuffled, we get the current valid index
+        const currentStopNumber = route.findIndex(s => s.id === targetStop.id) + 1;
+
         dispatchRedux(addPackage({
           id: crypto.randomUUID(),
           size: match.extractedDetails.size,
           notes: match.combinedNotes.join(', '),
+          
+          // STRICT ID ASSIGNMENT
           assignedStopId: targetStop.id, 
-          assignedStopNumber: targetIndex + 1, 
+          
+          // Live Index
+          assignedStopNumber: currentStopNumber,
+          
+          // Data Copy
           assignedAddress: targetStop.full_address || targetStop.address_line1,
           delivered: false,
         }));
@@ -220,8 +241,8 @@ export const VoiceLoadHUD: React.FC = () => {
         triggerGlobalFx('package-delivered');
         analyticsRef.current.log('confirm', { address: match.address });
       } else {
-         console.error('Stop matched but not found in Route', match.stopId);
-         toast.error("Stop not found in route.");
+         console.error('[CRITICAL] Brain ID mismatch. Stop ID from Brain not found in current Route:', match.stopId);
+         toast.error("Error: Matched stop is no longer in the route.");
          playTone('error');
       }
 
@@ -248,7 +269,7 @@ export const VoiceLoadHUD: React.FC = () => {
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm touch-none overflow-hidden">
       
       <div className="absolute top-0 left-0 w-full p-4 border-b border-border bg-surface/80 flex justify-between items-center">
-        <h2 className={`text-xl m-0 p-0 !mb-0 !border-0 ${isCyberpunk ? '' : 'font-sans font-bold normal-case tracking-normal'}`} data-text={ui.header}>
+        <h2 className={`text-xl m-0 p-0 mb-0! border-0! ${isCyberpunk ? '' : 'font-sans font-bold normal-case tracking-normal'}`} data-text={ui.header}>
             {ui.header}
         </h2>
         
@@ -329,10 +350,6 @@ export const VoiceLoadHUD: React.FC = () => {
              >
                 {ui.undo}
              </button>
-             {/* BUTTON LOGIC FIX:
-                 If system is active (listening, confirming, success, processing), show STOP and call handleManualStop.
-                 Otherwise show RECONNECT.
-             */}
              <button 
                 onClick={() => isSystemActive ? handleManualStop() : handleSystemStart()}
                 className={`py-4 border transition-colors uppercase font-bold tracking-widest text-sm ${isCyberpunk ? (isSystemActive ? 'border-brand text-brand hover:bg-brand hover:text-black' : 'border-muted text-muted') : (isSystemActive ? 'bg-brand text-brand-foreground border-transparent rounded-lg' : 'bg-muted text-muted-foreground border-transparent rounded-lg')}`}

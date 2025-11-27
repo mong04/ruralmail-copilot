@@ -2,14 +2,23 @@
 // Main UI for magical, hands-free package loading
 import React, { useReducer, useRef } from 'react';
 import { voiceLoadReducer } from './VoiceLoadMachine';
-import type { VoiceLoadState, MatchResult } from './VoiceLoadMachine';
+import type { VoiceLoadState } from './VoiceLoadMachine';
 import { useVoiceEngine } from './useVoiceEngine';
+import { useAppSelector, useAppDispatch } from '../../store';
+import { addPackage, incrementLoadCount, removeLastPackage } from '../package-management/store/packageSlice';
+import { createFuzzyMatcher } from './fuzzyMatch';
+import type { Stop, Package } from '../../db';
+import { VoiceSessionAnalytics } from './VoiceSessionAnalytics';
 
 const initial: VoiceLoadState = { mode: 'booting' };
 
 export const VoiceLoadHUD: React.FC = () => {
   const [state, dispatch] = useReducer(voiceLoadReducer, initial);
   const interimRef = useRef('');
+  const route = useAppSelector((s) => s.route.route as Stop[]);
+  const dispatchRedux = useAppDispatch();
+  const fuzzyMatch = React.useMemo(() => createFuzzyMatcher(route), [route]);
+  const analyticsRef = React.useRef(new VoiceSessionAnalytics());
 
   // Voice engine integration
   const { start, stop, speak, playTone } = useVoiceEngine({
@@ -37,21 +46,67 @@ export const VoiceLoadHUD: React.FC = () => {
     // eslint-disable-next-line
   }, [state.mode]);
 
-  // Demo: fake match for every transcript
+  // Log every state/action for analytics
   React.useEffect(() => {
-    if (state.mode === 'processing') {
-      // TODO: Replace with real fuzzy match logic
-      // Type guard for processing state
-      if ('transcript' in state) {
-        const fake: MatchResult = {
-          stopId: '123',
-          address: state.transcript,
-          confidence: 0.95,
-        };
-        dispatch({ type: 'MATCH', match: fake, confidence: fake.confidence });
-      }
+    if (state.mode === 'processing' && 'transcript' in state) {
+      analyticsRef.current.log('transcript', { transcript: state.transcript });
+    }
+    if (state.mode === 'confirming' && 'match' in state) {
+      analyticsRef.current.log('match', { match: state.match });
+    }
+    if (state.mode === 'success' && 'match' in state) {
+      analyticsRef.current.log('confirm', { match: state.match });
+    }
+    if (state.mode === 'error' && 'error' in state) {
+      analyticsRef.current.log('error', { error: state.error });
     }
   }, [state]);
+
+  // Advanced voice command parsing
+  React.useEffect(() => {
+    if (state.mode === 'processing' && 'transcript' in state) {
+      const t = state.transcript.trim().toLowerCase();
+      if (/^(undo|delete last|remove last|oops|revert)$/.test(t)) {
+        dispatchRedux(removeLastPackage());
+        speak('Last package removed.');
+        playTone('error');
+        dispatch({ type: 'BOOT' });
+        return;
+      }
+      if (/^(help|what can i say|options|commands)$/.test(t)) {
+        speak('You can say an address, say undo to remove the last package, say summary for a session summary, or say repeat to hear the last address.');
+        // TODO: Show contextual help overlay
+        dispatch({ type: 'BOOT' });
+        return;
+      }
+      if (/^(summary|how many|what's loaded|packages loaded)$/.test(t)) {
+        const summary = analyticsRef.current.getSummary();
+        speak(`You have loaded ${summary.loaded} packages. ${summary.failed} failed. Average confidence ${Math.round(summary.avgConfidence * 100)} percent.`);
+        // Optionally show a magical summary overlay here
+        dispatch({ type: 'BOOT' });
+        return;
+      }
+      if (/^(repeat|say again|last address)$/.test(t)) {
+        // TODO: Store last confirmed address for repeat
+        speak('Repeating last address.');
+        dispatch({ type: 'BOOT' });
+        return;
+      }
+      // Replace the fake match effect with real fuzzy matching
+      const matches = fuzzyMatch(state.transcript);
+      if (matches.length === 1 && matches[0].confidence > 0.85) {
+        dispatch({ type: 'MATCH', match: matches[0], confidence: matches[0].confidence });
+      } else if (matches.length > 1) {
+        speak('Multiple matches found. Please say the number or clarify.');
+        playTone('alert');
+        dispatch({ type: 'CANDIDATES', candidates: matches });
+      } else {
+        speak('No address match found. Please try again or say help.');
+        playTone('error');
+        dispatch({ type: 'ERROR', error: 'No address match found.' });
+      }
+    }
+  }, [state, fuzzyMatch, speak, playTone, dispatchRedux, route.length]);
 
   // Confirm on high confidence
   React.useEffect(() => {
@@ -64,6 +119,26 @@ export const VoiceLoadHUD: React.FC = () => {
       setTimeout(() => dispatch({ type: 'RESET' }), 1500);
     }
   }, [state, speak, playTone]);
+
+  // On confirm, add package to manifest
+  React.useEffect(() => {
+    if (state.mode === 'success' && 'match' in state) {
+      const stop = route.find((s) => s.id === state.match.stopId);
+      if (stop) {
+        const pkg: Package = {
+          id: crypto.randomUUID(),
+          size: 'medium',
+          notes: state.match.notes?.join(', ') || '',
+          assignedStopId: stop.id,
+          assignedStopNumber: route.findIndex((s) => s.id === stop.id) + 1,
+          assignedAddress: stop.full_address || stop.address_line1,
+        };
+        dispatchRedux(addPackage(pkg));
+        dispatchRedux(incrementLoadCount());
+        // TODO: Add magical feedback for success
+      }
+    }
+  }, [state, route, dispatchRedux]);
 
   // Render HUD
   return (

@@ -11,7 +11,7 @@ lerna-debug.log*
 node_modules
 
 # Build outputs
-dev-dist
+dev-dist/*
 dist
 dist-ssr
 .vite
